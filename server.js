@@ -9,7 +9,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'online' }));
-
+app.get('/test-key', async (req, res) => {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return res.json({ error: 'No API key found in environment' });
+  res.json({ key_present: true, starts_with: key.substring(0, 12) + '...' });
+});
 // AI Bullet Generation endpoint
 app.post('/api/bullets', async (req, res) => {
   const { name, category, action, impact, count } = req.body;
