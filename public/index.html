@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NCO Tools — Leader's Toolkit</title>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500&family=Libre+Franklin:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --od: #2B3A2E;
+    --od-light: #3d5440;
+    --od-dark: #1a2419;
+    --tan: #C8B48A;
+    --tan-light: #e2d4b8;
+    --tan-dark: #a08e65;
+    --black: #0d0f0d;
+    --white: #F4F1EA;
+    --red: #8B1A1A;
+    --grid: #2B3A2E22;
+    --card: #1e271f;
+    --border: #3d5440;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--black);
+    color: var(--white);
+    font-family: 'Libre Franklin', sans-serif;
+    min-height: 100vh;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--od-dark);
+    border-bottom: 2px solid var(--tan);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-badge {
+    width: 36px;
+    height: 36px;
+    background: var(--tan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+
+  .logo-badge span {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--od-dark);
+    letter-spacing: 1px;
+  }
+
+  .logo-text {
+    font-family: 'Oswald', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--tan);
+    text-transform: uppercase;
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--tan-dark);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: 'Source Code Pro', monospace;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px;
+    color: var(--tan-dark);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: #4CAF50;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* MAIN LAYOUT */
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+  /* NAV TABS */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 32px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .tab {
+    padding: 12px 24px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan-dark);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { color: var(--tan); }
+
+  .tab.active {
+    color: var(--tan);
+    border-bottom-color: var(--tan);
+    background: var(--od-dark);
+  }
+
+  /* PANELS */
+  .panel { display: none; animation: fadeIn 0.3s ease; }
+  .panel.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* SECTION HEADER */
+  .section-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .section-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--tan);
+    line-height: 1;
+  }
+
+  .section-sub {
+    font-size: 12px;
+    color: var(--tan-dark);
+    letter-spacing: 2px;
+    font-family: 'Source Code Pro', monospace;
+    margin-top: 4px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--tan);
+  }
+
+  .card-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--tan);
+    margin-bottom: 16px;
+  }
+
+  /* FORM ELEMENTS */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid.full { grid-template-columns: 1fr; }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  label {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan-dark);
+  }
+
+  input, select, textarea {
+    background: var(--od-dark);
+    border: 1px solid var(--border);
+    color: var(--white);
+    padding: 10px 12px;
+    font-family: 'Libre Franklin', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--tan);
+  }
+
+  select option { background: var(--od-dark); }
+
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 12px 28px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--tan);
+    color: var(--od-dark);
+  }
+  .btn-primary:hover { background: var(--tan-light); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--tan);
+    border: 1px solid var(--tan);
+  }
+  .btn-secondary:hover { background: var(--tan); color: var(--od-dark); }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+    font-size: 11px;
+    padding: 6px 14px;
+  }
+  .btn-danger:hover { background: var(--red); color: var(--white); }
+
+  .btn-sm {
+    font-size: 11px;
+    padding: 7px 16px;
+    letter-spacing: 2px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    align-items: center;
+  }
+
+  /* OUTPUT BOX */
+  .output-box {
+    background: var(--od-dark);
+    border: 1px solid var(--tan);
+    padding: 24px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    color: var(--tan-light);
+    margin-top: 20px;
+    display: none;
+    position: relative;
+  }
+
+  .output-box.visible { display: block; }
+
+  .output-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--black);
+    padding: 0 8px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--tan);
+    text-transform: uppercase;
+  }
+
+  /* SOLDIER ROSTER */
+  .roster-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .roster-table th {
+    background: var(--od);
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan);
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .roster-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--white);
+    vertical-align: middle;
+  }
+
+  .roster-table tr:hover td { background: var(--od-dark); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-family: 'Source Code Pro', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .badge-green { background: #1a3d1a; color: #4CAF50; border: 1px solid #4CAF50; }
+  .badge-yellow { background: #3d3010; color: #FFC107; border: 1px solid #FFC107; }
+  .badge-red { background: #3d1010; color: #f44336; border: 1px solid #f44336; }
+
+  /* BULLET BUILDER */
+  .bullet-output {
+    background: var(--od-dark);
+    border-left: 3px solid var(--tan);
+    padding: 16px 20px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--tan-light);
+    margin-top: 12px;
+    display: none;
+  }
+  .bullet-output.visible { display: block; }
+
+  .bullet-line { margin-bottom: 8px; }
+  .bullet-line::before { content: '• '; color: var(--tan); }
+
+  /* DIVIDER */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+
+  /* STATS ROW */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--tan);
+  }
+
+  .stat-number {
+    font-family: 'Oswald', sans-serif;
+    font-size: 32px;
+    color: var(--tan);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan-dark);
+    margin-top: 4px;
+  }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 48px;
+    color: var(--tan-dark);
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+  }
+
+  .copy-confirm {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px;
+    color: #4CAF50;
+    letter-spacing: 1px;
+    display: none;
+  }
+
+  .copy-confirm.visible { display: inline; }
+
+  /* PREMIUM BANNER */
+  .premium-banner {
+    background: linear-gradient(135deg, var(--od-dark), var(--od));
+    border: 1px solid var(--tan);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .premium-text {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--tan);
+    text-transform: uppercase;
+  }
+
+  .premium-sub {
+    font-size: 11px;
+    color: var(--tan-dark);
+    font-family: 'Source Code Pro', monospace;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 700px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .form-grid.three { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .tabs { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-badge"><span>NCO</span></div>
+    <div>
+      <div class="logo-text">NCO Tools</div>
+      <div class="logo-sub">Leader's Toolkit — Prototype v0.1</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-dot"></div>
+    SYSTEM ONLINE
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-number" id="statSoldiers">0</div>
+      <div class="stat-label">Soldiers Tracked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statCounselings">0</div>
+      <div class="stat-label">Counselings Generated</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statBullets">0</div>
+      <div class="stat-label">Bullets Built</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statOverdue">0</div>
+      <div class="stat-label">Overdue Counselings</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
+    <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
+    <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
+  </div>
+
+  <!-- ===== COUNSELING PANEL ===== -->
+  <div class="panel active" id="panel-counseling">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">DA Form 4856</div>
+        <div class="section-sub">Developmental Counseling Form Generator</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Header Information</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Name of Soldier (Last, First MI)</label>
+          <input type="text" id="c_soldierName" placeholder="SMITH, John A.">
+        </div>
+        <div class="field">
+          <label>Rank / Grade</label>
+          <select id="c_rank">
+            <option value="">-- Select --</option>
+            <option>PVT / E-1</option><option>PV2 / E-2</option><option>PFC / E-3</option>
+            <option>SPC / E-4</option><option>CPL / E-4</option><option>SGT / E-5</option>
+            <option>SSG / E-6</option><option>SFC / E-7</option><option>MSG / E-8</option>
+            <option>1SG / E-8</option><option>SGM / E-9</option><option>CSM / E-9</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Date of Counseling</label>
+          <input type="date" id="c_date">
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-top:16px">
+        <div class="field">
+          <label>Organization / Unit</label>
+          <input type="text" id="c_unit" placeholder="HHC, 1-12 IN, 4ID">
+        </div>
+        <div class="field">
+          <label>Name of Counselor</label>
+          <input type="text" id="c_counselor" placeholder="SSG JONES, Marcus T.">
+        </div>
+        <div class="field">
+          <label>Counselor Rank</label>
+          <select id="c_counselorRank">
+            <option value="">-- Select --</option>
+            <option>SGT / E-5</option><option>SSG / E-6</option><option>SFC / E-7</option>
+            <option>MSG / E-8</option><option>1SG / E-8</option><option>SGM / E-9</option>
+            <option>CSM / E-9</option><option>2LT / O-1</option><option>1LT / O-2</option>
+            <option>CPT / O-3</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Purpose of Counseling</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="field">
+          <label>Counseling Type</label>
+          <select id="c_type" onchange="updatePurpose()">
+            <option value="">-- Select Type --</option>
+            <option value="initial">Initial Counseling</option>
+            <option value="performance">Performance Counseling (Monthly)</option>
+            <option value="event_positive">Event-Oriented — Commendable Performance</option>
+            <option value="event_negative">Event-Oriented — Substandard Performance</option>
+            <option value="ncoer_support">NCOER Support Form</option>
+            <option value="profile">Profile / Physical Limitations</option>
+            <option value="custom">Custom / Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Subject</label>
+          <input type="text" id="c_subject" placeholder="e.g. Initial Counseling / Monthly Performance">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Key Facts / Observations</div>
+      <div class="section-sub" style="margin-bottom:14px; font-size:11px; color: var(--tan-dark);">Enter what happened — the form will write itself</div>
+
+      <div class="form-grid full">
+        <div class="field">
+          <label>Situation / Background (what occurred or what you observed)</label>
+          <textarea id="c_situation" placeholder="e.g. SGT Smith arrived 25 minutes late to the 0600 PT formation on 14 March 2026 without prior notification to his chain of command..."></textarea>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>Strengths / Positives Noted (optional)</label>
+          <textarea id="c_strengths" placeholder="e.g. SGT Smith has consistently performed well in physical training and demonstrates strong technical knowledge..."></textarea>
+        </div>
+        <div class="field">
+          <label>Areas Requiring Improvement (optional)</label>
+          <textarea id="c_improve" placeholder="e.g. Time management, accountability to chain of command, adherence to standards..."></textarea>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>Plan of Action / Expected Outcomes</label>
+          <textarea id="c_poa" placeholder="e.g. SGT Smith will report 10 minutes prior to all formations. Will have no further issues with tardiness. Will report any conflicts to the chain of command NLT 24 hours in advance..."></textarea>
+        </div>
+        <div class="field">
+          <label>Leader Responsibilities</label>
+          <textarea id="c_leader" placeholder="e.g. Counselor will follow up at the next monthly counseling. Will monitor attendance and provide mentorship as needed..."></textarea>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="generateCounseling()">Generate DA 4856</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearCounseling()">Clear Form</button>
+        <span class="copy-confirm" id="copyCounselingConfirm">✓ COPIED TO CLIPBOARD</span>
+      </div>
+    </div>
+
+    <div class="output-box" id="counselingOutput">
+      <div class="output-label">Generated DA 4856</div>
+    </div>
+
+    <div class="btn-row" id="counselingCopyRow" style="display:none">
+      <button class="btn btn-secondary btn-sm" onclick="copyOutput('counselingOutput', 'copyCounselingConfirm')">Copy to Clipboard</button>
+    </div>
+
+  </div>
+
+  <!-- ===== ROSTER PANEL ===== -->
+  <div class="panel" id="panel-roster">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Soldier Roster</div>
+        <div class="section-sub">Track counseling status across your formation</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="toggleAddSoldier()">+ Add Soldier</button>
+    </div>
+
+    <div class="card" id="addSoldierForm" style="display:none">
+      <div class="card-title">Add Soldier to Roster</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Name (Last, First MI)</label>
+          <input type="text" id="r_name" placeholder="SMITH, John A.">
+        </div>
+        <div class="field">
+          <label>Rank</label>
+          <select id="r_rank">
+            <option>PVT</option><option>PV2</option><option>PFC</option>
+            <option>SPC</option><option>CPL</option><option>SGT</option>
+            <option>SSG</option><option>SFC</option><option>MSG</option>
+            <option>1SG</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>MOS</label>
+          <input type="text" id="r_mos" placeholder="11B, 25U, 42A...">
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-top:14px">
+        <div class="field">
+          <label>Last Counseling Date</label>
+          <input type="date" id="r_lastCounseling">
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="r_status">
+            <option value="current">Current</option>
+            <option value="due">Due This Month</option>
+            <option value="overdue">Overdue</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Notes</label>
+          <input type="text" id="r_notes" placeholder="Optional notes...">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="addSoldier()">Add to Roster</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleAddSoldier()">Cancel</button>
+      </div>
+    </div>
+
+    <div id="rosterContainer">
+      <div class="empty-state" id="rosterEmpty">NO SOLDIERS ADDED YET — CLICK + ADD SOLDIER TO BEGIN</div>
+      <table class="roster-table" id="rosterTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Rank</th>
+            <th>MOS</th>
+            <th>Last Counseling</th>
+            <th>Status</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rosterBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ===== BULLETS PANEL ===== -->
+  <div class="panel" id="panel-bullets">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">NCOER Bullet Builder</div>
+        <div class="section-sub">AI-powered — type plain language, get Army-standard bullets</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Accomplishment Input</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="field">
+          <label>Soldier Name &amp; Rank</label>
+          <input type="text" id="b_name" placeholder="SGT Smith">
+        </div>
+        <div class="field">
+          <label>Rating Category</label>
+          <select id="b_category">
+            <option>Character</option>
+            <option>Presence</option>
+            <option>Intellect</option>
+            <option>Leads</option>
+            <option>Develops</option>
+            <option>Achieves</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid full">
+        <div class="field">
+          <label>Describe what they did — plain language is fine</label>
+          <textarea id="b_action" rows="4" placeholder="e.g. John Smith did good during the field exercise... or SGT Smith led the team through a live fire and everyone passed..."></textarea>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>Any numbers / metrics to include? (optional)</label>
+          <input type="text" id="b_impact" placeholder="e.g. 12 soldiers, 100% pass rate, 3 weeks ahead of schedule">
+        </div>
+        <div class="field">
+          <label>Bullet Count</label>
+          <select id="b_count">
+            <option value="3">3 bullets</option>
+            <option value="5">5 bullets</option>
+            <option value="1">1 bullet (single best)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="buildBtn" onclick="buildBulletAI()">⚡ Generate AI Bullets</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearBullets()">Clear</button>
+      </div>
+
+      <!-- LOADING STATE -->
+      <div id="bulletLoading" style="display:none; margin-top:20px; padding:20px; background:var(--od-dark); border:1px solid var(--border); text-align:center;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:3px;">
+          <span id="loadingDots">GENERATING</span>
+        </div>
+        <div style="margin-top:8px; font-size:11px; color:var(--tan-dark); font-family:'Source Code Pro',monospace; letter-spacing:1px;">
+          AI is writing Army-standard bullets...
+        </div>
+      </div>
+
+      <!-- ERROR STATE -->
+      <div id="bulletError" style="display:none; margin-top:16px; padding:14px 18px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:12px;"></div>
+    </div>
+
+    <div id="bulletsContainer"></div>
+
+  </div>
+
+</div>
+
+<script>
+  // STATE
+  let soldiers = [];
+  let counselingCount = 0;
+  let bulletCount = 0;
+
+  // TAB SWITCHING
+  function switchTab(name, el) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    el.classList.add('active');
+  }
+
+  // UPDATE STATS
+  function updateStats() {
+    document.getElementById('statSoldiers').textContent = soldiers.length;
+    document.getElementById('statCounselings').textContent = counselingCount;
+    document.getElementById('statBullets').textContent = bulletCount;
+    const overdue = soldiers.filter(s => s.status === 'overdue').length;
+    document.getElementById('statOverdue').textContent = overdue;
+  }
+
+  // SET TODAY'S DATE
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('c_date').value = today;
+
+  // COUNSELING TYPE → AUTO-FILL SUBJECT
+  function updatePurpose() {
+    const type = document.getElementById('c_type').value;
+    const subjects = {
+      initial: 'Initial Counseling',
+      performance: 'Monthly Performance Counseling',
+      event_positive: 'Commendable Performance',
+      event_negative: 'Substandard Performance / Corrective Training',
+      ncoer_support: 'NCOER Support Form Counseling',
+      profile: 'Profile / Physical Limitations Counseling',
+      custom: ''
+    };
+    if (subjects[type] !== undefined) {
+      document.getElementById('c_subject').value = subjects[type];
+    }
+  }
+
+  // GENERATE COUNSELING
+  function generateCounseling() {
+    const name = document.getElementById('c_soldierName').value || '[SOLDIER NAME]';
+    const rank = document.getElementById('c_rank').value || '[RANK]';
+    const date = document.getElementById('c_date').value || today;
+    const unit = document.getElementById('c_unit').value || '[UNIT]';
+    const counselor = document.getElementById('c_counselor').value || '[COUNSELOR NAME]';
+    const counselorRank = document.getElementById('c_counselorRank').value || '[RANK]';
+    const type = document.getElementById('c_type').value;
+    const subject = document.getElementById('c_subject').value || '[SUBJECT]';
+    const situation = document.getElementById('c_situation').value;
+    const strengths = document.getElementById('c_strengths').value;
+    const improve = document.getElementById('c_improve').value;
+    const poa = document.getElementById('c_poa').value;
+    const leader = document.getElementById('c_leader').value;
+
+    const formattedDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
+      day: '2-digit', month: 'long', year: 'numeric'
+    });
+
+    let output = `DA FORM 4856 — DEVELOPMENTAL COUNSELING FORM
+${'='.repeat(60)}
+
+PART I — ADMINISTRATIVE DATA
+${'─'.repeat(60)}
+Name (Last, First, MI):   ${name}
+Rank / Grade:             ${rank}
+Date of Counseling:       ${formattedDate}
+Organization:             ${unit}
+Name of Counselor:        ${counselorRank} ${counselor}
+
+PART II — BACKGROUND INFORMATION
+${'─'.repeat(60)}
+Purpose of Counseling:
+
+  Subject: ${subject}
+`;
+
+    if (situation) {
+      output += `\n  ${situation}\n`;
+    }
+
+    output += `\nPART III — SUMMARY OF COUNSELING
+${'─'.repeat(60)}
+`;
+
+    if (strengths) {
+      output += `\nSTRENGTHS / COMMENDABLE PERFORMANCE:\n  ${strengths}\n`;
+    }
+
+    if (improve) {
+      output += `\nAREAS REQUIRING IMPROVEMENT:\n  ${improve}\n`;
+    }
+
+    if (poa) {
+      output += `\nPLAN OF ACTION:\n  ${poa}\n`;
+    }
+
+    if (leader) {
+      output += `\nLEADER RESPONSIBILITIES:\n  ${leader}\n`;
+    }
+
+    output += `\nPART IV — ASSESSMENT OF THE PLAN OF ACTION
+${'─'.repeat(60)}
+  [ ] The Plan of Action was / was not accomplished.
+  Follow-up counseling required: [ ] Yes  [ ] No
+  Date of next counseling: ___________________________
+
+${'─'.repeat(60)}
+INDIVIDUAL COUNSELED:
+
+  Signature: ________________________________  Date: _____________
+
+  [ ] I agree  [ ] I disagree with the information above.
+
+  Comments: ______________________________________________________
+
+${'─'.repeat(60)}
+LEADER / COUNSELOR:
+
+  Signature: ________________________________  Date: _____________
+  ${counselorRank} ${counselor}
+
+${'─'.repeat(60)}
+NOTE: The counselee's signature is NOT an agreement or
+disagreement with the content. It is confirmation that
+the counseling took place and a copy was provided.
+${'─'.repeat(60)}
+DOCUMENT GENERATED BY NCO TOOLS — PROTOTYPE v0.1
+Review all content before official use.`;
+
+    const box = document.getElementById('counselingOutput');
+    box.textContent = output;
+    box.classList.add('visible');
+    document.getElementById('counselingCopyRow').style.display = 'flex';
+
+    counselingCount++;
+    updateStats();
+  }
+
+  function clearCounseling() {
+    ['c_soldierName','c_unit','c_counselor','c_subject','c_situation','c_strengths','c_improve','c_poa','c_leader'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('c_rank').value = '';
+    document.getElementById('c_counselorRank').value = '';
+    document.getElementById('c_type').value = '';
+    document.getElementById('c_date').value = today;
+    document.getElementById('counselingOutput').classList.remove('visible');
+    document.getElementById('counselingCopyRow').style.display = 'none';
+  }
+
+  function copyOutput(outputId, confirmId) {
+    const text = document.getElementById(outputId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const el = document.getElementById(confirmId);
+      el.classList.add('visible');
+      setTimeout(() => el.classList.remove('visible'), 2000);
+    });
+  }
+
+  // ROSTER
+  function toggleAddSoldier() {
+    const form = document.getElementById('addSoldierForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function addSoldier() {
+    const name = document.getElementById('r_name').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+
+    const soldier = {
+      id: Date.now(),
+      name,
+      rank: document.getElementById('r_rank').value,
+      mos: document.getElementById('r_mos').value || '—',
+      lastCounseling: document.getElementById('r_lastCounseling').value || '—',
+      status: document.getElementById('r_status').value,
+      notes: document.getElementById('r_notes').value || '—'
+    };
+
+    soldiers.push(soldier);
+    renderRoster();
+    updateStats();
+    toggleAddSoldier();
+
+    ['r_name','r_mos','r_notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('r_lastCounseling').value = '';
+    document.getElementById('r_rank').value = 'SPC';
+    document.getElementById('r_status').value = 'current';
+  }
+
+  function removeSoldier(id) {
+    soldiers = soldiers.filter(s => s.id !== id);
+    renderRoster();
+    updateStats();
+  }
+
+  function renderRoster() {
+    const tbody = document.getElementById('rosterBody');
+    const table = document.getElementById('rosterTable');
+    const empty = document.getElementById('rosterEmpty');
+
+    if (soldiers.length === 0) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = soldiers.map(s => {
+      const badgeClass = s.status === 'current' ? 'badge-green' : s.status === 'due' ? 'badge-yellow' : 'badge-red';
+      const badgeText = s.status === 'current' ? 'Current' : s.status === 'due' ? 'Due' : 'Overdue';
+      const lastDate = s.lastCounseling !== '—' ?
+        new Date(s.lastCounseling + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) :
+        '—';
+
+      return `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td>${s.rank}</td>
+        <td>${s.mos}</td>
+        <td>${lastDate}</td>
+        <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+        <td style="font-size:12px; color: var(--tan-dark)">${s.notes}</td>
+        <td><button class="btn btn-danger" onclick="removeSoldier(${s.id})">Remove</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // BULLET BUILDER — AI POWERED
+  let loadingInterval = null;
+
+  async function buildBulletAI() {
+    const name = document.getElementById('b_name').value.trim() || 'Soldier';
+    const category = document.getElementById('b_category').value;
+    const b_action = document.getElementById('b_action').value.trim();
+    const b_impact = document.getElementById('b_impact').value.trim();
+    const count = document.getElementById('b_count').value;
+
+    if (!b_action) { alert('Please describe what the soldier did.'); return; }
+
+    // UI: loading state
+    document.getElementById('buildBtn').disabled = true;
+    document.getElementById('buildBtn').textContent = 'Generating...';
+    document.getElementById('bulletLoading').style.display = 'block';
+    document.getElementById('bulletError').style.display = 'none';
+
+    // Animate loading dots
+    const dots = ['GENERATING', 'GENERATING.', 'GENERATING..', 'GENERATING...'];
+    let di = 0;
+    loadingInterval = setInterval(() => {
+      document.getElementById('loadingDots').textContent = dots[di++ % dots.length];
+    }, 400);
+
+    try {
+      const response = await fetch('/api/bullets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, category, action: b_action, impact: b_impact, count })
+      });
+
+      const data = await response.json();
+
+      if (data.error) throw new Error(data.error);
+
+      const bullets = data.bullets;
+
+      clearInterval(loadingInterval);
+      document.getElementById('bulletLoading').style.display = 'none';
+      document.getElementById('buildBtn').disabled = false;
+      document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+
+      // Render result card
+      const container = document.getElementById('bulletsContainer');
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.style.marginTop = '16px';
+      div.innerHTML = `
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+          <span>${category.toUpperCase()} — ${name}</span>
+          <button class="btn btn-danger" onclick="this.closest('.card').remove(); bulletCount = Math.max(0, bulletCount-1); updateStats();">Remove</button>
+        </div>
+        <div class="bullet-output visible" id="bulletResult_${Date.now()}">
+          ${bullets.map(b => `<div class="bullet-line">${b}</div>`).join('')}
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary btn-sm" onclick="copyBullets(this)">Copy All Bullets</button>
+        </div>
+      `;
+      container.prepend(div);
+
+      bulletCount++;
+      updateStats();
+
+    } catch (err) {
+      clearInterval(loadingInterval);
+      document.getElementById('bulletLoading').style.display = 'none';
+      document.getElementById('buildBtn').disabled = false;
+      document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+      document.getElementById('bulletError').style.display = 'block';
+      document.getElementById('bulletError').textContent = 'ERROR: Could not reach AI service. Check connection and try again. (' + err.message + ')';
+    }
+  }
+
+  function copyBullets(btn) {
+    const bullets = btn.closest('.card').querySelectorAll('.bullet-line');
+    const text = Array.from(bullets).map(b => '• ' + b.textContent.trim()).join('\n');
+    navigator.clipboard.writeText(text);
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = 'Copy All Bullets', 2000);
+  }
+
+  function clearBullets() {
+    ['b_name','b_action','b_impact'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('bulletError').style.display = 'none';
+  }
+
+  updateStats();
+</script>
+</body>
+</html>
