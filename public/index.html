@@ -662,8 +662,8 @@
       </div>
 
       <div class="btn-row" style="margin-top:20px">
-        <button class="btn btn-primary" onclick="enhanceAllAndGenerate()">⚡ AI Enhance All + Generate</button>
-        <button class="btn btn-secondary btn-sm" onclick="generateCounseling()">Generate As-Is</button>
+        <button class="btn btn-primary" onclick="enhanceAllAndGenerate()">⚡ AI Enhance All + Generate PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="generatePDF()">Generate PDF As-Is</button>
         <button class="btn btn-secondary btn-sm" onclick="clearCounseling()">Clear</button>
       </div>
       <div id="counselingAILoading" style="display:none; margin-top:16px; padding:16px; background:var(--od-dark); border:1px solid var(--border); text-align:center; font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:3px;">
@@ -945,7 +945,7 @@
         field.value = data.enhanced;
       }
       document.getElementById('counselingAILoading').style.display = 'none';
-      generateCounseling();
+      generatePDF();
     } catch (err) {
       document.getElementById('counselingAILoading').style.display = 'none';
       document.getElementById('counselingAIError').style.display = 'block';
@@ -953,104 +953,62 @@
     }
   }
 
-  // GENERATE COUNSELING
-  function generateCounseling() {
-    const name = document.getElementById('c_soldierName').value || '[SOLDIER NAME]';
-    const rank = document.getElementById('c_rank').value || '[RANK]';
+  // GENERATE PDF
+  async function generatePDF() {
+    const soldierName = document.getElementById('c_soldierName').value || '';
+    const rank = document.getElementById('c_rank').value || '';
     const date = document.getElementById('c_date').value || today;
-    const unit = document.getElementById('c_unit').value || '[UNIT]';
-    const counselor = document.getElementById('c_counselor').value || '[COUNSELOR NAME]';
-    const counselorRank = document.getElementById('c_counselorRank').value || '[RANK]';
-    const type = document.getElementById('c_type').value;
-    const subject = document.getElementById('c_subject').value || '[SUBJECT]';
-    const situation = document.getElementById('c_situation').value;
-    const strengths = document.getElementById('c_strengths').value;
-    const improve = document.getElementById('c_improve').value;
-    const poa = document.getElementById('c_poa').value;
-    const leader = document.getElementById('c_leader').value;
+    const unit = document.getElementById('c_unit').value || '';
+    const counselor = document.getElementById('c_counselor').value || '';
+    const counselorRank = document.getElementById('c_counselorRank').value || '';
+    const subject = document.getElementById('c_subject').value || '';
+    const situation = document.getElementById('c_situation').value || '';
+    const strengths = document.getElementById('c_strengths').value || '';
+    const improve = document.getElementById('c_improve').value || '';
+    const poa = document.getElementById('c_poa').value || '';
+    const leader = document.getElementById('c_leader').value || '';
 
-    const formattedDate = new Date(date + 'T12:00:00').toLocaleDateString('en-US', {
-      day: '2-digit', month: 'long', year: 'numeric'
-    });
+    if (!soldierName) { alert('Please enter the soldier name before generating.'); return; }
 
-    let output = `DA FORM 4856 — DEVELOPMENTAL COUNSELING FORM
-${'='.repeat(60)}
+    document.getElementById('counselingAILoading').style.display = 'block';
+    document.getElementById('counselingAILoading').textContent = 'GENERATING PDF...';
+    document.getElementById('counselingAIError').style.display = 'none';
 
-PART I — ADMINISTRATIVE DATA
-${'─'.repeat(60)}
-Name (Last, First, MI):   ${name}
-Rank / Grade:             ${rank}
-Date of Counseling:       ${formattedDate}
-Organization:             ${unit}
-Name of Counselor:        ${counselorRank} ${counselor}
+    try {
+      const response = await fetch('/api/generate-4856', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soldierName, rank, date, unit, counselor, counselorRank, subject, situation, strengths, improve, poa, leader })
+      });
 
-PART II — BACKGROUND INFORMATION
-${'─'.repeat(60)}
-Purpose of Counseling:
+      if (!response.ok) throw new Error('PDF generation failed');
 
-  Subject: ${subject}
-`;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
 
-    if (situation) {
-      output += `\n  ${situation}\n`;
+      // Open in new tab
+      const newTab = window.open(url, '_blank');
+
+      // Also trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `DA4856_${soldierName.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+      a.click();
+
+      document.getElementById('counselingAILoading').style.display = 'none';
+      counselingCount++;
+      updateStats();
+
+    } catch (err) {
+      document.getElementById('counselingAILoading').style.display = 'none';
+      document.getElementById('counselingAIError').style.display = 'block';
+      document.getElementById('counselingAIError').textContent = 'PDF generation failed: ' + err.message;
     }
+  }
 
-    output += `\nPART III — SUMMARY OF COUNSELING
-${'─'.repeat(60)}
-`;
-
-    if (strengths) {
-      output += `\nSTRENGTHS / COMMENDABLE PERFORMANCE:\n  ${strengths}\n`;
-    }
-
-    if (improve) {
-      output += `\nAREAS REQUIRING IMPROVEMENT:\n  ${improve}\n`;
-    }
-
-    if (poa) {
-      output += `\nPLAN OF ACTION:\n  ${poa}\n`;
-    }
-
-    if (leader) {
-      output += `\nLEADER RESPONSIBILITIES:\n  ${leader}\n`;
-    }
-
-    output += `\nPART IV — ASSESSMENT OF THE PLAN OF ACTION
-${'─'.repeat(60)}
-  [ ] The Plan of Action was / was not accomplished.
-  Follow-up counseling required: [ ] Yes  [ ] No
-  Date of next counseling: ___________________________
-
-${'─'.repeat(60)}
-INDIVIDUAL COUNSELED:
-
-  Signature: ________________________________  Date: _____________
-
-  [ ] I agree  [ ] I disagree with the information above.
-
-  Comments: ______________________________________________________
-
-${'─'.repeat(60)}
-LEADER / COUNSELOR:
-
-  Signature: ________________________________  Date: _____________
-  ${counselorRank} ${counselor}
-
-${'─'.repeat(60)}
-NOTE: The counselee's signature is NOT an agreement or
-disagreement with the content. It is confirmation that
-the counseling took place and a copy was provided.
-${'─'.repeat(60)}
-DOCUMENT GENERATED BY NCO TOOLS — PROTOTYPE v0.1
-Review all content before official use.`;
-
-    const box = document.getElementById('counselingOutput');
-    box.textContent = output;
-    box.classList.add('visible');
-    document.getElementById('counselingCopyRow').style.display = 'flex';
-
-    counselingCount++;
-    updateStats();
+  // GENERATE COUNSELING (legacy text output kept as fallback)
+  function generateCounseling() {
+    generatePDF();
   }
 
   function clearCounseling() {
