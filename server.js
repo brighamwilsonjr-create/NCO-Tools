@@ -9,11 +9,66 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'online' }));
-app.get('/test-key', async (req, res) => {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.json({ error: 'No API key found in environment' });
-  res.json({ key_present: true, starts_with: key.substring(0, 12) + '...' });
+
+// AI Counseling Enhancement endpoint
+app.post('/api/enhance-counseling', async (req, res) => {
+  const { rawText, section, soldierName, rank, counselingType } = req.body;
+
+  if (!rawText) return res.status(400).json({ error: 'Text is required.' });
+
+  const sectionContext = {
+    situation: 'the Background Information / Purpose of Counseling section — describe what occurred factually and professionally',
+    strengths: 'the Strengths and Commendable Performance section — highlight positive attributes and accomplishments professionally',
+    improvement: 'the Areas Requiring Improvement section — describe deficiencies professionally without personal attacks',
+    plan_of_action: 'the Plan of Action section — specific, measurable, achievable actions the soldier will take with clear timelines',
+    leader_responsibilities: 'the Leader Responsibilities section — what the counselor commits to doing to support the soldier'
+  };
+
+  const prompt = `You are an expert Army NCO writer who specializes in DA Form 4856 Developmental Counseling Forms. You write in precise, professional Army regulatory language following AR 623-3 and FM 6-22 standards.
+
+Rewrite the following rough notes into polished, professional Army language suitable for ${sectionContext[section] || 'a DA 4856 counseling form'}.
+
+Soldier: ${rank} ${soldierName}
+Counseling Type: ${counselingType}
+Raw Notes: ${rawText}
+
+Rules:
+- Write in third person (refer to soldier by rank and last name)
+- Use professional, regulatory Army language
+- Be specific and factual — no vague language
+- Do not add information that wasn't in the original notes
+- Keep it concise but complete
+- Do not use bullet points — write in paragraph form
+- Do not include section headers or labels in your response
+- Output ONLY the rewritten text, nothing else`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    if (data.error) return res.status(500).json({ error: data.error.message });
+
+    const enhanced = data.content.map(i => i.text || '').join('').trim();
+    res.json({ enhanced });
+
+  } catch (err) {
+    console.error('Counseling enhance error:', err);
+    res.status(500).json({ error: 'Failed to reach AI service.' });
+  }
 });
+
 // AI Bullet Generation endpoint
 app.post('/api/bullets', async (req, res) => {
   const { name, category, action, impact, count } = req.body;
