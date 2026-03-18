@@ -934,9 +934,32 @@
           <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_plk">— pts</div>
         </div>
         <div class="field">
+          <label>Alternate Aerobic Event</label>
+          <select id="aft_alternate" onchange="toggleAlternate()">
+            <option value="no">No — Taking 2MR</option>
+            <option value="bike">12K Bike</option>
+            <option value="walk">2.5 Mile Walk</option>
+            <option value="swim">1K Swim</option>
+            <option value="row">5K Rower</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 2MR field — shown when no alternate selected -->
+      <div class="form-grid" style="margin-top:16px" id="tmr_field">
+        <div class="field">
           <label>2MR — Two-Mile Run (MM:SS)</label>
           <input type="text" id="aft_tmr" placeholder="e.g. 15:30" oninput="liveScore()">
           <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_tmr">— pts</div>
+        </div>
+      </div>
+
+      <!-- Alternate event time field — shown when alternate selected -->
+      <div class="form-grid" style="margin-top:16px; display:none" id="alt_field">
+        <div class="field">
+          <label id="alt_event_label">Alternate Event Time (MM:SS)</label>
+          <input type="text" id="aft_alt_time" placeholder="e.g. 26:25" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_alt">— GO/NO-GO</div>
         </div>
       </div>
 
@@ -1341,6 +1364,77 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
     document.getElementById('bulletError').style.display = 'none';
   }
 
+  // AFT ALTERNATE EVENT TABLES (Go/No-Go cutoff times by age band - lower is better)
+  // Format: [M, F] per age band index 0-9
+  const ALT_TABLES = {
+    walk: ['31:00','34:00', '30:45','33:30', '30:30','33:00', '30:45','33:30', '31:00','34:00', '31:00','34:00', '32:00','35:00', '32:00','35:00', '33:00','36:00', '33:00','36:00'],
+    bike: ['26:25','28:58', '26:12','28:31', '26:00','28:07', '26:12','28:31', '26:25','28:58', '26:25','28:58', '27:16','29:50', '27:16','29:50', '28:07','30:41', '28:07','30:41'],
+    swim: ['30:48','33:48', '30:30','33:18', '30:20','32:48', '30:30','33:18', '30:48','33:48', '30:48','33:48', '31:48','34:48', '31:48','34:48', '32:50','35:48', '32:50','35:48'],
+    row:  ['30:48','33:48', '30:30','33:18', '30:20','32:48', '30:30','33:18', '30:48','33:48', '30:48','33:48', '31:48','34:48', '31:48','34:48', '32:50','35:48', '32:50','35:48'],
+  };
+
+  const ALT_LABELS = {
+    bike: '12K Bike (MM:SS)',
+    walk: '2.5 Mile Walk (MM:SS)',
+    swim: '1K Swim (MM:SS)',
+    row: '5K Rower (MM:SS)',
+  };
+
+  const ALT_PLACEHOLDERS = {
+    bike: 'e.g. 26:25',
+    walk: 'e.g. 31:00',
+    swim: 'e.g. 30:48',
+    row: 'e.g. 30:48',
+  };
+
+  function toggleAlternate() {
+    const val = document.getElementById('aft_alternate').value;
+    const tmrField = document.getElementById('tmr_field');
+    const altField = document.getElementById('alt_field');
+
+    if (val === 'no') {
+      tmrField.style.display = 'block';
+      altField.style.display = 'none';
+      document.getElementById('pts_alt').textContent = '— GO/NO-GO';
+    } else {
+      tmrField.style.display = 'none';
+      altField.style.display = 'block';
+      document.getElementById('alt_event_label').textContent = ALT_LABELS[val];
+      document.getElementById('aft_alt_time').placeholder = ALT_PLACEHOLDERS[val];
+    }
+    liveScore();
+  }
+
+  function scoreAlternate(timeStr, eventKey, age, sex) {
+    const table = ALT_TABLES[eventKey];
+    if (!table) return null;
+    const bandIdx = getAgeBandIndex(parseInt(age));
+    const colIdx = bandIdx * 2 + (sex === 'F' ? 1 : 0);
+    const cutoff = table[colIdx];
+    if (!cutoff) return null;
+
+    const inputSecs = timeToSeconds(timeStr);
+    const cutoffSecs = timeToSeconds(cutoff);
+    if (!inputSecs || !cutoffSecs) return null;
+
+    return { go: inputSecs <= cutoffSecs, cutoff };
+  }
+
+  function getAgeBandIndex(age) {
+    const bands = [21, 26, 31, 36, 41, 46, 51, 56, 61];
+    for (let i = 0; i < bands.length; i++) {
+      if (age <= bands[i]) return i;
+    }
+    return 9;
+  }
+
+  function timeToSeconds(t) {
+    if (!t || t === '---') return null;
+    const parts = t.split(':');
+    if (parts.length !== 2) return null;
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  }
+
   // AFT SCORER
   let lastAFTResult = null;
 
@@ -1352,10 +1446,22 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
     const hrp = document.getElementById('aft_hrp').value;
     const sdc = document.getElementById('aft_sdc').value;
     const plk = document.getElementById('aft_plk').value;
-    const tmr = document.getElementById('aft_tmr').value;
+    const alternate = document.getElementById('aft_alternate').value;
+    const tmr = alternate === 'no' ? document.getElementById('aft_tmr').value : '';
+    const altTime = alternate !== 'no' ? document.getElementById('aft_alt_time').value : '';
 
     if (!age || !sex) return;
-    if (!mdl && !hrp && !sdc && !plk && !tmr) return;
+    if (!mdl && !hrp && !sdc && !plk && !tmr && !altTime) return;
+
+    // Handle alternate event display
+    if (alternate !== 'no' && altTime) {
+      const altResult = scoreAlternate(altTime, alternate, age, sex);
+      if (altResult) {
+        const el = document.getElementById('pts_alt');
+        el.textContent = altResult.go ? `✓ GO (cutoff: ${altResult.cutoff})` : `✗ NO-GO (cutoff: ${altResult.cutoff})`;
+        el.style.color = altResult.go ? '#4CAF50' : '#f44336';
+      }
+    }
 
     try {
       const response = await fetch('/api/aft-score', {
@@ -1367,27 +1473,42 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
       if (data.error) return;
 
       lastAFTResult = data;
+      lastAFTResult.alternate = alternate;
+      lastAFTResult.altTime = altTime;
 
       const events = ['mdl','hrp','sdc','plk','tmr'];
       events.forEach(ev => {
         const el = document.getElementById('pts_' + ev);
+        if (!el) return;
         const pts = data.scores[ev];
-        if (pts !== undefined) {
+        if (pts !== undefined && ev !== 'tmr' || (ev === 'tmr' && alternate === 'no')) {
           el.textContent = pts + ' pts';
           el.style.color = pts >= 60 ? '#4CAF50' : '#f44336';
         }
       });
+
+      // For alternate events, check alt go/no-go for overall pass
+      let altGo = true;
+      if (alternate !== 'no' && altTime) {
+        const altResult = scoreAlternate(altTime, alternate, age, sex);
+        altGo = altResult ? altResult.go : false;
+      }
+
+      // Recalculate pass considering alternate
+      const altOverallPass = alternate !== 'no'
+        ? data.eventPass && altGo && data.total >= data.minTotal
+        : data.overallPass;
 
       document.getElementById('aft_score_display').style.display = 'block';
       document.getElementById('aft_total_display').textContent = data.total;
       const badge = document.getElementById('aft_result_badge');
       const detail = document.getElementById('aft_result_detail');
 
-      if (data.overallPass) {
+      if (altOverallPass) {
         badge.textContent = 'GO';
         badge.style.color = '#4CAF50';
         badge.style.borderColor = '#4CAF50';
-        detail.textContent = `All events passed (≥60 pts each) | Total meets ${standard === 'combat' ? 'Combat (350)' : 'General (300)'} standard`;
+        detail.textContent = `All events passed | Total meets ${standard === 'combat' ? 'Combat (350)' : 'General (300)'} standard${alternate !== 'no' ? ' | Alternate: GO' : ''}`;
       } else {
         badge.textContent = 'NO-GO';
         badge.style.color = '#f44336';
@@ -1395,15 +1516,17 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
         const reasons = [];
         if (!data.eventPass) reasons.push('one or more events below 60 pts');
         if (!data.totalPass) reasons.push(`total below ${data.minTotal}`);
+        if (alternate !== 'no' && !altGo) reasons.push('alternate event no-go');
         detail.textContent = 'Failed: ' + reasons.join(', ');
       }
+
     } catch (err) {}
   }
 
   async function generateDA705() {}
 
   function clearAFT() {
-    ['aft_name','aft_age','aft_unit','aft_mos','aft_date','aft_mdl','aft_hrp','aft_sdc','aft_plk','aft_tmr'].forEach(id => {
+    ['aft_name','aft_age','aft_unit','aft_mos','aft_date','aft_mdl','aft_hrp','aft_sdc','aft_plk','aft_tmr','aft_alt_time'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
@@ -1411,6 +1534,10 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
       const el = document.getElementById('pts_' + ev);
       if (el) { el.textContent = '— pts'; el.style.color = 'var(--tan)'; }
     });
+    document.getElementById('aft_alternate').value = 'no';
+    document.getElementById('tmr_field').style.display = 'block';
+    document.getElementById('alt_field').style.display = 'none';
+    document.getElementById('pts_alt').textContent = '— GO/NO-GO';
     const scoreDisplay = document.getElementById('aft_score_display');
     if (scoreDisplay) scoreDisplay.style.display = 'none';
     lastAFTResult = null;
