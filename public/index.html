@@ -529,6 +529,7 @@
     <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
     <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
     <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
+    <button class="tab" onclick="switchTab('aft', this)">AFT Scorer / DA 705</button>
   </div>
 
   <!-- ===== COUNSELING PANEL ===== -->
@@ -832,9 +833,135 @@
 
   </div>
 
-</div>
+  <!-- ===== AFT PANEL ===== -->
+  <div class="panel" id="panel-aft">
 
-<script>
+    <div class="section-header">
+      <div>
+        <div class="section-title">AFT Scorer</div>
+        <div class="section-sub">Auto-calculates points from official June 2025 tables — generates DA 705 PDF</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Soldier Information</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Name (Last, First MI)</label>
+          <input type="text" id="aft_name" placeholder="SMITH, John A.">
+        </div>
+        <div class="field">
+          <label>Sex</label>
+          <select id="aft_sex">
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Age</label>
+          <input type="number" id="aft_age" placeholder="25" min="17" max="80">
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-top:14px">
+        <div class="field">
+          <label>Unit</label>
+          <input type="text" id="aft_unit" placeholder="HHC, 1-12 IN">
+        </div>
+        <div class="field">
+          <label>MOS</label>
+          <input type="text" id="aft_mos" placeholder="11B">
+        </div>
+        <div class="field">
+          <label>Pay Grade</label>
+          <select id="aft_grade">
+            <option>E-1</option><option>E-2</option><option>E-3</option>
+            <option>E-4</option><option>E-5</option><option>E-6</option>
+            <option>E-7</option><option>E-8</option><option>E-9</option>
+            <option>O-1</option><option>O-2</option><option>O-3</option>
+            <option>O-4</option><option>O-5</option><option>O-6</option>
+            <option>W-1</option><option>W-2</option><option>W-3</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field">
+          <label>Test Date (YYYYMMDD)</label>
+          <input type="text" id="aft_date" placeholder="20260318">
+        </div>
+        <div class="field">
+          <label>Standard</label>
+          <select id="aft_standard">
+            <option value="general">General (300 min total)</option>
+            <option value="combat">Combat MOS (350 min total)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Event Raw Scores</div>
+      <div class="section-sub" style="margin-bottom:14px; font-size:11px; color:var(--tan-dark);">Enter raw performance — points calculate automatically from official AFT tables</div>
+
+      <div class="form-grid three">
+        <div class="field">
+          <label>MDL — Max Deadlift (lbs)</label>
+          <input type="number" id="aft_mdl" placeholder="e.g. 280" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_mdl">— pts</div>
+        </div>
+        <div class="field">
+          <label>HRP — Hand-Release Push-Ups (reps)</label>
+          <input type="number" id="aft_hrp" placeholder="e.g. 42" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_hrp">— pts</div>
+        </div>
+        <div class="field">
+          <label>SDC — Sprint-Drag-Carry (M:SS)</label>
+          <input type="text" id="aft_sdc" placeholder="e.g. 1:45" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_sdc">— pts</div>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>PLK — Plank (M:SS)</label>
+          <input type="text" id="aft_plk" placeholder="e.g. 2:30" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_plk">— pts</div>
+        </div>
+        <div class="field">
+          <label>2MR — Two-Mile Run (MM:SS)</label>
+          <input type="text" id="aft_tmr" placeholder="e.g. 15:30" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_tmr">— pts</div>
+        </div>
+      </div>
+
+      <!-- LIVE SCORE DISPLAY -->
+      <div id="aft_score_display" style="display:none; margin-top:20px; padding:16px; background:var(--od-dark); border:1px solid var(--tan);">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:3px; color:var(--tan-dark); text-transform:uppercase;">Total Score</div>
+            <div style="font-family:'Oswald',sans-serif; font-size:48px; color:var(--tan); line-height:1;" id="aft_total_display">0</div>
+          </div>
+          <div id="aft_result_badge" style="font-family:'Oswald',sans-serif; font-size:24px; letter-spacing:4px; padding:12px 24px; border:2px solid var(--tan);">
+            —
+          </div>
+        </div>
+        <div style="margin-top:8px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);" id="aft_result_detail"></div>
+      </div>
+
+      <div class="field" style="margin-top:16px">
+        <label>OIC/NCOIC Name (for DA 705)</label>
+        <input type="text" id="aft_oic" placeholder="SSG JONES, Marcus T.">
+      </div>
+
+      <div class="btn-row" style="margin-top:20px">
+        <button class="btn btn-primary" onclick="generateDA705()">Generate DA 705 PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearAFT()">Clear</button>
+      </div>
+
+      <div id="aftError" style="display:none; margin-top:16px; padding:14px 18px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:12px;"></div>
+    </div>
+
+  </div>
+
+</div>
   // STATE
   let soldiers = [];
   let counselingCount = 0;
@@ -1210,6 +1337,132 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
   function clearBullets() {
     ['b_name','b_action','b_impact'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('bulletError').style.display = 'none';
+  }
+
+  // AFT SCORER
+  let lastAFTResult = null;
+
+  async function liveScore() {
+    const age = document.getElementById('aft_age').value;
+    const sex = document.getElementById('aft_sex').value;
+    const standard = document.getElementById('aft_standard').value;
+    const mdl = document.getElementById('aft_mdl').value;
+    const hrp = document.getElementById('aft_hrp').value;
+    const sdc = document.getElementById('aft_sdc').value;
+    const plk = document.getElementById('aft_plk').value;
+    const tmr = document.getElementById('aft_tmr').value;
+
+    if (!age || !sex) return;
+    if (!mdl && !hrp && !sdc && !plk && !tmr) return;
+
+    try {
+      const response = await fetch('/api/aft-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ age, sex, standard, mdl, hrp, sdc, plk, tmr })
+      });
+      const data = await response.json();
+      if (data.error) return;
+
+      lastAFTResult = data;
+
+      const events = ['mdl','hrp','sdc','plk','tmr'];
+      events.forEach(ev => {
+        const el = document.getElementById('pts_' + ev);
+        const pts = data.scores[ev];
+        if (pts !== undefined) {
+          el.textContent = pts + ' pts';
+          el.style.color = pts >= 60 ? '#4CAF50' : '#f44336';
+        }
+      });
+
+      document.getElementById('aft_score_display').style.display = 'block';
+      document.getElementById('aft_total_display').textContent = data.total;
+      const badge = document.getElementById('aft_result_badge');
+      const detail = document.getElementById('aft_result_detail');
+
+      if (data.overallPass) {
+        badge.textContent = 'GO';
+        badge.style.color = '#4CAF50';
+        badge.style.borderColor = '#4CAF50';
+        detail.textContent = `All events passed (≥60 pts each) | Total meets ${standard === 'combat' ? 'Combat (350)' : 'General (300)'} standard`;
+      } else {
+        badge.textContent = 'NO-GO';
+        badge.style.color = '#f44336';
+        badge.style.borderColor = '#f44336';
+        const reasons = [];
+        if (!data.eventPass) reasons.push('one or more events below 60 pts');
+        if (!data.totalPass) reasons.push(`total below ${data.minTotal}`);
+        detail.textContent = 'Failed: ' + reasons.join(', ');
+      }
+    } catch (err) {}
+  }
+
+  async function generateDA705() {
+    const name = document.getElementById('aft_name').value;
+    const age = document.getElementById('aft_age').value;
+    const sex = document.getElementById('aft_sex').value;
+
+    if (!name || !age) { alert('Please enter soldier name and age.'); return; }
+
+    await liveScore();
+    if (!lastAFTResult) { alert('Please enter at least one event score.'); return; }
+
+    const payload = {
+      name, sex, age,
+      unit: document.getElementById('aft_unit').value,
+      mos: document.getElementById('aft_mos').value,
+      payGrade: document.getElementById('aft_grade').value,
+      standard: document.getElementById('aft_standard').value,
+      date: document.getElementById('aft_date').value,
+      mdl: document.getElementById('aft_mdl').value,
+      hrp: document.getElementById('aft_hrp').value,
+      sdc: document.getElementById('aft_sdc').value,
+      plk: document.getElementById('aft_plk').value,
+      tmr: document.getElementById('aft_tmr').value,
+      oicName: document.getElementById('aft_oic').value,
+      scores: lastAFTResult.scores,
+      total: lastAFTResult.total,
+      overallPass: lastAFTResult.overallPass
+    };
+
+    document.getElementById('aftError').style.display = 'none';
+
+    try {
+      const response = await fetch('/api/generate-705', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error('PDF generation failed');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `DA705_${name.replace(/[^a-z0-9]/gi,'_')}.pdf`;
+      a.click();
+
+    } catch (err) {
+      document.getElementById('aftError').style.display = 'block';
+      document.getElementById('aftError').textContent = 'PDF generation failed: ' + err.message;
+    }
+  }
+
+  function clearAFT() {
+    ['aft_name','aft_age','aft_unit','aft_mos','aft_date','aft_mdl','aft_hrp','aft_sdc','aft_plk','aft_tmr','aft_oic'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    ['mdl','hrp','sdc','plk','tmr'].forEach(ev => {
+      document.getElementById('pts_' + ev).textContent = '— pts';
+      document.getElementById('pts_' + ev).style.color = 'var(--tan)';
+    });
+    document.getElementById('aft_score_display').style.display = 'none';
+    document.getElementById('aftError').style.display = 'none';
+    lastAFTResult = null;
   }
 
   updateStats();
