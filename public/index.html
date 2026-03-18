@@ -839,7 +839,7 @@
     <div class="section-header">
       <div>
         <div class="section-title">AFT Scorer</div>
-        <div class="section-sub">Auto-calculates points from official June 2025 tables — generates DA 705 PDF</div>
+        <div class="section-sub">Live score calculator — enter raw scores and see points and pass/fail instantly</div>
       </div>
     </div>
 
@@ -946,17 +946,9 @@
         <div style="margin-top:8px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);" id="aft_result_detail"></div>
       </div>
 
-      <div class="field" style="margin-top:16px">
-        <label>OIC/NCOIC Name (for DA 705)</label>
-        <input type="text" id="aft_oic" placeholder="SSG JONES, Marcus T.">
-      </div>
-
       <div class="btn-row" style="margin-top:20px">
-        <button class="btn btn-primary" onclick="generateDA705()">Generate DA 705 PDF</button>
         <button class="btn btn-secondary btn-sm" onclick="clearAFT()">Clear</button>
       </div>
-
-      <div id="aftError" style="display:none; margin-top:16px; padding:14px 18px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:12px;"></div>
     </div>
 
   </div>
@@ -1400,70 +1392,19 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
     } catch (err) {}
   }
 
-  async function generateDA705() {
-    const name = document.getElementById('aft_name').value;
-    const age = document.getElementById('aft_age').value;
-    const sex = document.getElementById('aft_sex').value;
-
-    if (!name || !age) { alert('Please enter soldier name and age.'); return; }
-
-    await liveScore();
-    if (!lastAFTResult) { alert('Please enter at least one event score.'); return; }
-
-    const payload = {
-      name, sex, age,
-      unit: document.getElementById('aft_unit').value,
-      mos: document.getElementById('aft_mos').value,
-      payGrade: document.getElementById('aft_grade').value,
-      standard: document.getElementById('aft_standard').value,
-      date: document.getElementById('aft_date').value,
-      mdl: document.getElementById('aft_mdl').value,
-      hrp: document.getElementById('aft_hrp').value,
-      sdc: document.getElementById('aft_sdc').value,
-      plk: document.getElementById('aft_plk').value,
-      tmr: document.getElementById('aft_tmr').value,
-      oicName: document.getElementById('aft_oic').value,
-      scores: lastAFTResult.scores,
-      total: lastAFTResult.total,
-      overallPass: lastAFTResult.overallPass
-    };
-
-    document.getElementById('aftError').style.display = 'none';
-
-    try {
-      const response = await fetch('/api/generate-705', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) throw new Error('PDF generation failed');
-
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `DA705_${name.replace(/[^a-z0-9]/gi,'_')}.pdf`;
-      a.click();
-
-    } catch (err) {
-      document.getElementById('aftError').style.display = 'block';
-      document.getElementById('aftError').textContent = 'PDF generation failed: ' + err.message;
-    }
-  }
+  async function generateDA705() {}
 
   function clearAFT() {
-    ['aft_name','aft_age','aft_unit','aft_mos','aft_date','aft_mdl','aft_hrp','aft_sdc','aft_plk','aft_tmr','aft_oic'].forEach(id => {
-      document.getElementById(id).value = '';
+    ['aft_name','aft_age','aft_unit','aft_mos','aft_date','aft_mdl','aft_hrp','aft_sdc','aft_plk','aft_tmr'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
     });
     ['mdl','hrp','sdc','plk','tmr'].forEach(ev => {
-      document.getElementById('pts_' + ev).textContent = '— pts';
-      document.getElementById('pts_' + ev).style.color = 'var(--tan)';
+      const el = document.getElementById('pts_' + ev);
+      if (el) { el.textContent = '— pts'; el.style.color = 'var(--tan)'; }
     });
-    document.getElementById('aft_score_display').style.display = 'none';
-    document.getElementById('aftError').style.display = 'none';
+    const scoreDisplay = document.getElementById('aft_score_display');
+    if (scoreDisplay) scoreDisplay.style.display = 'none';
     lastAFTResult = null;
   }
 
