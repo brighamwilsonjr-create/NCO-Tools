@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const PDFDocument = require('pdfkit');
+const { calculateAFT } = require('./aft_tables');
+
 
 const app = express();
 app.use(cors());
@@ -186,7 +187,176 @@ app.post('/api/generate-4856', (req, res) => {
   doc.end();
 });
 
-// AI Counseling Enhancement endpoint
+// AFT Score Calculation
+app.post('/api/aft-score', (req, res) => {
+  try {
+    const result = calculateAFT(req.body);
+    res.json(result);
+  } catch (err) {
+    console.error('AFT score error:', err);
+    res.status(500).json({ error: 'Score calculation failed: ' + err.message });
+  }
+});
+
+// DA 705 PDF Generation
+app.post('/api/generate-705', (req, res) => {
+  try {
+    const { name, sex, unit, mos, payGrade, age, standard, date,
+            mdl, hrp, sdc, plk, tmr, oicName, scores, total, overallPass } = req.body;
+
+    const doc = new PDFDocument({ margin: 36, size: 'letter' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="DA705_${(name||'AFT').replace(/[^a-z0-9]/gi,'_')}.pdf"`);
+    doc.pipe(res);
+
+    const W = 595 - 72;
+    const L = 36;
+    let y = 36;
+
+    const box = (x, y, w, h) => doc.rect(x, y, w, h).stroke();
+    const fillBox = (x, y, w, h, color) => doc.rect(x, y, w, h).fill(color).stroke('#000');
+    const lbl = (text, x, y, opts={}) => doc.fontSize(6).font('Helvetica').fillColor('#000').text(text, x, y, { lineBreak: false, ...opts });
+    const val = (text, x, y, w, opts={}) => doc.fontSize(9).font('Helvetica-Bold').fillColor('#000').text(text||'', x, y, { width: w, lineBreak: false, ...opts });
+    const hdr = (text, x, y, w) => {
+      doc.rect(x, y, w, 13).fill('#000');
+      doc.fontSize(7).font('Helvetica-Bold').fillColor('#fff').text(text, x+2, y+3, { lineBreak: false });
+      doc.fillColor('#000');
+    };
+
+    // Title
+    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000')
+      .text('ARMY FITNESS TEST SCORECARD', L, y, { align: 'center', width: W });
+    y += 13;
+    doc.fontSize(6).font('Helvetica')
+      .text('DA FORM 705  |  For use of this form, see ATP 7-22.01; proponent agency is TRADOC', L, y, { align: 'center', width: W });
+    y += 10;
+
+    // Header info row
+    box(L, y, W*0.4, 22);
+    box(L+W*0.4, y, W*0.15, 22);
+    box(L+W*0.55, y, W*0.15, 22);
+    box(L+W*0.70, y, W*0.15, 22);
+    box(L+W*0.85, y, W*0.15, 22);
+    lbl('NAME (Last, First, MI)', L+2, y+2);
+    lbl('SEX', L+W*0.4+2, y+2);
+    lbl('DATE (YYYYMMDD)', L+W*0.55+2, y+2);
+    lbl('STANDARD', L+W*0.70+2, y+2);
+    lbl('PAY GRADE', L+W*0.85+2, y+2);
+    val(name||'', L+2, y+11, W*0.4-4);
+    val(sex||'', L+W*0.4+2, y+11, W*0.15-4);
+    val(date||'', L+W*0.55+2, y+11, W*0.15-4);
+    val((standard||'').toUpperCase(), L+W*0.70+2, y+11, W*0.15-4);
+    val(payGrade||'', L+W*0.85+2, y+11, W*0.15-4);
+    y += 22;
+
+    // Unit / MOS / Age row
+    box(L, y, W*0.5, 20);
+    box(L+W*0.5, y, W*0.25, 20);
+    box(L+W*0.75, y, W*0.25, 20);
+    lbl('UNIT/LOCATION', L+2, y+2);
+    lbl('MOS', L+W*0.5+2, y+2);
+    lbl('AGE', L+W*0.75+2, y+2);
+    val(unit||'', L+2, y+10, W*0.5-4);
+    val(mos||'', L+W*0.5+2, y+10, W*0.25-4);
+    val(age||'', L+W*0.75+2, y+10, W*0.25-4);
+    y += 20;
+
+    // EVENTS SECTION
+    hdr('TEST ONE — EVENT SCORES', L, y, W);
+    y += 15;
+
+    const events = [
+      { label: '3-REP MAX DEADLIFT (MDL)', unit: 'lbs', raw: mdl, pts: scores?.mdl },
+      { label: 'HAND-RELEASE PUSH-UP (HRP)', unit: 'reps', raw: hrp, pts: scores?.hrp },
+      { label: 'SPRINT-DRAG-CARRY (SDC)', unit: 'M:SS', raw: sdc, pts: scores?.sdc },
+      { label: 'PLANK (PLK)', unit: 'M:SS', raw: plk, pts: scores?.plk },
+      { label: 'TWO-MILE RUN (2MR)', unit: 'MM:SS', raw: tmr, pts: scores?.tmr },
+    ];
+
+    events.forEach(ev => {
+      const pass = ev.pts >= 60;
+      box(L, y, W*0.40, 18);
+      box(L+W*0.40, y, W*0.15, 18);
+      box(L+W*0.55, y, W*0.15, 18);
+      box(L+W*0.70, y, W*0.15, 18);
+      box(L+W*0.85, y, W*0.075, 18);
+      box(L+W*0.925, y, W*0.075, 18);
+
+      lbl(ev.label, L+2, y+2);
+      lbl(`Raw (${ev.unit})`, L+W*0.40+2, y+2);
+      lbl('Points', L+W*0.55+2, y+2);
+      lbl('Pass/Fail', L+W*0.70+2, y+2);
+      lbl('GO', L+W*0.85+2, y+2);
+      lbl('NO-GO', L+W*0.925+2, y+2);
+
+      val(String(ev.raw||''), L+W*0.40+2, y+9, W*0.15-4);
+      val(String(ev.pts||0), L+W*0.55+2, y+9, W*0.15-4);
+
+      if (ev.pts !== undefined) {
+        const passColor = pass ? '#c8f7c5' : '#f7c5c5';
+        doc.rect(L+W*0.70, y, W*0.15, 18).fill(passColor);
+        doc.rect(L+W*0.70, y, W*0.15, 18).stroke('#000');
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('#000')
+          .text(pass ? 'GO' : 'NO-GO', L+W*0.70+2, y+5, { lineBreak: false });
+
+        if (pass) {
+          doc.rect(L+W*0.85, y, W*0.075, 18).fill('#c8f7c5').stroke('#000');
+          doc.fontSize(10).font('Helvetica-Bold').fillColor('#000').text('✓', L+W*0.85+8, y+4, { lineBreak: false });
+        } else {
+          doc.rect(L+W*0.925, y, W*0.075, 18).fill('#f7c5c5').stroke('#000');
+          doc.fontSize(10).font('Helvetica-Bold').fillColor('#000').text('✓', L+W*0.925+8, y+4, { lineBreak: false });
+        }
+      }
+      y += 18;
+    });
+
+    // Total score row
+    y += 4;
+    const totalPass2 = total >= (standard === 'combat' ? 350 : 300);
+    const totalColor = (overallPass) ? '#c8f7c5' : '#f7c5c5';
+    doc.rect(L, y, W, 24).fill(totalColor).stroke('#000');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000')
+      .text(`TOTAL SCORE: ${total||0} / 500`, L+4, y+4, { lineBreak: false });
+    doc.text(`MINIMUM REQUIRED: ${standard === 'combat' ? 350 : 300}`, L+W*0.4, y+4, { lineBreak: false });
+    doc.text(overallPass ? '✓ PASS' : '✗ FAIL', L+W*0.75, y+4, { lineBreak: false });
+    doc.fillColor('#000');
+    y += 28;
+
+    // Signature block
+    hdr('SIGNATURES', L, y, W);
+    y += 15;
+
+    box(L, y, W*0.5, 30);
+    box(L+W*0.5, y, W*0.5, 30);
+    lbl('SOLDIER SIGNATURE', L+2, y+2);
+    lbl('OIC/NCOIC NAME (Last, First, MI)', L+W*0.5+2, y+2);
+    val(oicName||'', L+W*0.5+2, y+14, W*0.5-4);
+    y += 30;
+
+    box(L, y, W*0.5, 20);
+    box(L+W*0.5, y, W*0.3, 20);
+    box(L+W*0.8, y, W*0.2, 20);
+    lbl('OIC/NCOIC SIGNATURE', L+2, y+2);
+    lbl('DATE', L+W*0.5+2, y+2);
+    lbl('OVERALL', L+W*0.8+2, y+2);
+    val(overallPass ? 'GO' : 'NO-GO', L+W*0.8+2, y+10, W*0.2-4);
+    y += 24;
+
+    // Footer
+    doc.fontSize(6).font('Helvetica-Oblique').fillColor('#666')
+      .text('NOTE: To convert raw scores to scaled scores, refer to AFT event score conversion tables at https://www.army.mil/aft', L, y, { width: W });
+    y += 8;
+    doc.text('Generated by NCO Tools | Review all content before official use | DA FORM 705', L, y, { width: W, align: 'center' });
+
+    doc.end();
+
+  } catch (err) {
+    console.error('DA 705 PDF error:', err);
+    res.status(500).json({ error: 'PDF generation failed: ' + err.message });
+  }
+});
+
+
 app.post('/api/enhance-counseling', async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
 
