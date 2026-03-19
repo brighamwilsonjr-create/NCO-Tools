@@ -28,6 +28,7 @@ async function sendEmail(to, subject, html) {
     body: JSON.stringify({ from: 'NCO Kit <noreply@ncokit.com>', to, subject, html })
   });
   const data = await response.json();
+  console.log('Resend response:', JSON.stringify(data));
   if (!response.ok) throw new Error(`Email failed: ${JSON.stringify(data)}`);
   return data;
 }
@@ -107,7 +108,11 @@ app.post('/api/auth/register', async (req, res) => {
       `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by) VALUES ($1, $2, $3, $4, $5, $6)`,
       [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, referralCode, validReferredBy]
     );
-    await sendVerificationEmail(email.toLowerCase(), verificationToken);
+    try {
+      await sendVerificationEmail(email.toLowerCase(), verificationToken);
+    } catch (emailErr) {
+      console.error('Verification email failed:', emailErr.message);
+    }
     res.json({ success: true, message: 'Account created. Check your email to verify your account.' });
   } catch (err) {
     console.error('Register error:', err);
