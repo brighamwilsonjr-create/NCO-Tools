@@ -25,7 +25,7 @@ async function sendEmail(to, subject, html) {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
     },
-    body: JSON.stringify({ from: 'NCO Kit <onboarding@resend.dev>', to, subject, html })
+    body: JSON.stringify({ from: 'NCO Kit <noreply@ncokit.com>', to, subject, html })
   });
   const data = await response.json();
   if (!response.ok) throw new Error(`Email failed: ${JSON.stringify(data)}`);
