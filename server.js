@@ -6,7 +6,6 @@ const { calculateAFT } = require('./aft_tables');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-const { Resend } = require('resend');
 
 const app = express();
 app.use(cors());
@@ -18,7 +17,20 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Email via Resend REST API - no SDK needed
+async function sendEmail(to, subject, html) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+    },
+    body: JSON.stringify({ from: 'NCO Kit <onboarding@resend.dev>', to, subject, html })
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(`Email failed: ${JSON.stringify(data)}`);
+  return data;
+}
 
 function generateToken(length = 32) {
   return crypto.randomBytes(length).toString('hex');
@@ -40,36 +52,32 @@ async function getUserFromSession(req) {
 
 async function sendVerificationEmail(email, token) {
   const verifyUrl = `https://ncokit.com/verify?token=${token}`;
-  await resend.emails.send({
-    from: 'NCO Kit <noreply@ncokit.com>',
-    to: email,
-    subject: 'Verify your NCO Kit account',
-    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+  await sendEmail(email, 'Verify your NCO Kit account', `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
       <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
       <h2 style="color:#F4F1EA;">Verify Your Email</h2>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;">Click below to verify your email and activate your account.</p>
       <a href="${verifyUrl}" style="display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Verify Email</a>
       <p style="color:#666;font-size:12px;">This link expires in 24 hours.</p>
       <p style="color:#666;font-size:11px;">Or copy: ${verifyUrl}</p>
-    </div>`
-  });
+    </div>
+  `);
 }
 
 async function sendPasswordResetEmail(email, token) {
   const resetUrl = `https://ncokit.com/reset-password?token=${token}`;
-  await resend.emails.send({
-    from: 'NCO Kit <noreply@ncokit.com>',
-    to: email,
-    subject: 'Reset your NCO Kit password',
-    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+  await sendEmail(email, 'Reset your NCO Kit password', `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
       <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
       <h2 style="color:#F4F1EA;">Reset Your Password</h2>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;">Click below to reset your password. Expires in 1 hour.</p>
       <a href="${resetUrl}" style="display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Reset Password</a>
       <p style="color:#666;font-size:12px;">If you didn't request this, ignore this email.</p>
-    </div>`
-  });
+    </div>
+  `);
 }
+
+// ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
 app.get('/test-key', async (req, res) => {
@@ -83,27 +91,22 @@ app.post('/api/auth/register', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
-
   try {
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (existing.rows.length > 0) return res.status(400).json({ error: 'An account with this email already exists' });
-
     const passwordHash = await bcrypt.hash(password, 12);
     const verificationToken = generateToken();
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const referralCode = generateReferralCode();
-
     let validReferredBy = null;
     if (referredBy) {
       const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referredBy.toUpperCase()]);
       if (referrer.rows.length > 0) validReferredBy = referredBy.toUpperCase();
     }
-
     await pool.query(
       `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by) VALUES ($1, $2, $3, $4, $5, $6)`,
       [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, referralCode, validReferredBy]
     );
-
     await sendVerificationEmail(email.toLowerCase(), verificationToken);
     res.json({ success: true, message: 'Account created. Check your email to verify your account.' });
   } catch (err) {
@@ -139,11 +142,9 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user.verified) return res.status(401).json({ error: 'Please verify your email before logging in', needsVerification: true });
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) return res.status(401).json({ error: 'Invalid email or password' });
-
     const sessionToken = generateToken();
     const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     await pool.query('INSERT INTO sessions (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, sessionToken, sessionExpires]);
-
     res.json({
       success: true,
       token: sessionToken,
@@ -284,7 +285,7 @@ app.post('/api/generate-4856', (req, res) => {
   sHdr('SIGNATURES', L, y, W); y+=16;
   box(L,y,W,45); label('INDIVIDUAL COUNSELED — [ ] I agree  [ ] I disagree',L+3,y+2); label('Signature: ________________________________',L+3,y+14); label('Date: ________________',L+W*.6,y+14); y+=45;
   box(L,y,W,40); label('LEADER/COUNSELOR',L+3,y+2); label('Signature: ________________________________',L+3,y+14); label('Date: ________________',L+W*.6,y+14); label(`${counselorRank||''} ${counselor||''}`,L+3,y+28); y+=44;
-  doc.fontSize(6).font('Helvetica').fillColor('#666').text('DA FORM 4856 | Generated by NCO Kit — ncokit.com | Review all content before official use', L, y, { width: W, align: 'center' });
+  doc.fontSize(6).font('Helvetica').fillColor('#666').text('DA FORM 4856 | Generated by NCO Kit — ncokit.com | Review before official use', L, y, { width: W, align: 'center' });
   doc.end();
 });
 
@@ -319,51 +320,42 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Auto-initialize database schema on startup
 async function initDB() {
   try {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        verified BOOLEAN DEFAULT FALSE,
-        verification_token VARCHAR(255),
-        verification_expires TIMESTAMPTZ,
-        reset_token VARCHAR(255),
-        reset_expires TIMESTAMPTZ,
-        plan VARCHAR(20) DEFAULT 'free',
-        stripe_customer_id VARCHAR(255),
-        stripe_subscription_id VARCHAR(255),
-        referral_code VARCHAR(20) UNIQUE,
-        referred_by VARCHAR(20),
-        free_months_earned INTEGER DEFAULT 0,
-        free_months_used INTEGER DEFAULT 0,
-        bullets_used_this_month INTEGER DEFAULT 0,
-        bullets_reset_date DATE DEFAULT CURRENT_DATE,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS sessions (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        token VARCHAR(255) UNIQUE NOT NULL,
-        expires_at TIMESTAMPTZ NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-
+    await pool.query(`CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      email VARCHAR(255) UNIQUE NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      verified BOOLEAN DEFAULT FALSE,
+      verification_token VARCHAR(255),
+      verification_expires TIMESTAMPTZ,
+      reset_token VARCHAR(255),
+      reset_expires TIMESTAMPTZ,
+      plan VARCHAR(20) DEFAULT 'free',
+      stripe_customer_id VARCHAR(255),
+      stripe_subscription_id VARCHAR(255),
+      referral_code VARCHAR(20) UNIQUE,
+      referred_by VARCHAR(20),
+      free_months_earned INTEGER DEFAULT 0,
+      free_months_used INTEGER DEFAULT 0,
+      bullets_used_this_month INTEGER DEFAULT 0,
+      bullets_reset_date DATE DEFAULT CURRENT_DATE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      token VARCHAR(255) UNIQUE NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
-
-    console.log('Database schema initialized successfully');
+    console.log('Database initialized successfully');
   } catch (err) {
     console.error('Database init error:', err.message);
   }
