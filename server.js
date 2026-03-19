@@ -316,9 +316,33 @@ app.post('/api/aft-score', (req, res) => {
   }
 });
 
-app.get('*', (req, res) => {
+app.get('/verify', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.redirect('/?error=invalid_token');
+  try {
+    const result = await pool.query(
+      'SELECT id FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
+      [token]
+    );
+    if (result.rows.length === 0) {
+      return res.redirect('/?error=invalid_token');
+    }
+    await pool.query(
+      'UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = $1',
+      [result.rows[0].id]
+    );
+    return res.redirect('/?verified=true');
+  } catch (err) {
+    console.error('Verify route error:', err);
+    return res.redirect('/?error=verify_failed');
+  }
+});
+
+app.get('/reset-password', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+
 
 async function initDB() {
   try {
