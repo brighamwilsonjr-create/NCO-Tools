@@ -316,22 +316,6 @@ app.post('/api/aft-score', (req, res) => {
   }
 });
 
-// Temporary admin route to manually verify an email
-app.get('/admin/verify-email', async (req, res) => {
-  const adminEmail = process.env.ADMIN_EMAIL;
-  if (!adminEmail) return res.json({ error: 'No admin email configured' });
-  try {
-    const result = await pool.query(
-      'UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE email = $1 RETURNING email',
-      [adminEmail.toLowerCase()]
-    );
-    if (result.rows.length === 0) return res.json({ error: 'Email not found: ' + adminEmail });
-    res.json({ success: true, message: 'Email verified: ' + result.rows[0].email });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.get('/verify', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.redirect('/?error=invalid_token');
