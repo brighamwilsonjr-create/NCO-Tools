@@ -1792,21 +1792,27 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
 
   async function handleVerifyToken() {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    if (!token) return;
-    try {
-      const res = await fetch('/api/auth/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showAuth('login');
-        document.getElementById('loginSuccess').textContent = '✓ Email verified! You can now log in.';
-        document.getElementById('loginSuccess').style.display = 'block';
-      }
+    const verified = params.get('verified');
+    const error = params.get('error');
+    const resetToken = params.get('token');
+
+    if (verified === 'true') {
+      showAuth('login');
+      document.getElementById('loginSuccess').textContent = '✓ Email verified! You can now log in.';
+      document.getElementById('loginSuccess').style.display = 'block';
       window.history.replaceState({}, '', '/');
-    } catch (e) {}
+    } else if (error === 'invalid_token') {
+      showAuth('login');
+      document.getElementById('loginError').textContent = 'Verification link is invalid or expired. Request a new one below.';
+      document.getElementById('loginError').style.display = 'block';
+      window.history.replaceState({}, '', '/');
+    } else if (resetToken) {
+      // Password reset flow
+      showAuth('login');
+      document.getElementById('loginError').textContent = 'Use the form below to reset your password. Token: ' + resetToken;
+      document.getElementById('loginError').style.display = 'block';
+      window.history.replaceState({}, '', '/');
+    }
   }
 
   document.getElementById('authModal').addEventListener('click', function(e) {
