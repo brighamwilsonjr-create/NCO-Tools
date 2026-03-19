@@ -500,15 +500,110 @@
   <div class="logo">
     <div class="logo-badge"><span>NCO</span></div>
     <div>
-      <div class="logo-text">NCO Tools</div>
-      <div class="logo-sub">Leader's Toolkit — Prototype v0.1</div>
+      <div class="logo-text">NCO Kit</div>
+      <div class="logo-sub">Leader's Toolkit — ncokit.com</div>
     </div>
   </div>
-  <div class="header-right">
-    <div class="status-dot"></div>
-    SYSTEM ONLINE
+  <div class="header-right" style="gap:16px">
+    <div id="authButtons" style="display:flex; gap:8px; align-items:center;">
+      <button class="btn btn-secondary btn-sm" onclick="showAuth('login')">Login</button>
+      <button class="btn btn-primary btn-sm" onclick="showAuth('register')">Sign Up — Free</button>
+    </div>
+    <div id="userMenu" style="display:none; align-items:center; gap:12px;">
+      <span id="userEmail" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
+      <span id="userPlan" style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px; padding:2px 8px; border:1px solid var(--tan); color:var(--tan);"></span>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="status-dot"></div>
+      <span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">SYSTEM ONLINE</span>
+    </div>
   </div>
 </header>
+
+<!-- AUTH MODAL -->
+<div id="authModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px; position:relative;">
+
+    <!-- Modal Header -->
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;" id="modalTitle">Sign In</div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;" id="modalSub">Access your NCO Kit account</div>
+      </div>
+      <button onclick="closeAuth()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer; padding:4px;">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div style="padding:24px;">
+
+      <!-- Tab switcher -->
+      <div style="display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--border);">
+        <button id="loginTab" class="tab active" style="font-size:12px; padding:8px 16px;" onclick="switchAuthTab('login')">Login</button>
+        <button id="registerTab" class="tab" style="font-size:12px; padding:8px 16px;" onclick="switchAuthTab('register')">Create Account</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="loginForm">
+        <div class="field" style="margin-bottom:16px;">
+          <label>Email Address</label>
+          <input type="email" id="loginEmail" placeholder="your@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div style="text-align:right; margin-bottom:20px;">
+          <a href="#" onclick="showForgotPassword()" style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-decoration:none;">Forgot password?</a>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="doLogin()" id="loginBtn">Login</button>
+        <div id="loginError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+        <div id="loginSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      </div>
+
+      <!-- Register Form -->
+      <div id="registerForm" style="display:none;">
+        <div class="field" style="margin-bottom:16px;">
+          <label>Email Address</label>
+          <input type="email" id="regEmail" placeholder="your@email.com">
+        </div>
+        <div class="field" style="margin-bottom:16px;">
+          <label>Password (min 8 characters)</label>
+          <input type="password" id="regPassword" placeholder="••••••••">
+        </div>
+        <div class="field" style="margin-bottom:20px;">
+          <label>Referral Code (optional)</label>
+          <input type="text" id="regReferral" placeholder="e.g. ABC123" style="text-transform:uppercase;">
+          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:4px;">Get 50% off your first premium month with a referral code</div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="doRegister()" id="registerBtn">Create Free Account</button>
+        <div id="registerError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+        <div id="registerSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      </div>
+
+      <!-- Forgot Password Form -->
+      <div id="forgotForm" style="display:none;">
+        <p style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:16px; line-height:1.6;">Enter your email and we'll send you a reset link.</p>
+        <div class="field" style="margin-bottom:20px;">
+          <label>Email Address</label>
+          <input type="email" id="forgotEmail" placeholder="your@email.com">
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="doForgotPassword()" id="forgotBtn">Send Reset Link</button>
+        <div style="margin-top:12px; text-align:center;">
+          <a href="#" onclick="switchAuthTab('login')" style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-decoration:none;">← Back to login</a>
+        </div>
+        <div id="forgotMsg" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      </div>
+
+    </div>
+
+    <!-- Footer note -->
+    <div style="padding:12px 24px; border-top:1px solid var(--border); font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-align:center;">
+      Free to use during testing — no credit card required
+    </div>
+  </div>
+</div>
+
 
 <div class="container">
 
@@ -1542,6 +1637,184 @@ Respond with ONLY the bullets, one per line, nothing else. No preamble, no expla
     if (scoreDisplay) scoreDisplay.style.display = 'none';
     lastAFTResult = null;
   }
+
+  // ── AUTH ──────────────────────────────────────────────────────────────────
+
+  let currentUser = null;
+
+  async function initAuth() {
+    const token = localStorage.getItem('ncokit_token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const user = await res.json();
+        setLoggedIn(user, token);
+      } else {
+        localStorage.removeItem('ncokit_token');
+      }
+    } catch (e) {}
+  }
+
+  function setLoggedIn(user, token) {
+    currentUser = user;
+    localStorage.setItem('ncokit_token', token);
+    document.getElementById('authButtons').style.display = 'none';
+    document.getElementById('userMenu').style.display = 'flex';
+    document.getElementById('userEmail').textContent = user.email;
+    document.getElementById('userPlan').textContent = user.plan === 'premium' ? '⭐ PREMIUM' : 'FREE';
+    closeAuth();
+  }
+
+  function showAuth(tab) {
+    document.getElementById('authModal').style.display = 'flex';
+    switchAuthTab(tab || 'login');
+  }
+
+  function closeAuth() {
+    document.getElementById('authModal').style.display = 'none';
+    clearAuthForms();
+  }
+
+  function clearAuthForms() {
+    ['loginEmail','loginPassword','regEmail','regPassword','regReferral','forgotEmail'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    ['loginError','loginSuccess','registerError','registerSuccess','forgotMsg'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  }
+
+  function switchAuthTab(tab) {
+    document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+    document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+    document.getElementById('forgotForm').style.display = tab === 'forgot' ? 'block' : 'none';
+    document.getElementById('loginTab').classList.toggle('active', tab === 'login');
+    document.getElementById('registerTab').classList.toggle('active', tab === 'register');
+    document.getElementById('modalTitle').textContent = tab === 'register' ? 'Create Account' : tab === 'forgot' ? 'Reset Password' : 'Sign In';
+    document.getElementById('modalSub').textContent = tab === 'register' ? 'Free to use — no credit card required' : tab === 'forgot' ? 'We\'ll email you a reset link' : 'Access your NCO Kit account';
+  }
+
+  function showForgotPassword() { switchAuthTab('forgot'); }
+
+  async function doLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const btn = document.getElementById('loginBtn');
+    const errEl = document.getElementById('loginError');
+    const sucEl = document.getElementById('loginSuccess');
+    if (!email || !password) { showAuthError(errEl, 'Please enter your email and password.'); return; }
+    btn.textContent = 'Logging in...'; btn.disabled = true;
+    errEl.style.display = 'none'; sucEl.style.display = 'none';
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAuthError(errEl, data.error);
+        if (data.needsVerification) {
+          errEl.innerHTML = data.error + ' <a href="#" onclick="resendVerification(\'' + email + '\')" style="color:#C8B48A;">Resend verification email</a>';
+        }
+      } else {
+        setLoggedIn(data.user, data.token);
+      }
+    } catch (e) { showAuthError(errEl, 'Connection error. Please try again.'); }
+    finally { btn.textContent = 'Login'; btn.disabled = false; }
+  }
+
+  async function doRegister() {
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const referredBy = document.getElementById('regReferral').value.trim();
+    const btn = document.getElementById('registerBtn');
+    const errEl = document.getElementById('registerError');
+    const sucEl = document.getElementById('registerSuccess');
+    if (!email || !password) { showAuthError(errEl, 'Please enter your email and password.'); return; }
+    btn.textContent = 'Creating account...'; btn.disabled = true;
+    errEl.style.display = 'none'; sucEl.style.display = 'none';
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, referredBy: referredBy || undefined })
+      });
+      const data = await res.json();
+      if (!res.ok) { showAuthError(errEl, data.error); }
+      else {
+        sucEl.textContent = '✓ Account created! Check your email to verify your account before logging in.';
+        sucEl.style.display = 'block';
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+      }
+    } catch (e) { showAuthError(errEl, 'Connection error. Please try again.'); }
+    finally { btn.textContent = 'Create Free Account'; btn.disabled = false; }
+  }
+
+  async function doForgotPassword() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    const btn = document.getElementById('forgotBtn');
+    const msgEl = document.getElementById('forgotMsg');
+    if (!email) { msgEl.textContent = 'Please enter your email.'; msgEl.style.cssText = 'display:block;background:#3d1010;border:1px solid var(--red);color:#f44336;'; return; }
+    btn.textContent = 'Sending...'; btn.disabled = true;
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      msgEl.textContent = data.message || 'Reset link sent.';
+      msgEl.style.cssText = 'display:block;background:#1a3d1a;border:1px solid #4CAF50;color:#4CAF50;padding:10px 14px;font-family:Source Code Pro,monospace;font-size:11px;margin-top:12px;';
+    } catch (e) { msgEl.textContent = 'Connection error.'; }
+    finally { btn.textContent = 'Send Reset Link'; btn.disabled = false; }
+  }
+
+  async function resendVerification(email) {
+    await fetch('/api/auth/resend-verification', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    alert('Verification email resent. Check your inbox.');
+  }
+
+  async function logout() {
+    const token = localStorage.getItem('ncokit_token');
+    if (token) await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+    localStorage.removeItem('ncokit_token');
+    currentUser = null;
+    document.getElementById('authButtons').style.display = 'flex';
+    document.getElementById('userMenu').style.display = 'none';
+  }
+
+  function showAuthError(el, msg) { el.textContent = msg; el.style.display = 'block'; }
+
+  async function handleVerifyToken() {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showAuth('login');
+        document.getElementById('loginSuccess').textContent = '✓ Email verified! You can now log in.';
+        document.getElementById('loginSuccess').style.display = 'block';
+      }
+      window.history.replaceState({}, '', '/');
+    } catch (e) {}
+  }
+
+  document.getElementById('authModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAuth();
+  });
+
+  initAuth();
+  handleVerifyToken();
 
   updateStats();
 </script>
