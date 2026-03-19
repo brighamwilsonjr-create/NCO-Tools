@@ -3,483 +3,374 @@ const cors = require('cors');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 const { calculateAFT } = require('./aft_tables');
-
+const { Pool } = require('pg');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
+const { Resend } = require('resend');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Health check
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+function generateToken(length = 32) {
+  return crypto.randomBytes(length).toString('hex');
+}
+
+function generateReferralCode() {
+  return crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+async function getUserFromSession(req) {
+  const token = req.headers['authorization']?.replace('Bearer ', '');
+  if (!token) return null;
+  const result = await pool.query(
+    'SELECT u.* FROM users u JOIN sessions s ON s.user_id = u.id WHERE s.token = $1 AND s.expires_at > NOW()',
+    [token]
+  );
+  return result.rows[0] || null;
+}
+
+async function sendVerificationEmail(email, token) {
+  const verifyUrl = `https://ncokit.com/verify?token=${token}`;
+  await resend.emails.send({
+    from: 'NCO Kit <noreply@ncokit.com>',
+    to: email,
+    subject: 'Verify your NCO Kit account',
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+      <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
+      <h2 style="color:#F4F1EA;">Verify Your Email</h2>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;">Click below to verify your email and activate your account.</p>
+      <a href="${verifyUrl}" style="display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Verify Email</a>
+      <p style="color:#666;font-size:12px;">This link expires in 24 hours.</p>
+      <p style="color:#666;font-size:11px;">Or copy: ${verifyUrl}</p>
+    </div>`
+  });
+}
+
+async function sendPasswordResetEmail(email, token) {
+  const resetUrl = `https://ncokit.com/reset-password?token=${token}`;
+  await resend.emails.send({
+    from: 'NCO Kit <noreply@ncokit.com>',
+    to: email,
+    subject: 'Reset your NCO Kit password',
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+      <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
+      <h2 style="color:#F4F1EA;">Reset Your Password</h2>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;">Click below to reset your password. Expires in 1 hour.</p>
+      <a href="${resetUrl}" style="display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Reset Password</a>
+      <p style="color:#666;font-size:12px;">If you didn't request this, ignore this email.</p>
+    </div>`
+  });
+}
+
 app.get('/health', (req, res) => res.json({ status: 'online' }));
 app.get('/test-key', async (req, res) => {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.json({ error: 'No API key found in environment' });
+  if (!key) return res.json({ error: 'No API key found' });
   res.json({ key_present: true, starts_with: key.substring(0, 12) + '...' });
 });
 
-// DA 4856 PDF Generation
-app.post('/api/generate-4856', (req, res) => {
-  const {
-    soldierName, rank, date, unit, counselor, counselorRank,
-    subject, situation, strengths, improve, poa, leader
-  } = req.body;
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password, referredBy } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
 
-  const doc = new PDFDocument({ margin: 40, size: 'letter' });
-
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="DA4856_${(soldierName || 'counseling').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
-  doc.pipe(res);
-
-  const W = 595 - 80; // usable width
-  const L = 40;       // left margin
-  const formattedDate = date ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' }) : '___________________';
-
-  // Helper functions
-  const box = (x, y, w, h) => doc.rect(x, y, w, h).stroke();
-  const hline = (x, y, w) => doc.moveTo(x, y).lineTo(x + w, y).stroke();
-  const label = (text, x, y, opts = {}) => {
-    doc.fontSize(6.5).font('Helvetica').fillColor('#000').text(text, x, y, { ...opts, lineBreak: false });
-  };
-  const field = (text, x, y, w, opts = {}) => {
-    doc.fontSize(9).font('Helvetica').fillColor('#000').text(text || '', x, y, { width: w, ...opts });
-  };
-  const sectionHeader = (text, x, y, w) => {
-    doc.rect(x, y, w, 14).fillAndStroke('#000', '#000');
-    doc.fontSize(8).font('Helvetica-Bold').fillColor('#fff').text(text, x + 4, y + 3, { lineBreak: false });
-    doc.fillColor('#000');
-  };
-
-  let y = 40;
-
-  // ── FORM TITLE ──
-  doc.fontSize(10).font('Helvetica-Bold').text('DEVELOPMENTAL COUNSELING FORM', L, y, { align: 'center', width: W });
-  y += 14;
-  doc.fontSize(7).font('Helvetica').text('For use of this form, see FM 6-22; the proponent agency is TRADOC', L, y, { align: 'center', width: W });
-  y += 6;
-  doc.fontSize(7).font('Helvetica').text('DATA REQUIRED BY THE PRIVACY ACT OF 1974', L, y, { align: 'center', width: W });
-  y += 10;
-
-  // ── PART I HEADER ──
-  sectionHeader('PART I - ADMINISTRATIVE DATA', L, y, W);
-  y += 16;
-
-  // Row 1: Name | Rank | Date
-  box(L, y, W * 0.45, 28);
-  box(L + W * 0.45, y, W * 0.25, 28);
-  box(L + W * 0.70, y, W * 0.30, 28);
-  label('Name (Last, First, MI)', L + 3, y + 2);
-  label('Rank/Grade', L + W * 0.45 + 3, y + 2);
-  label('Date of Counseling', L + W * 0.70 + 3, y + 2);
-  field(soldierName || '', L + 3, y + 12, W * 0.45 - 6);
-  field(rank || '', L + W * 0.45 + 3, y + 12, W * 0.25 - 6);
-  field(formattedDate, L + W * 0.70 + 3, y + 12, W * 0.30 - 6);
-  y += 28;
-
-  // Row 2: Organization | Counselor Name | Counselor Rank
-  box(L, y, W * 0.45, 28);
-  box(L + W * 0.45, y, W * 0.30, 28);
-  box(L + W * 0.75, y, W * 0.25, 28);
-  label('Organization', L + 3, y + 2);
-  label('Name and Title of Counselor', L + W * 0.45 + 3, y + 2);
-  label('Counselor Rank', L + W * 0.75 + 3, y + 2);
-  field(unit || '', L + 3, y + 12, W * 0.45 - 6);
-  field(counselor || '', L + W * 0.45 + 3, y + 12, W * 0.30 - 6);
-  field(counselorRank || '', L + W * 0.75 + 3, y + 12, W * 0.25 - 6);
-  y += 28;
-
-  // ── PART II HEADER ──
-  sectionHeader('PART II - BACKGROUND INFORMATION', L, y, W);
-  y += 16;
-
-  // Purpose / Subject
-  box(L, y, W, 24);
-  label('Purpose of Counseling (Reason for counseling; include what precipitated this counseling, i.e., performance/professional or personal)', L + 3, y + 2, { width: W - 6 });
-  field(subject || '', L + 3, y + 13, W - 6);
-  y += 24;
-
-  // Situation block
-  const sitLines = Math.max(4, Math.ceil((situation || '').length / 90));
-  const sitH = Math.min(Math.max(sitLines * 13, 60), 130);
-  box(L, y, W, sitH);
-  label('Key Facts / Background', L + 3, y + 2);
-  doc.fontSize(8.5).font('Helvetica').text(situation || '', L + 3, y + 13, { width: W - 6, height: sitH - 16 });
-  y += sitH;
-
-  // ── PART III HEADER ──
-  sectionHeader('PART III - SUMMARY OF COUNSELING', L, y, W);
-  y += 16;
-  label('Complete this section during or immediately subsequent to counseling', L + 3, y);
-  y += 12;
-
-  // Strengths
-  if (strengths) {
-    const strH = Math.min(Math.max(Math.ceil(strengths.length / 90) * 13, 45), 100);
-    box(L, y, W, strH);
-    label('STRENGTHS / COMMENDABLE PERFORMANCE', L + 3, y + 2);
-    doc.fontSize(8.5).font('Helvetica').text(strengths, L + 3, y + 13, { width: W - 6, height: strH - 16 });
-    y += strH;
-  }
-
-  // Improvement
-  if (improve) {
-    const impH = Math.min(Math.max(Math.ceil(improve.length / 90) * 13, 45), 100);
-    box(L, y, W, impH);
-    label('AREAS REQUIRING IMPROVEMENT', L + 3, y + 2);
-    doc.fontSize(8.5).font('Helvetica').text(improve, L + 3, y + 13, { width: W - 6, height: impH - 16 });
-    y += impH;
-  }
-
-  // Plan of Action
-  const poaH = Math.min(Math.max(Math.ceil((poa || '').length / 90) * 13, 60), 120);
-  box(L, y, W, poaH);
-  label('Plan of Action (Identifies actions that the subordinate will do after the counseling session to reach the agreed upon goal(s))', L + 3, y + 2, { width: W - 6 });
-  doc.fontSize(8.5).font('Helvetica').text(poa || '', L + 3, y + 13, { width: W - 6, height: poaH - 16 });
-  y += poaH;
-
-  // Leader responsibilities
-  const ldrH = Math.min(Math.max(Math.ceil((leader || '').length / 90) * 13, 50), 100);
-  box(L, y, W, ldrH);
-  label('Leader Responsibilities (Specify actions that the leader will do to assist the subordinate in reaching the agreed upon goal(s))', L + 3, y + 2, { width: W - 6 });
-  doc.fontSize(8.5).font('Helvetica').text(leader || '', L + 3, y + 13, { width: W - 6, height: ldrH - 16 });
-  y += ldrH;
-
-  // ── PART IV HEADER ──
-  if (y > 680) { doc.addPage(); y = 40; }
-  sectionHeader('PART IV - ASSESSMENT OF THE PLAN OF ACTION', L, y, W);
-  y += 16;
-
-  box(L, y, W, 50);
-  label('Assessment (Did the plan of action achieve the desired results? This section is completed by both the leader and the subordinate.)', L + 3, y + 2, { width: W - 6 });
-  label('The plan of action:  [ ] Was Accomplished    [ ] Was Not Accomplished', L + 3, y + 16);
-  label('Follow-up counseling required:  [ ] Yes    [ ] No', L + 3, y + 28);
-  label('Date of Follow-up Counseling: ______________________', L + 3, y + 40);
-  y += 50;
-
-  // ── SIGNATURES ──
-  sectionHeader('SIGNATURES', L, y, W);
-  y += 16;
-
-  // Individual counseled
-  box(L, y, W, 45);
-  label('INDIVIDUAL COUNSELED', L + 3, y + 2);
-  label('I agree / disagree with the information above.', L + 3, y + 13);
-  label('Signature: _______________________________________', L + 3, y + 25);
-  label('Date: ____________________', L + W * 0.6, y + 25);
-  label('Comments: _____________________________________________', L + 3, y + 36);
-  y += 45;
-
-  // Leader/Counselor
-  box(L, y, W, 40);
-  label('LEADER / COUNSELOR', L + 3, y + 2);
-  label(`Signature: _______________________________________`, L + 3, y + 14);
-  label('Date: ____________________', L + W * 0.6, y + 14);
-  label(`${counselorRank || ''} ${counselor || ''}`, L + 3, y + 28);
-  y += 40;
-
-  // Footer note
-  y += 6;
-  doc.fontSize(6.5).font('Helvetica-Oblique').fillColor('#333')
-    .text('NOTE: The counselee\'s signature confirms that this counseling has taken place and is NOT agreement with the content herein. Retain original; provide copy to individual counseled.', L, y, { width: W });
-  y += 14;
-  doc.fontSize(6.5).font('Helvetica').fillColor('#666')
-    .text(`DA FORM 4856  |  Generated by NCO Tools  |  Review all content before official use`, L, y, { width: W, align: 'center' });
-
-  doc.end();
-});
-
-// AFT Score Calculation
-app.post('/api/aft-score', (req, res) => {
   try {
-    const result = calculateAFT(req.body);
-    res.json(result);
+    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (existing.rows.length > 0) return res.status(400).json({ error: 'An account with this email already exists' });
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const verificationToken = generateToken();
+    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const referralCode = generateReferralCode();
+
+    let validReferredBy = null;
+    if (referredBy) {
+      const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referredBy.toUpperCase()]);
+      if (referrer.rows.length > 0) validReferredBy = referredBy.toUpperCase();
+    }
+
+    await pool.query(
+      `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, referralCode, validReferredBy]
+    );
+
+    await sendVerificationEmail(email.toLowerCase(), verificationToken);
+    res.json({ success: true, message: 'Account created. Check your email to verify your account.' });
   } catch (err) {
-    console.error('AFT score error:', err);
-    res.status(500).json({ error: 'Score calculation failed: ' + err.message });
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
   }
 });
 
-// DA 705 PDF Generation
-app.post('/api/generate-705', (req, res) => {
+app.post('/api/auth/verify', async (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token required' });
   try {
-    const { name, sex, unit, mos, payGrade, age, standard, date,
-            mdl, hrp, sdc, plk, tmr, oicName, scores, total, overallPass } = req.body;
+    const result = await pool.query(
+      'SELECT id FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
+      [token]
+    );
+    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired verification link' });
+    await pool.query('UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = $1', [result.rows[0].id]);
+    res.json({ success: true, message: 'Email verified. You can now log in.' });
+  } catch (err) {
+    console.error('Verify error:', err);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
 
-    const doc = new PDFDocument({ margin: 36, size: 'letter' });
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="DA705_${(name||'AFT').replace(/[^a-z0-9]/gi,'_')}.pdf"`);
-    doc.pipe(res);
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+    const user = result.rows[0];
+    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
+    if (!user.verified) return res.status(401).json({ error: 'Please verify your email before logging in', needsVerification: true });
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+    if (!passwordMatch) return res.status(401).json({ error: 'Invalid email or password' });
 
-    const W = 595 - 72;
-    const L = 36;
-    let y = 36;
+    const sessionToken = generateToken();
+    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    await pool.query('INSERT INTO sessions (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, sessionToken, sessionExpires]);
 
-    const box = (x, y, w, h) => doc.rect(x, y, w, h).stroke();
-    const fillBox = (x, y, w, h, color) => doc.rect(x, y, w, h).fill(color).stroke('#000');
-    const lbl = (text, x, y, opts={}) => doc.fontSize(6).font('Helvetica').fillColor('#000').text(text, x, y, { lineBreak: false, ...opts });
-    const val = (text, x, y, w, opts={}) => doc.fontSize(9).font('Helvetica-Bold').fillColor('#000').text(text||'', x, y, { width: w, lineBreak: false, ...opts });
-    const hdr = (text, x, y, w) => {
-      doc.rect(x, y, w, 13).fill('#000');
-      doc.fontSize(7).font('Helvetica-Bold').fillColor('#fff').text(text, x+2, y+3, { lineBreak: false });
-      doc.fillColor('#000');
-    };
-
-    // Title
-    doc.fontSize(11).font('Helvetica-Bold').fillColor('#000')
-      .text('ARMY FITNESS TEST SCORECARD', L, y, { align: 'center', width: W });
-    y += 13;
-    doc.fontSize(6).font('Helvetica')
-      .text('DA FORM 705  |  For use of this form, see ATP 7-22.01; proponent agency is TRADOC', L, y, { align: 'center', width: W });
-    y += 10;
-
-    // Header info row
-    box(L, y, W*0.4, 22);
-    box(L+W*0.4, y, W*0.15, 22);
-    box(L+W*0.55, y, W*0.15, 22);
-    box(L+W*0.70, y, W*0.15, 22);
-    box(L+W*0.85, y, W*0.15, 22);
-    lbl('NAME (Last, First, MI)', L+2, y+2);
-    lbl('SEX', L+W*0.4+2, y+2);
-    lbl('DATE (YYYYMMDD)', L+W*0.55+2, y+2);
-    lbl('STANDARD', L+W*0.70+2, y+2);
-    lbl('PAY GRADE', L+W*0.85+2, y+2);
-    val(name||'', L+2, y+11, W*0.4-4);
-    val(sex||'', L+W*0.4+2, y+11, W*0.15-4);
-    val(date||'', L+W*0.55+2, y+11, W*0.15-4);
-    val((standard||'').toUpperCase(), L+W*0.70+2, y+11, W*0.15-4);
-    val(payGrade||'', L+W*0.85+2, y+11, W*0.15-4);
-    y += 22;
-
-    // Unit / MOS / Age row
-    box(L, y, W*0.5, 20);
-    box(L+W*0.5, y, W*0.25, 20);
-    box(L+W*0.75, y, W*0.25, 20);
-    lbl('UNIT/LOCATION', L+2, y+2);
-    lbl('MOS', L+W*0.5+2, y+2);
-    lbl('AGE', L+W*0.75+2, y+2);
-    val(unit||'', L+2, y+10, W*0.5-4);
-    val(mos||'', L+W*0.5+2, y+10, W*0.25-4);
-    val(age||'', L+W*0.75+2, y+10, W*0.25-4);
-    y += 20;
-
-    // EVENTS SECTION
-    hdr('TEST ONE — EVENT SCORES', L, y, W);
-    y += 15;
-
-    const events = [
-      { label: '3-REP MAX DEADLIFT (MDL)', unit: 'lbs', raw: mdl, pts: scores?.mdl },
-      { label: 'HAND-RELEASE PUSH-UP (HRP)', unit: 'reps', raw: hrp, pts: scores?.hrp },
-      { label: 'SPRINT-DRAG-CARRY (SDC)', unit: 'M:SS', raw: sdc, pts: scores?.sdc },
-      { label: 'PLANK (PLK)', unit: 'M:SS', raw: plk, pts: scores?.plk },
-      { label: 'TWO-MILE RUN (2MR)', unit: 'MM:SS', raw: tmr, pts: scores?.tmr },
-    ];
-
-    events.forEach(ev => {
-      const pass = ev.pts >= 60;
-      box(L, y, W*0.40, 18);
-      box(L+W*0.40, y, W*0.15, 18);
-      box(L+W*0.55, y, W*0.15, 18);
-      box(L+W*0.70, y, W*0.15, 18);
-      box(L+W*0.85, y, W*0.075, 18);
-      box(L+W*0.925, y, W*0.075, 18);
-
-      lbl(ev.label, L+2, y+2);
-      lbl(`Raw (${ev.unit})`, L+W*0.40+2, y+2);
-      lbl('Points', L+W*0.55+2, y+2);
-      lbl('Pass/Fail', L+W*0.70+2, y+2);
-      lbl('GO', L+W*0.85+2, y+2);
-      lbl('NO-GO', L+W*0.925+2, y+2);
-
-      val(String(ev.raw||''), L+W*0.40+2, y+9, W*0.15-4);
-      val(String(ev.pts||0), L+W*0.55+2, y+9, W*0.15-4);
-
-      if (ev.pts !== undefined) {
-        const passColor = pass ? '#c8f7c5' : '#f7c5c5';
-        doc.rect(L+W*0.70, y, W*0.15, 18).fill(passColor);
-        doc.rect(L+W*0.70, y, W*0.15, 18).stroke('#000');
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#000')
-          .text(pass ? 'GO' : 'NO-GO', L+W*0.70+2, y+5, { lineBreak: false });
-
-        if (pass) {
-          doc.rect(L+W*0.85, y, W*0.075, 18).fill('#c8f7c5').stroke('#000');
-          doc.fontSize(10).font('Helvetica-Bold').fillColor('#000').text('✓', L+W*0.85+8, y+4, { lineBreak: false });
-        } else {
-          doc.rect(L+W*0.925, y, W*0.075, 18).fill('#f7c5c5').stroke('#000');
-          doc.fontSize(10).font('Helvetica-Bold').fillColor('#000').text('✓', L+W*0.925+8, y+4, { lineBreak: false });
-        }
-      }
-      y += 18;
+    res.json({
+      success: true,
+      token: sessionToken,
+      user: { id: user.id, email: user.email, plan: user.plan, referralCode: user.referral_code, bulletsUsed: user.bullets_used_this_month }
     });
-
-    // Total score row
-    y += 4;
-    const totalPass2 = total >= (standard === 'combat' ? 350 : 300);
-    const totalColor = (overallPass) ? '#c8f7c5' : '#f7c5c5';
-    doc.rect(L, y, W, 24).fill(totalColor).stroke('#000');
-    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000')
-      .text(`TOTAL SCORE: ${total||0} / 500`, L+4, y+4, { lineBreak: false });
-    doc.text(`MINIMUM REQUIRED: ${standard === 'combat' ? 350 : 300}`, L+W*0.4, y+4, { lineBreak: false });
-    doc.text(overallPass ? '✓ PASS' : '✗ FAIL', L+W*0.75, y+4, { lineBreak: false });
-    doc.fillColor('#000');
-    y += 28;
-
-    // Signature block
-    hdr('SIGNATURES', L, y, W);
-    y += 15;
-
-    box(L, y, W*0.5, 30);
-    box(L+W*0.5, y, W*0.5, 30);
-    lbl('SOLDIER SIGNATURE', L+2, y+2);
-    lbl('OIC/NCOIC NAME (Last, First, MI)', L+W*0.5+2, y+2);
-    val(oicName||'', L+W*0.5+2, y+14, W*0.5-4);
-    y += 30;
-
-    box(L, y, W*0.5, 20);
-    box(L+W*0.5, y, W*0.3, 20);
-    box(L+W*0.8, y, W*0.2, 20);
-    lbl('OIC/NCOIC SIGNATURE', L+2, y+2);
-    lbl('DATE', L+W*0.5+2, y+2);
-    lbl('OVERALL', L+W*0.8+2, y+2);
-    val(overallPass ? 'GO' : 'NO-GO', L+W*0.8+2, y+10, W*0.2-4);
-    y += 24;
-
-    // Footer
-    doc.fontSize(6).font('Helvetica-Oblique').fillColor('#666')
-      .text('NOTE: To convert raw scores to scaled scores, refer to AFT event score conversion tables at https://www.army.mil/aft', L, y, { width: W });
-    y += 8;
-    doc.text('Generated by NCO Tools | Review all content before official use | DA FORM 705', L, y, { width: W, align: 'center' });
-
-    doc.end();
-
   } catch (err) {
-    console.error('DA 705 PDF error:', err);
-    res.status(500).json({ error: 'PDF generation failed: ' + err.message });
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed. Please try again.' });
   }
 });
 
+app.post('/api/auth/logout', async (req, res) => {
+  const token = req.headers['authorization']?.replace('Bearer ', '');
+  if (token) await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
+  res.json({ success: true });
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  try {
+    const user = await getUserFromSession(req);
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    res.json({ id: user.id, email: user.email, plan: user.plan, referralCode: user.referral_code, bulletsUsed: user.bullets_used_this_month, verified: user.verified });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  try {
+    const result = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
+    if (result.rows.length > 0) {
+      const resetToken = generateToken();
+      const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
+      await pool.query('UPDATE users SET reset_token = $1, reset_expires = $2 WHERE email = $3', [resetToken, resetExpires, email.toLowerCase()]);
+      await sendPasswordResetEmail(email.toLowerCase(), resetToken);
+    }
+    res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Failed to process request' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  try {
+    const result = await pool.query('SELECT id FROM users WHERE reset_token = $1 AND reset_expires > NOW()', [token]);
+    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired reset link' });
+    const passwordHash = await bcrypt.hash(password, 12);
+    await pool.query('UPDATE users SET password_hash = $1, reset_token = NULL, reset_expires = NULL WHERE id = $2', [passwordHash, result.rows[0].id]);
+    await pool.query('DELETE FROM sessions WHERE user_id = $1', [result.rows[0].id]);
+    res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Password reset failed' });
+  }
+});
+
+app.post('/api/auth/resend-verification', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+  try {
+    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND verified = FALSE', [email.toLowerCase()]);
+    if (result.rows.length > 0) {
+      const verificationToken = generateToken();
+      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await pool.query('UPDATE users SET verification_token = $1, verification_expires = $2 WHERE email = $3', [verificationToken, verificationExpires, email.toLowerCase()]);
+      await sendVerificationEmail(email.toLowerCase(), verificationToken);
+    }
+    res.json({ success: true, message: 'Verification email sent if account exists.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to resend verification' });
+  }
+});
 
 app.post('/api/enhance-counseling', async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
-
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
-
   const sectionContext = {
-    situation: 'the Background Information / Purpose of Counseling section — describe what occurred factually and professionally',
-    strengths: 'the Strengths and Commendable Performance section — highlight positive attributes and accomplishments professionally',
-    improvement: 'the Areas Requiring Improvement section — describe deficiencies professionally without personal attacks',
-    plan_of_action: 'the Plan of Action section — specific, measurable, achievable actions the soldier will take with clear timelines',
-    leader_responsibilities: 'the Leader Responsibilities section — what the counselor commits to doing to support the soldier'
+    situation: 'the Background Information / Purpose of Counseling section',
+    strengths: 'the Strengths and Commendable Performance section',
+    improvement: 'the Areas Requiring Improvement section',
+    plan_of_action: 'the Plan of Action section',
+    leader_responsibilities: 'the Leader Responsibilities section'
   };
-
-  const prompt = `You are an expert Army NCO writer who specializes in DA Form 4856 Developmental Counseling Forms. You write in precise, professional Army regulatory language following AR 623-3 and FM 6-22 standards.
-
-Rewrite the following rough notes into polished, professional Army language suitable for ${sectionContext[section] || 'a DA 4856 counseling form'}.
-
-Soldier: ${rank} ${soldierName}
-Counseling Type: ${counselingType}
-Raw Notes: ${rawText}
-
-Rules:
-- Write in third person (refer to soldier by rank and last name)
-- Use professional, regulatory Army language
-- Be specific and factual — no vague language
-- Do not add information that wasn't in the original notes
-- Keep it concise but complete
-- Do not use bullet points — write in paragraph form
-- Do not include section headers or labels in your response
-- Output ONLY the rewritten text, nothing else`;
-
+  const prompt = `You are an expert Army NCO writer specializing in DA Form 4856. Rewrite the following rough notes into professional Army regulatory language for ${sectionContext[section] || 'a DA 4856'}.\n\nSoldier: ${rank} ${soldierName}\nCounseling Type: ${counselingType}\nRaw Notes: ${rawText}\n\nRules: Write in third person. Professional Army language. No bullet points. No headers. Output ONLY the rewritten text.`;
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 500,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
     });
-
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
-
-    const enhanced = data.content.map(i => i.text || '').join('').trim();
-    res.json({ enhanced });
-
+    res.json({ enhanced: data.content.map(i => i.text || '').join('').trim() });
   } catch (err) {
-    console.error('Counseling enhance error:', err);
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
 
-// AI Bullet Generation endpoint
+app.post('/api/generate-4856', (req, res) => {
+  const { soldierName, rank, date, unit, counselor, counselorRank, subject, situation, strengths, improve, poa, leader } = req.body;
+  const doc = new PDFDocument({ margin: 40, size: 'letter' });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="DA4856_${(soldierName || 'counseling').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
+  doc.pipe(res);
+  const W = 595 - 80, L = 40;
+  const formattedDate = date ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' }) : '___________________';
+  const box = (x, y, w, h) => doc.rect(x, y, w, h).stroke();
+  const label = (text, x, y, opts = {}) => doc.fontSize(6.5).font('Helvetica').fillColor('#000').text(text, x, y, { ...opts, lineBreak: false });
+  const field = (text, x, y, w, opts = {}) => doc.fontSize(9).font('Helvetica').fillColor('#000').text(text || '', x, y, { width: w, ...opts });
+  const sHdr = (text, x, y, w) => { doc.rect(x, y, w, 14).fillAndStroke('#000', '#000'); doc.fontSize(8).font('Helvetica-Bold').fillColor('#fff').text(text, x + 4, y + 3, { lineBreak: false }); doc.fillColor('#000'); };
+  let y = 40;
+  doc.fontSize(10).font('Helvetica-Bold').text('DEVELOPMENTAL COUNSELING FORM', L, y, { align: 'center', width: W }); y += 24;
+  sHdr('PART I - ADMINISTRATIVE DATA', L, y, W); y += 16;
+  box(L, y, W*.45, 28); box(L+W*.45, y, W*.25, 28); box(L+W*.70, y, W*.30, 28);
+  label('Name (Last, First, MI)', L+3, y+2); label('Rank/Grade', L+W*.45+3, y+2); label('Date of Counseling', L+W*.70+3, y+2);
+  field(soldierName||'', L+3, y+12, W*.45-6); field(rank||'', L+W*.45+3, y+12, W*.25-6); field(formattedDate, L+W*.70+3, y+12, W*.30-6); y += 28;
+  box(L, y, W*.45, 28); box(L+W*.45, y, W*.30, 28); box(L+W*.75, y, W*.25, 28);
+  label('Organization', L+3, y+2); label('Name and Title of Counselor', L+W*.45+3, y+2); label('Counselor Rank', L+W*.75+3, y+2);
+  field(unit||'', L+3, y+12, W*.45-6); field(counselor||'', L+W*.45+3, y+12, W*.30-6); field(counselorRank||'', L+W*.75+3, y+12, W*.25-6); y += 28;
+  sHdr('PART II - BACKGROUND INFORMATION', L, y, W); y += 16;
+  box(L, y, W, 24); label('Purpose of Counseling', L+3, y+2); field(subject||'', L+3, y+13, W-6); y += 24;
+  const sitH = Math.min(Math.max(Math.ceil((situation||'').length/90)*13, 60), 130);
+  box(L, y, W, sitH); label('Key Facts / Background', L+3, y+2); doc.fontSize(8.5).font('Helvetica').text(situation||'', L+3, y+13, { width: W-6, height: sitH-16 }); y += sitH;
+  sHdr('PART III - SUMMARY OF COUNSELING', L, y, W); y += 16;
+  if (strengths) { const h=Math.min(Math.max(Math.ceil(strengths.length/90)*13,45),100); box(L,y,W,h); label('STRENGTHS',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(strengths,L+3,y+13,{width:W-6,height:h-16}); y+=h; }
+  if (improve) { const h=Math.min(Math.max(Math.ceil(improve.length/90)*13,45),100); box(L,y,W,h); label('AREAS REQUIRING IMPROVEMENT',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(improve,L+3,y+13,{width:W-6,height:h-16}); y+=h; }
+  const poaH=Math.min(Math.max(Math.ceil((poa||'').length/90)*13,60),120); box(L,y,W,poaH); label('Plan of Action',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(poa||'',L+3,y+13,{width:W-6,height:poaH-16}); y+=poaH;
+  const ldrH=Math.min(Math.max(Math.ceil((leader||'').length/90)*13,50),100); box(L,y,W,ldrH); label('Leader Responsibilities',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(leader||'',L+3,y+13,{width:W-6,height:ldrH-16}); y+=ldrH;
+  if(y>680){doc.addPage();y=40;}
+  sHdr('PART IV - ASSESSMENT', L, y, W); y+=16;
+  box(L,y,W,50); label('[ ] Plan of Action was/was not accomplished.',L+3,y+6); label('Follow-up required: [ ] Yes  [ ] No',L+3,y+18); label('Date of next counseling: _______________',L+3,y+30); y+=54;
+  sHdr('SIGNATURES', L, y, W); y+=16;
+  box(L,y,W,45); label('INDIVIDUAL COUNSELED — [ ] I agree  [ ] I disagree',L+3,y+2); label('Signature: ________________________________',L+3,y+14); label('Date: ________________',L+W*.6,y+14); y+=45;
+  box(L,y,W,40); label('LEADER/COUNSELOR',L+3,y+2); label('Signature: ________________________________',L+3,y+14); label('Date: ________________',L+W*.6,y+14); label(`${counselorRank||''} ${counselor||''}`,L+3,y+28); y+=44;
+  doc.fontSize(6).font('Helvetica').fillColor('#666').text('DA FORM 4856 | Generated by NCO Kit — ncokit.com | Review all content before official use', L, y, { width: W, align: 'center' });
+  doc.end();
+});
+
 app.post('/api/bullets', async (req, res) => {
   const { name, category, action, impact, count } = req.body;
-
-  if (!action) {
-    return res.status(400).json({ error: 'Action field is required.' });
-  }
-
-  const prompt = `You are an expert Army NCO who writes exceptional NCOER evaluation bullets. Your bullets are concise, action-oriented, and follow Army writing standards.
-
-Generate exactly ${count || 3} NCOER bullet(s) for the "${category}" section of an NCOER.
-
-Soldier: ${name || 'Soldier'}
-What they did: ${action}
-${impact ? `Metrics/Impact: ${impact}` : ''}
-
-Rules for Army NCOER bullets:
-- Start with a strong action verb (Led, Trained, Managed, Executed, Coordinated, Achieved, etc.)
-- Be specific and measurable where possible
-- Use third person — never use "I"
-- Each bullet should be one sentence, punchy and direct
-- Do NOT use the soldier's name in the bullet (use their rank if needed, e.g. "SGT")
-- Format: action verb + what + result/impact
-- Keep each bullet under 175 characters
-- Do NOT number the bullets or add bullet symbols
-
-Respond with ONLY the bullets, one per line, nothing else. No preamble, no explanation.`;
-
+  if (!action) return res.status(400).json({ error: 'Action field is required.' });
+  const prompt = `You are an expert Army NCO who writes exceptional NCOER evaluation bullets.\n\nGenerate exactly ${count||3} NCOER bullet(s) for the "${category}" section.\n\nSoldier: ${name||'Soldier'}\nWhat they did: ${action}\n${impact?`Metrics/Impact: ${impact}`:''}\n\nRules: Strong action verb. Third person. Under 175 chars each. No numbers or bullet symbols.\n\nRespond with ONLY the bullets, one per line.`;
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1000,
-        messages: [{ role: 'user', content: prompt }]
-      })
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
     });
-
     const data = await response.json();
-
-    if (data.error) {
-      return res.status(500).json({ error: data.error.message });
-    }
-
-    const text = data.content.map(i => i.text || '').join('').trim();
-    const bullets = text.split('\n').map(b => b.trim()).filter(b => b.length > 0);
-
+    if (data.error) return res.status(500).json({ error: data.error.message });
+    const bullets = data.content.map(i=>i.text||'').join('').trim().split('\n').map(b=>b.trim()).filter(b=>b.length>0);
     res.json({ bullets });
-
   } catch (err) {
-    console.error('API error:', err);
-    res.status(500).json({ error: 'Failed to reach AI service. Try again.' });
+    res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
 
-// Serve the app for all other routes
+app.post('/api/aft-score', (req, res) => {
+  try {
+    res.json(calculateAFT(req.body));
+  } catch (err) {
+    res.status(500).json({ error: 'Score calculation failed: ' + err.message });
+  }
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Auto-initialize database schema on startup
+async function initDB() {
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        verified BOOLEAN DEFAULT FALSE,
+        verification_token VARCHAR(255),
+        verification_expires TIMESTAMPTZ,
+        reset_token VARCHAR(255),
+        reset_expires TIMESTAMPTZ,
+        plan VARCHAR(20) DEFAULT 'free',
+        stripe_customer_id VARCHAR(255),
+        stripe_subscription_id VARCHAR(255),
+        referral_code VARCHAR(20) UNIQUE,
+        referred_by VARCHAR(20),
+        free_months_earned INTEGER DEFAULT 0,
+        free_months_used INTEGER DEFAULT 0,
+        bullets_used_this_month INTEGER DEFAULT 0,
+        bullets_reset_date DATE DEFAULT CURRENT_DATE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        token VARCHAR(255) UNIQUE NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+
+    console.log('Database schema initialized successfully');
+  } catch (err) {
+    console.error('Database init error:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`NCO Tools running on port ${PORT}`));
+app.listen(PORT, async () => {
+  console.log(`NCO Kit running on port ${PORT}`);
+  await initDB();
+});
