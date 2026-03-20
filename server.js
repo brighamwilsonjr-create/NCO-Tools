@@ -6,9 +6,60 @@ const { calculateAFT } = require('./aft_tables');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 const app = express();
 app.use(cors());
+
+// Stripe webhook needs raw body BEFORE express.json()
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Webhook signature error:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const userId = session.metadata?.userId;
+      const customerId = session.customer;
+      const subscriptionId = session.subscription;
+      if (userId) {
+        await pool.query(
+          'UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW() WHERE id = $4',
+          ['premium', customerId, subscriptionId, userId]
+        );
+        const userResult = await pool.query('SELECT referred_by FROM users WHERE id = $1', [userId]);
+        const referredBy = userResult.rows[0]?.referred_by;
+        if (referredBy) {
+          await pool.query(
+            'UPDATE users SET free_months_earned = free_months_earned + 1 WHERE referral_code = $1',
+            [referredBy]
+          );
+        }
+        console.log(`User ${userId} upgraded to premium`);
+      }
+    }
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object;
+      await pool.query(
+        'UPDATE users SET plan = $1, stripe_subscription_id = NULL, updated_at = NOW() WHERE stripe_subscription_id = $2',
+        ['free', subscription.id]
+      );
+      console.log(`Subscription ${subscription.id} cancelled`);
+    }
+    if (event.type === 'invoice.payment_failed') {
+      console.log(`Payment failed for customer ${event.data.object.customer}`);
+    }
+  } catch (err) {
+    console.error('Webhook processing error:', err);
+  }
+  res.json({ received: true });
+});
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -375,6 +426,55 @@ app.post('/api/aft-score', (req, res) => {
     res.json(calculateAFT(req.body));
   } catch (err) {
     res.status(500).json({ error: 'Score calculation failed: ' + err.message });
+  }
+});
+
+// ── STRIPE ENDPOINTS ──────────────────────────────────────────────────────────
+
+app.post('/api/stripe/create-checkout', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (user.plan === 'premium') return res.status(400).json({ error: 'Already premium' });
+
+  try {
+    let discounts = [];
+    if (user.referred_by && !user.stripe_customer_id) {
+      const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
+      discounts = [{ coupon: coupon.id }];
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      customer_email: user.email,
+      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      discounts,
+      metadata: { userId: user.id },
+      success_url: 'https://ncokit.com/?upgraded=true',
+      cancel_url: 'https://ncokit.com/?upgrade=cancelled',
+    });
+
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Checkout error:', err);
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+app.post('/api/stripe/portal', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!user.stripe_customer_id) return res.status(400).json({ error: 'No subscription found' });
+
+  try {
+    const session = await stripe.billingPortal.sessions.create({
+      customer: user.stripe_customer_id,
+      return_url: 'https://ncokit.com/',
+    });
+    res.json({ url: session.url });
+  } catch (err) {
+    console.error('Portal error:', err);
+    res.status(500).json({ error: 'Failed to open billing portal' });
   }
 });
 
