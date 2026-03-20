@@ -878,10 +878,107 @@
 
     <div class="card">
       <div class="card-title">Accomplishment Input</div>
-      <div class="form-grid" style="margin-bottom:16px">
+      <div class="form-grid three" style="margin-bottom:16px">
         <div class="field">
           <label>Soldier Name &amp; Rank</label>
           <input type="text" id="b_name" placeholder="SGT Smith">
+        </div>
+        <div class="field">
+          <label>MOS</label>
+          <select id="b_mos">
+            <option value="">-- Select MOS --</option>
+            <optgroup label="Infantry / Combat Arms">
+              <option value="11A">11A — Infantry Officer</option>
+              <option value="11B">11B — Infantryman</option>
+              <option value="11C">11C — Indirect Fire Infantryman</option>
+              <option value="12B">12B — Combat Engineer</option>
+              <option value="12W">12W — Carpentry & Masonry Specialist</option>
+              <option value="13B">13B — Cannon Crewmember</option>
+              <option value="13F">13F — Fire Support Specialist</option>
+              <option value="19D">19D — Cavalry Scout</option>
+              <option value="19K">19K — M1 Armor Crewman</option>
+            </optgroup>
+            <optgroup label="Aviation">
+              <option value="15B">15B — Aircraft Powerplant Repairer</option>
+              <option value="15T">15T — UH-60 Helicopter Repairer</option>
+              <option value="15U">15U — CH-47 Helicopter Repairer</option>
+              <option value="15W">15W — Unmanned Aircraft Systems Operator</option>
+            </optgroup>
+            <optgroup label="Signal / Cyber / IT">
+              <option value="25B">25B — IT Specialist</option>
+              <option value="25L">25L — Cable Systems Installer-Maintainer</option>
+              <option value="25N">25N — Nodal Network Systems Operator-Maintainer</option>
+              <option value="25P">25P — Microwave Systems Operator-Maintainer</option>
+              <option value="25S">25S — Satellite Communication Systems Operator-Maintainer</option>
+              <option value="25U">25U — Signal Support Systems Specialist</option>
+              <option value="17C">17C — Cyber Operations Specialist</option>
+            </optgroup>
+            <optgroup label="Intelligence">
+              <option value="35F">35F — Intelligence Analyst</option>
+              <option value="35L">35L — Counterintelligence Agent</option>
+              <option value="35M">35M — Human Intelligence Collector</option>
+              <option value="35N">35N — Signals Intelligence Analyst</option>
+              <option value="35P">35P — Cryptologic Linguist</option>
+            </optgroup>
+            <optgroup label="Medical">
+              <option value="68A">68A — Biomedical Equipment Specialist</option>
+              <option value="68D">68D — Operating Room Specialist</option>
+              <option value="68E">68E — Dental Specialist</option>
+              <option value="68J">68J — Medical Logistics Specialist</option>
+              <option value="68W">68W — Combat Medic Specialist</option>
+              <option value="68X">68X — Behavioral Health Specialist</option>
+            </optgroup>
+            <optgroup label="Maintenance / Mechanical">
+              <option value="91A">91A — M1 Abrams Tank System Maintainer</option>
+              <option value="91B">91B — Wheeled Vehicle Mechanic</option>
+              <option value="91C">91C — Utilities Equipment Repairer</option>
+              <option value="91D">91D — Power Generation Equipment Repairer</option>
+              <option value="91E">91E — Allied Trades Specialist</option>
+              <option value="91F">91F — Small Arms/Artillery Repairer</option>
+              <option value="91H">91H — Track Vehicle Repairer</option>
+              <option value="91L">91L — Construction Equipment Repairer</option>
+              <option value="91M">91M — Bradley Fighting Vehicle System Maintainer</option>
+              <option value="91S">91S — Stryker Systems Maintainer</option>
+            </optgroup>
+            <optgroup label="Logistics / Supply">
+              <option value="88H">88H — Cargo Specialist</option>
+              <option value="88M">88M — Motor Transport Operator</option>
+              <option value="88N">88N — Transportation Management Coordinator</option>
+              <option value="89B">89B — Ammunition Specialist</option>
+              <option value="92A">92A — Automated Logistical Specialist</option>
+              <option value="92F">92F — Petroleum Supply Specialist</option>
+              <option value="92G">92G — Culinary Specialist</option>
+              <option value="92L">92L — Petroleum Laboratory Specialist</option>
+              <option value="92W">92W — Water Treatment Specialist</option>
+              <option value="92Y">92Y — Unit Supply Specialist</option>
+            </optgroup>
+            <optgroup label="HR / Finance / Admin">
+              <option value="36B">36B — Financial Management Technician</option>
+              <option value="42A">42A — Human Resources Specialist</option>
+              <option value="42T">42T — Talent Acquisition Specialist</option>
+              <option value="56M">56M — Religious Affairs Specialist</option>
+              <option value="79S">79S — Career Counselor</option>
+            </optgroup>
+            <optgroup label="Military Police / Legal">
+              <option value="27D">27D — Paralegal Specialist</option>
+              <option value="31B">31B — Military Police</option>
+              <option value="31D">31D — Criminal Investigation Agent</option>
+              <option value="31E">31E — Internment/Resettlement Specialist</option>
+            </optgroup>
+            <optgroup label="Civil Affairs / PSYOP / Special Operations">
+              <option value="37F">37F — Psychological Operations Specialist</option>
+              <option value="38B">38B — Civil Affairs Specialist</option>
+              <option value="18B">18B — Special Forces Weapons Sergeant</option>
+              <option value="18C">18C — Special Forces Engineer Sergeant</option>
+              <option value="18D">18D — Special Forces Medical Sergeant</option>
+              <option value="18E">18E — Special Forces Communications Sergeant</option>
+              <option value="18F">18F — Special Forces Intelligence Sergeant</option>
+              <option value="18Z">18Z — Special Forces Senior Sergeant</option>
+            </optgroup>
+            <optgroup label="Chemical / NBC">
+              <option value="74D">74D — Chemical, Biological, Radiological & Nuclear Specialist</option>
+            </optgroup>
+          </select>
         </div>
         <div class="field">
           <label>Rating Category</label>
@@ -1406,6 +1503,7 @@
     const action = document.getElementById('b_action').value.trim();
     const impact = document.getElementById('b_impact').value.trim();
     const count = document.getElementById('b_count').value;
+    const mos = document.getElementById('b_mos').value;
 
     if (!action) { alert('Please describe what the soldier did.'); return; }
 
@@ -1426,7 +1524,7 @@
       const response = await fetch('/api/bullets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, category, action, impact, count })
+        body: JSON.stringify({ name, category, action, impact, count, mos })
       });
 
       const data = await response.json();
