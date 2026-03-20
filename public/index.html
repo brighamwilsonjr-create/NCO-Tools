@@ -1374,40 +1374,16 @@
       document.getElementById('loadingDots').textContent = dots[di++ % dots.length];
     }, 400);
 
-    const prompt = `You are an expert Army NCO who writes exceptional NCOER evaluation bullets. Your bullets are concise, action-oriented, and follow Army writing standards.
-
-Generate exactly ${count} NCOER bullet(s) for the "${category}" section of an NCOER.
-
-Soldier: ${name}
-What they did: ${action}
-${impact ? `Metrics/Impact: ${impact}` : ''}
-
-Rules for Army NCOER bullets:
-- Start with a strong action verb (Led, Trained, Managed, Executed, Coordinated, Achieved, etc.)
-- Be specific and measurable where possible
-- Use third person — never use "I"
-- Each bullet should be one sentence, punchy and direct
-- Do NOT use the soldier's name in the bullet (use their rank if needed, e.g. "SGT")
-- Format: action verb + what + result/impact
-- Keep each bullet under 175 characters
-- Do NOT number the bullets or add bullet symbols
-
-Respond with ONLY the bullets, one per line, nothing else. No preamble, no explanation.`;
-
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/bullets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [{ role: 'user', content: prompt }]
-        })
+        body: JSON.stringify({ name, category, action, impact, count })
       });
 
       const data = await response.json();
-      const text = data.content.map(i => i.text || '').join('').trim();
-      const bullets = text.split('\n').map(b => b.trim()).filter(b => b.length > 0);
+      if (data.error) throw new Error(data.error);
+      const bullets = data.bullets;
 
       clearInterval(loadingInterval);
       document.getElementById('bulletLoading').style.display = 'none';
