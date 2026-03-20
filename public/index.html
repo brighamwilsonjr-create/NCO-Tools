@@ -1596,16 +1596,6 @@
     }
   }
 
-    } catch (err) {
-      clearInterval(loadingInterval);
-      document.getElementById('bulletLoading').style.display = 'none';
-      document.getElementById('buildBtn').disabled = false;
-      document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
-      document.getElementById('bulletError').style.display = 'block';
-      document.getElementById('bulletError').textContent = 'ERROR: Could not reach AI service. Check connection and try again. (' + err.message + ')';
-    }
-  }
-
   function copyBullets(btn) {
     const bullets = btn.closest('.card').querySelectorAll('.bullet-line');
     const text = Array.from(bullets).map(b => '• ' + b.textContent.trim()).join('\n');
