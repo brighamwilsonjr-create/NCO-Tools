@@ -295,9 +295,66 @@ app.post('/api/generate-4856', (req, res) => {
 });
 
 app.post('/api/bullets', async (req, res) => {
-  const { name, category, action, impact, count } = req.body;
+  const { name, category, action, impact, count, mos } = req.body;
   if (!action) return res.status(400).json({ error: 'Action field is required.' });
-  const prompt = `You are an expert Army NCO who writes exceptional NCOER evaluation bullets.\n\nGenerate exactly ${count||3} NCOER bullet(s) for the "${category}" section.\n\nSoldier: ${name||'Soldier'}\nWhat they did: ${action}\n${impact?`Metrics/Impact: ${impact}`:''}\n\nRules: Strong action verb. Third person. Under 175 chars each. No numbers or bullet symbols.\n\nRespond with ONLY the bullets, one per line.`;
+
+  const mosContext = {
+    '11B': 'Infantryman. Focuses on direct combat operations, small unit tactics, physical readiness, weapons proficiency, and leading soldiers in austere environments.',
+    '11C': 'Indirect Fire Infantryman. Focuses on indirect fire support, crew-served weapons, fire mission execution, and supporting maneuver elements.',
+    '12B': 'Combat Engineer. Focuses on mobility, countermobility, survivability operations, demolitions, route clearance, and construction support.',
+    '13B': 'Cannon Crewmember. Focuses on artillery fire support, howitzer operations, crew drills, ammunition handling, and fire mission execution.',
+    '13F': 'Fire Support Specialist. Focuses on coordinating fire support, calling for fires, target acquisition, and integrating combined arms effects.',
+    '15W': 'UAS Operator. Focuses on unmanned aircraft operations, reconnaissance missions, sensor employment, and providing ISR support to ground forces.',
+    '17C': 'Cyber Operations Specialist. Focuses on cyberspace operations, network defense, vulnerability assessment, and supporting information operations.',
+    '19D': 'Cavalry Scout. Focuses on reconnaissance, surveillance, target acquisition, screen operations, and providing battlefield intelligence.',
+    '19K': 'M1 Armor Crewman. Focuses on tank gunnery, crew proficiency, maneuver operations, and combined arms integration.',
+    '25B': 'IT Specialist. Focuses on network administration, information systems maintenance, cybersecurity, and ensuring communications readiness.',
+    '25U': 'Signal Support Systems Specialist. Focuses on communications systems installation, maintenance, and ensuring signal support across the formation.',
+    '31B': 'Military Police. Focuses on law enforcement, force protection, area security, detainee operations, and maintaining good order and discipline.',
+    '35F': 'Intelligence Analyst. Focuses on all-source intelligence analysis, intelligence preparation of the battlefield, and providing decision-quality intelligence products.',
+    '35M': 'HUMINT Collector. Focuses on human intelligence collection, source operations, debriefings, and supporting commander intelligence requirements.',
+    '36B': 'Financial Management Technician. Focuses on finance operations, pay support, vendor payments, and ensuring financial accountability.',
+    '37F': 'PSYOP Specialist. Focuses on psychological operations planning, target audience analysis, influence activities, and supporting information operations.',
+    '38B': 'Civil Affairs Specialist. Focuses on civil-military operations, engagement with local populations and governments, and minimizing civilian impacts.',
+    '42A': 'Human Resources Specialist. Focuses on personnel actions, strength management, casualty operations, evaluations, and awards processing.',
+    '42T': 'Talent Acquisition Specialist. Focuses on Army recruiting, mission accomplishment, community engagement, and identifying qualified applicants.',
+    '68W': 'Combat Medic. Focuses on trauma care, medical readiness, preventive medicine, soldier health, and casualty management.',
+    '74D': 'CBRN Specialist. Focuses on chemical, biological, radiological, and nuclear defense operations, detection, and decontamination.',
+    '79S': 'Career Counselor. Focuses on soldier retention, career development counseling, reenlistment operations, and force shaping.',
+    '88M': 'Motor Transport Operator. Focuses on convoy operations, vehicle operations, load planning, and sustainment movement.',
+    '89B': 'Ammunition Specialist. Focuses on ammunition accountability, storage operations, explosives safety, and supporting unit ammunition requirements.',
+    '91B': 'Wheeled Vehicle Mechanic. Focuses on vehicle maintenance, diagnostics, repair operations, and ensuring fleet readiness.',
+    '92A': 'Automated Logistical Specialist. Focuses on supply operations, property accountability, stock control, and sustainment support.',
+    '92F': 'Petroleum Supply Specialist. Focuses on bulk fuel operations, fuel accountability, and ensuring petroleum support to the force.',
+    '92G': 'Culinary Specialist. Focuses on food service operations, field feeding, nutritional support, and maintaining food safety standards.',
+    '92Y': 'Unit Supply Specialist. Focuses on supply room operations, property accountability, equipment readiness, and logistical support.',
+  };
+
+  const mosInfo = mos && mosContext[mos] ? `\nSoldier's Role Context: ${mosContext[mos]}` : '';
+  const mosLabel = mos ? ` (${mos})` : '';
+
+  const prompt = `You are an expert Army NCO who writes exceptional NCOER evaluation bullets. Your bullets are concise, action-oriented, and follow Army writing standards.${mosInfo}
+
+Generate exactly ${count||3} NCOER bullet(s) for the "${category}" section of an NCOER.
+
+Soldier: ${name||'Soldier'}${mosLabel}
+What they did: ${action}
+${impact?`Metrics/Impact: ${impact}`:''}
+
+Rules:
+- Start with a strong action verb appropriate to the soldier's role
+- Use the MOS context to frame accomplishments correctly — but avoid MOS-specific jargon or acronyms
+- Write clean, readable Army language that any promotion board member can understand
+- Be specific and measurable where possible
+- Use third person — never use "I"
+- Each bullet should be one sentence, punchy and direct
+- Do NOT use the soldier's name in the bullet
+- Format: action verb + what + result/impact
+- Keep each bullet under 175 characters
+- Do NOT number the bullets or add bullet symbols
+
+Respond with ONLY the bullets, one per line, nothing else.`;
+
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
