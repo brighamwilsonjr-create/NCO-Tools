@@ -632,7 +632,8 @@
     <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
     <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
     <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
-    <button class="tab" onclick="switchTab('aft', this)">AFT Scorer / DA 705</button>
+    <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
+    <button class="tab" id="savesTab" onclick="switchTab('saves', this)" style="display:none">💾 My Saves</button>
   </div>
 
   <!-- ===== COUNSELING PANEL ===== -->
@@ -783,6 +784,8 @@
 
     <div class="btn-row" id="counselingCopyRow" style="display:none">
       <button class="btn btn-secondary btn-sm" onclick="copyOutput('counselingOutput', 'copyCounselingConfirm')">Copy to Clipboard</button>
+      <button class="btn btn-secondary btn-sm" id="saveCounselingBtn" style="display:none" onclick="saveCounseling()">💾 Save Counseling</button>
+      <span style="font-family:'Source Code Pro',monospace; font-size:11px; color:#4CAF50; display:none;" id="saveCounselingConfirm">✓ SAVED</span>
     </div>
 
   </div>
@@ -1073,15 +1076,57 @@
       </div>
 
       <div class="btn-row" style="margin-top:20px">
+        <button class="btn btn-secondary btn-sm" id="saveAFTBtn" style="display:none" onclick="saveAFTScore()">💾 Save Score</button>
         <button class="btn btn-secondary btn-sm" onclick="clearAFT()">Clear</button>
       </div>
     </div>
 
   </div>
 
-</div>
+  <!-- ===== SAVES PANEL ===== -->
+  <div class="panel" id="panel-saves">
+    <div class="section-header">
+      <div>
+        <div class="section-title">My Saves</div>
+        <div class="section-sub">Your saved counselings, bullets, AFT scores, and soldier roster</div>
+      </div>
+    </div>
 
-<script>
+    <!-- Saves sub-tabs -->
+    <div style="display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--border);">
+      <button class="tab active" id="saveSubCounseling" onclick="switchSavesTab('counselings', this)" style="font-size:12px; padding:8px 16px;">Counselings</button>
+      <button class="tab" id="saveSubBullets" onclick="switchSavesTab('bullets', this)" style="font-size:12px; padding:8px 16px;">Bullets</button>
+      <button class="tab" id="saveSubAFT" onclick="switchSavesTab('aft', this)" style="font-size:12px; padding:8px 16px;">AFT Scores</button>
+      <button class="tab" id="saveSubSoldiers" onclick="switchSavesTab('soldiers', this)" style="font-size:12px; padding:8px 16px;">Soldiers</button>
+    </div>
+
+    <!-- Saved Counselings -->
+    <div id="saves-counselings">
+      <div class="empty-state" id="savedCounselingsEmpty" style="display:none">NO SAVED COUNSELINGS YET</div>
+      <div id="savedCounselingsList"></div>
+    </div>
+
+    <!-- Saved Bullets -->
+    <div id="saves-bullets" style="display:none">
+      <div class="empty-state" id="savedBulletsEmpty" style="display:none">NO SAVED BULLETS YET</div>
+      <div id="savedBulletsList"></div>
+    </div>
+
+    <!-- Saved AFT Scores -->
+    <div id="saves-aft" style="display:none">
+      <div class="empty-state" id="savedAFTEmpty" style="display:none">NO SAVED AFT SCORES YET</div>
+      <div id="savedAFTList"></div>
+    </div>
+
+    <!-- Saved Soldiers -->
+    <div id="saves-soldiers" style="display:none">
+      <div class="empty-state" id="savedSoldiersEmpty" style="display:none">NO SAVED SOLDIERS YET</div>
+      <div id="savedSoldiersList"></div>
+    </div>
+
+  </div>
+
+</div>
   // STATE
   let soldiers = [];
   let counselingCount = 0;
@@ -1405,6 +1450,7 @@
         </div>
         <div class="btn-row">
           <button class="btn btn-secondary btn-sm" onclick="copyBullets(this)">Copy All Bullets</button>
+          ${currentUser ? `<button class="btn btn-secondary btn-sm" onclick="saveBullets(this, '${name}', '${category}')">💾 Save Bullets</button>` : ''}
         </div>
       `;
       container.prepend(div);
@@ -1639,6 +1685,10 @@
     document.getElementById('userMenu').style.display = 'flex';
     document.getElementById('userEmail').textContent = user.email;
     document.getElementById('userPlan').textContent = user.plan === 'premium' ? '⭐ PREMIUM' : 'FREE';
+    document.getElementById('savesTab').style.display = 'block';
+    document.getElementById('saveCounselingBtn').style.display = 'inline-block';
+    const saveAFTBtn = document.getElementById('saveAFTBtn');
+    if (saveAFTBtn) saveAFTBtn.style.display = 'inline-block';
     closeAuth();
   }
 
@@ -1762,6 +1812,9 @@
     currentUser = null;
     document.getElementById('authButtons').style.display = 'flex';
     document.getElementById('userMenu').style.display = 'none';
+    document.getElementById('savesTab').style.display = 'none';
+    document.getElementById('saveCounselingBtn').style.display = 'none';
+    document.querySelectorAll('.tab')[0].click();
   }
 
   function showAuthError(el, msg) { el.textContent = msg; el.style.display = 'block'; }
@@ -1797,6 +1850,230 @@
 
   initAuth();
   handleVerifyToken();
+
+  // ── SAVES ──────────────────────────────────────────────────────────────────
+
+  function authHeader() {
+    const token = localStorage.getItem('ncokit_token');
+    return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  }
+
+  function switchSavesTab(tab, el) {
+    ['counselings','bullets','aft','soldiers'].forEach(t => {
+      document.getElementById('saves-' + t).style.display = t === tab ? 'block' : 'none';
+    });
+    document.querySelectorAll('#panel-saves .tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+    loadSaves(tab);
+  }
+
+  async function loadSaves(tab) {
+    if (!currentUser) return;
+    try {
+      if (tab === 'counselings') {
+        const res = await fetch('/api/save/counselings', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedCounselings(data.counselings || []);
+      } else if (tab === 'bullets') {
+        const res = await fetch('/api/save/bullets', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedBullets(data.bullets || []);
+      } else if (tab === 'aft') {
+        const res = await fetch('/api/save/aft', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedAFT(data.scores || []);
+      } else if (tab === 'soldiers') {
+        const res = await fetch('/api/save/soldiers', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedSoldiers(data.soldiers || []);
+      }
+    } catch (e) { console.error('Load saves error:', e); }
+  }
+
+  function renderSavedCounselings(items) {
+    const el = document.getElementById('savedCounselingsList');
+    const empty = document.getElementById('savedCounselingsEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(c => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${c.soldier_name || 'Unknown'} — ${c.counseling_type || 'Counseling'}</span>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="loadCounseling(${JSON.stringify(c).replace(/"/g, '&quot;')})">Load</button>
+            <button class="btn btn-danger" onclick="deleteSave('counseling','${c.id}')">Delete</button>
+          </div>
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">
+          ${c.unit || ''} | ${c.date || ''} | Saved ${new Date(c.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSavedBullets(items) {
+    const el = document.getElementById('savedBulletsList');
+    const empty = document.getElementById('savedBulletsEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(b => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${b.soldier_name || 'Unknown'} — ${b.category}</span>
+          <button class="btn btn-danger" onclick="deleteSave('bullets','${b.id}')">Delete</button>
+        </div>
+        <div class="bullet-output visible" style="margin-top:8px;">
+          ${(b.bullets || []).map(bullet => `<div class="bullet-line">${bullet}</div>`).join('')}
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-top:8px;">
+          Saved ${new Date(b.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSavedAFT(items) {
+    const el = document.getElementById('savedAFTList');
+    const empty = document.getElementById('savedAFTEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(a => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${a.soldier_name || 'Unknown'} — ${a.test_date || ''}</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-family:'Oswald',sans-serif; font-size:18px; color:${a.pass_fail ? '#4CAF50' : '#f44336'};">${a.pass_fail ? 'GO' : 'NO-GO'}</span>
+            <button class="btn btn-danger" onclick="deleteSave('aft','${a.id}')">Delete</button>
+          </div>
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); line-height:1.8;">
+          Total: ${a.total} | ${a.standard?.toUpperCase()} | Age: ${a.age} ${a.sex}<br>
+          MDL: ${a.mdl_raw} (${a.mdl_pts}pts) | HRP: ${a.hrp_raw} (${a.hrp_pts}pts) | SDC: ${a.sdc_raw} (${a.sdc_pts}pts) | PLK: ${a.plk_raw} (${a.plk_pts}pts) | 2MR: ${a.tmr_raw} (${a.tmr_pts}pts)
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSavedSoldiers(items) {
+    const el = document.getElementById('savedSoldiersList');
+    const empty = document.getElementById('savedSoldiersEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = `
+      <table class="roster-table">
+        <thead><tr><th>Name</th><th>Rank</th><th>MOS</th><th>Last Counseling</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          ${items.map(s => {
+            const badgeClass = s.status === 'current' ? 'badge-green' : s.status === 'due' ? 'badge-yellow' : 'badge-red';
+            return `<tr>
+              <td><strong>${s.name}</strong></td>
+              <td>${s.rank}</td>
+              <td>${s.mos || '—'}</td>
+              <td>${s.last_counseling || '—'}</td>
+              <td><span class="badge ${badgeClass}">${s.status}</span></td>
+              <td style="font-size:12px; color:var(--tan-dark)">${s.notes || '—'}</td>
+              <td><button class="btn btn-danger" onclick="deleteSave('soldier','${s.id}')">Delete</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function loadCounseling(c) {
+    document.getElementById('c_soldierName').value = c.soldier_name || '';
+    document.getElementById('c_rank').value = c.rank || '';
+    document.getElementById('c_date').value = c.date || today;
+    document.getElementById('c_unit').value = c.unit || '';
+    document.getElementById('c_counselor').value = c.counselor || '';
+    document.getElementById('c_counselorRank').value = c.counselor_rank || '';
+    document.getElementById('c_type').value = c.counseling_type || '';
+    document.getElementById('c_subject').value = c.subject || '';
+    document.getElementById('c_situation').value = c.situation || '';
+    document.getElementById('c_strengths').value = c.strengths || '';
+    document.getElementById('c_improve').value = c.improve || '';
+    document.getElementById('c_poa').value = c.poa || '';
+    document.getElementById('c_leader').value = c.leader || '';
+    switchTab('counseling', document.querySelector('.tab'));
+    document.querySelectorAll('.tab')[0].click();
+  }
+
+  async function saveCounseling() {
+    if (!currentUser) { showAuth('login'); return; }
+    const payload = {
+      soldierName: document.getElementById('c_soldierName').value,
+      rank: document.getElementById('c_rank').value,
+      unit: document.getElementById('c_unit').value,
+      counselor: document.getElementById('c_counselor').value,
+      counselorRank: document.getElementById('c_counselorRank').value,
+      date: document.getElementById('c_date').value,
+      counselingType: document.getElementById('c_type').value,
+      subject: document.getElementById('c_subject').value,
+      situation: document.getElementById('c_situation').value,
+      strengths: document.getElementById('c_strengths').value,
+      improve: document.getElementById('c_improve').value,
+      poa: document.getElementById('c_poa').value,
+      leader: document.getElementById('c_leader').value,
+    };
+    try {
+      const res = await fetch('/api/save/counseling', { method: 'POST', headers: authHeader(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) {
+        const confirm = document.getElementById('saveCounselingConfirm');
+        confirm.style.display = 'inline';
+        setTimeout(() => confirm.style.display = 'none', 2000);
+      }
+    } catch (e) { alert('Failed to save. Please try again.'); }
+  }
+
+  async function deleteSave(type, id) {
+    if (!confirm('Delete this saved record?')) return;
+    const endpoints = { counseling: 'counseling', bullets: 'bullets', aft: 'aft', soldier: 'soldier' };
+    try {
+      await fetch(`/api/save/${endpoints[type]}/${id}`, { method: 'DELETE', headers: authHeader() });
+      const currentTab = document.querySelector('#panel-saves .tab.active');
+      if (currentTab) currentTab.click();
+    } catch (e) { alert('Failed to delete.'); }
+  }
+
+  async function saveBullets(btn, soldierName, category) {
+    if (!currentUser) { showAuth('login'); return; }
+    const bulletEls = btn.closest('.card').querySelectorAll('.bullet-line');
+    const bullets = Array.from(bulletEls).map(b => b.textContent.trim());
+    try {
+      const res = await fetch('/api/save/bullets', {
+        method: 'POST', headers: authHeader(),
+        body: JSON.stringify({ soldierName, category, bullets })
+      });
+      const data = await res.json();
+      if (data.success) { btn.textContent = '✓ Saved'; setTimeout(() => btn.textContent = '💾 Save Bullets', 2000); }
+    } catch (e) { alert('Failed to save.'); }
+  }
+
+  async function saveAFTScore() {
+    if (!currentUser) { showAuth('login'); return; }
+    if (!lastAFTResult) { alert('Calculate a score first.'); return; }
+    const payload = {
+      soldierName: document.getElementById('aft_name').value,
+      age: document.getElementById('aft_age').value,
+      sex: document.getElementById('aft_sex').value,
+      standard: document.getElementById('aft_standard').value,
+      testDate: document.getElementById('aft_date').value,
+      mdl: document.getElementById('aft_mdl').value,
+      hrp: document.getElementById('aft_hrp').value,
+      sdc: document.getElementById('aft_sdc').value,
+      plk: document.getElementById('aft_plk').value,
+      tmr: document.getElementById('aft_tmr').value,
+      scores: lastAFTResult.scores,
+      total: lastAFTResult.total,
+      overallPass: lastAFTResult.overallPass
+    };
+    try {
+      const res = await fetch('/api/save/aft', { method: 'POST', headers: authHeader(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) alert('AFT score saved!');
+    } catch (e) { alert('Failed to save.'); }
+  }
 
   updateStats();
 </script>
