@@ -1541,6 +1541,8 @@
       const div = document.createElement('div');
       div.className = 'card';
       div.style.marginTop = '16px';
+      const cardId = 'bulletCard_' + Date.now();
+      div.id = cardId;
       const saveBtn = currentUser ? '<button class="btn btn-secondary btn-sm" onclick="saveBullets(this, \'' + name + '\', \'' + category + '\')">💾 Save Bullets</button>' : '';
       div.innerHTML = `
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
@@ -1550,6 +1552,7 @@
         <div class="bullet-output visible" id="bulletResult_${Date.now()}">
           ${bullets.map(b => `<div class="bullet-line">${b}</div>`).join('')}
         </div>
+        <div id="categoryAdvisory_${cardId}" style="display:none; margin-top:12px; padding:10px 14px; background:var(--od-dark); border-left:3px solid var(--tan); font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); line-height:1.6;"></div>
         <div class="btn-row">
           <button class="btn btn-secondary btn-sm" onclick="copyBullets(this)">Copy All Bullets</button>
           ${saveBtn}
@@ -1559,6 +1562,39 @@
 
       bulletCount++;
       updateStats();
+
+      // Run category validation in background
+      checkCategoryFit(bullets, category, action, cardId);
+
+    } catch (err) {
+      clearInterval(loadingInterval);
+      document.getElementById('bulletLoading').style.display = 'none';
+      document.getElementById('buildBtn').disabled = false;
+      document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+      document.getElementById('bulletError').style.display = 'block';
+      document.getElementById('bulletError').textContent = 'ERROR: Could not reach AI service. Check connection and try again. (' + err.message + ')';
+    }
+  }
+
+  async function checkCategoryFit(bullets, category, action, cardId) {
+    try {
+      const res = await fetch('/api/validate-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bullets, category, action })
+      });
+      const data = await res.json();
+      if (data.suggestion) {
+        const el = document.getElementById('categoryAdvisory_' + cardId);
+        if (el) {
+          el.innerHTML = '💡 ' + data.suggestion;
+          el.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      // Silent fail — advisory is non-critical
+    }
+  }
 
     } catch (err) {
       clearInterval(loadingInterval);
