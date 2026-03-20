@@ -321,6 +321,183 @@ app.post('/api/aft-score', (req, res) => {
   }
 });
 
+// ── SAVE ENDPOINTS ────────────────────────────────────────────────────────────
+
+// Save counseling
+app.post('/api/save/counseling', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { soldierName, rank, unit, counselor, counselorRank, date, counselingType, subject, situation, strengths, improve, poa, leader } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO saved_counselings (user_id, soldier_name, rank, unit, counselor, counselor_rank, date, counseling_type, subject, situation, strengths, improve, poa, leader)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
+      [user.id, soldierName, rank, unit, counselor, counselorRank, date, counselingType, subject, situation, strengths, improve, poa, leader]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    console.error('Save counseling error:', err);
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+// Get saved counselings
+app.get('/api/save/counselings', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM saved_counselings WHERE user_id = $1 ORDER BY created_at DESC',
+      [user.id]
+    );
+    res.json({ counselings: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load' });
+  }
+});
+
+// Delete saved counseling
+app.delete('/api/save/counseling/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_counselings WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+// Save bullets
+app.post('/api/save/bullets', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { soldierName, category, bullets } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO saved_bullets (user_id, soldier_name, category, bullets) VALUES ($1,$2,$3,$4) RETURNING id',
+      [user.id, soldierName, category, JSON.stringify(bullets)]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+// Get saved bullets
+app.get('/api/save/bullets', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM saved_bullets WHERE user_id = $1 ORDER BY created_at DESC',
+      [user.id]
+    );
+    res.json({ bullets: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load' });
+  }
+});
+
+// Delete saved bullets
+app.delete('/api/save/bullets/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_bullets WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+// Save AFT score
+app.post('/api/save/aft', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { soldierName, age, sex, standard, testDate, mdl, hrp, sdc, plk, tmr, scores, total, overallPass } = req.body;
+  try {
+    const result = await pool.query(
+      `INSERT INTO saved_aft_scores (user_id, soldier_name, age, sex, standard, test_date, mdl_raw, hrp_raw, sdc_raw, plk_raw, tmr_raw, mdl_pts, hrp_pts, sdc_pts, plk_pts, tmr_pts, total, pass_fail)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
+      [user.id, soldierName, age, sex, standard, testDate, mdl, hrp, sdc, plk, tmr, scores?.mdl, scores?.hrp, scores?.sdc, scores?.plk, scores?.tmr, total, overallPass]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+// Get saved AFT scores
+app.get('/api/save/aft', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM saved_aft_scores WHERE user_id = $1 ORDER BY created_at DESC',
+      [user.id]
+    );
+    res.json({ scores: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load' });
+  }
+});
+
+// Delete saved AFT score
+app.delete('/api/save/aft/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_aft_scores WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+// Save soldier to roster
+app.post('/api/save/soldier', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { name, rank, mos, lastCounseling, status, notes } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO saved_soldiers (user_id, name, rank, mos, last_counseling, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+      [user.id, name, rank, mos, lastCounseling, status, notes]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+// Get saved soldiers
+app.get('/api/save/soldiers', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM saved_soldiers WHERE user_id = $1 ORDER BY name ASC',
+      [user.id]
+    );
+    res.json({ soldiers: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load' });
+  }
+});
+
+// Delete saved soldier
+app.delete('/api/save/soldier/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_soldiers WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
 app.get('/verify', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.redirect('/?error=invalid_token');
@@ -384,6 +561,75 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS saved_counselings (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      soldier_name VARCHAR(255),
+      rank VARCHAR(50),
+      unit VARCHAR(255),
+      counselor VARCHAR(255),
+      counselor_rank VARCHAR(50),
+      date VARCHAR(50),
+      counseling_type VARCHAR(100),
+      subject VARCHAR(255),
+      situation TEXT,
+      strengths TEXT,
+      improve TEXT,
+      poa TEXT,
+      leader TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS saved_bullets (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      soldier_name VARCHAR(255),
+      category VARCHAR(100),
+      bullets JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS saved_aft_scores (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      soldier_name VARCHAR(255),
+      age INTEGER,
+      sex VARCHAR(1),
+      standard VARCHAR(20),
+      test_date VARCHAR(50),
+      mdl_raw VARCHAR(20),
+      hrp_raw VARCHAR(20),
+      sdc_raw VARCHAR(20),
+      plk_raw VARCHAR(20),
+      tmr_raw VARCHAR(20),
+      mdl_pts INTEGER,
+      hrp_pts INTEGER,
+      sdc_pts INTEGER,
+      plk_pts INTEGER,
+      tmr_pts INTEGER,
+      total INTEGER,
+      pass_fail BOOLEAN,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    await pool.query(`CREATE TABLE IF NOT EXISTS saved_soldiers (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      name VARCHAR(255),
+      rank VARCHAR(50),
+      mos VARCHAR(20),
+      last_counseling VARCHAR(50),
+      status VARCHAR(20),
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_counselings_user ON saved_counselings(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_bullets_user ON saved_bullets(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_aft_user ON saved_aft_scores(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_soldiers_user ON saved_soldiers(user_id)`);
+
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('Database init error:', err.message);
