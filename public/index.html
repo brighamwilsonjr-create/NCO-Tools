@@ -511,7 +511,7 @@
     </div>
     <div id="userMenu" style="display:none; align-items:center; gap:12px;">
       <span id="userEmail" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
-      <span id="userPlan" style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px; padding:2px 8px; border:1px solid var(--tan); color:var(--tan);"></span>
+      <span id="userPlan" style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px; padding:2px 8px; border:1px solid var(--tan); color:var(--tan); cursor:pointer;" onclick="handlePlanClick()"></span>
       <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
@@ -520,6 +520,29 @@
     </div>
   </div>
 </header>
+
+<!-- UPGRADE MODAL -->
+<div id="upgradeModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:460px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;">Upgrade to Premium</div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;">Unlock the full NCO Kit toolkit</div>
+      </div>
+      <button onclick="closeUpgradeModal()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:24px;">
+      <div style="font-family:'Oswald',sans-serif; font-size:36px; color:var(--tan); text-align:center; margin-bottom:4px;">$8<span style="font-size:16px; color:var(--tan-dark);">/month</span></div>
+      <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-align:center; margin-bottom:20px; letter-spacing:1px;">CANCEL ANYTIME</div>
+      <div style="border:1px solid var(--border); padding:16px; margin-bottom:20px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); margin-bottom:10px; letter-spacing:2px;">PREMIUM INCLUDES:</div>
+        ${['Unlimited saves across all tools', 'NCOER Support Form Builder (coming soon)', 'Awards Recommendation Writer (coming soon)', 'Promotion Board Prep Tool (coming soon)', 'Priority AI response speed', 'Early access to new features'].map(f => `<div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ ${f}</div>`).join('')}
+      </div>
+      <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $8/month</button>
+      <div style="text-align:center; margin-top:12px; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark);">Secured by Stripe · Cancel anytime from your account</div>
+    </div>
+  </div>
+</div>
 
 <!-- AUTH MODAL -->
 <div id="authModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
@@ -1979,8 +2002,68 @@
     if (e.target === this) closeAuth();
   });
 
+  async function handlePlanClick() {
+    if (!currentUser) return;
+    if (currentUser.plan === 'premium') {
+      // Open billing portal to manage subscription
+      try {
+        const res = await fetch('/api/stripe/portal', { method: 'POST', headers: authHeader() });
+        const data = await res.json();
+        if (data.url) window.location.href = data.url;
+      } catch (e) { alert('Failed to open billing portal.'); }
+    } else {
+      // Show upgrade modal
+      showUpgradeModal();
+    }
+  }
+
+  function showUpgradeModal() {
+    document.getElementById('upgradeModal').style.display = 'flex';
+  }
+
+  function closeUpgradeModal() {
+    document.getElementById('upgradeModal').style.display = 'none';
+  }
+
+  async function startUpgrade() {
+    if (!currentUser) { showAuth('login'); return; }
+    const btn = document.getElementById('upgradeBtn');
+    btn.textContent = 'Redirecting...';
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: authHeader() });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else { alert(data.error || 'Failed to start checkout.'); btn.textContent = 'Upgrade to Premium'; btn.disabled = false; }
+    } catch (e) {
+      alert('Failed to start checkout. Please try again.');
+      btn.textContent = 'Upgrade to Premium';
+      btn.disabled = false;
+    }
+  }
+
+  // Handle post-payment URL params
+  async function handlePaymentReturn() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === 'true') {
+      // Refresh user data to get new plan
+      const token = localStorage.getItem('ncokit_token');
+      if (token) {
+        const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const user = await res.json();
+          setLoggedIn(user, token);
+        }
+      }
+      window.history.replaceState({}, '', '/');
+      // Show success message
+      setTimeout(() => alert('Welcome to Premium! Your account has been upgraded.'), 500);
+    }
+  }
+
   initAuth();
   handleVerifyToken();
+  handlePaymentReturn();
 
   // ── SAVES ──────────────────────────────────────────────────────────────────
 
