@@ -378,7 +378,51 @@ app.post('/api/aft-score', (req, res) => {
   }
 });
 
-// ── SAVE ENDPOINTS ────────────────────────────────────────────────────────────
+// Category fit validation
+app.post('/api/validate-category', async (req, res) => {
+  const { bullets, category, action } = req.body;
+  if (!bullets || !category) return res.json({ suggestion: null });
+
+  const categoryGuide = `
+Character: Army values, ethics, integrity, empathy, warrior ethos, moral courage, discipline, doing what's right
+Presence: Physical fitness, military bearing, confidence, resilience, appearance, PT scores, physical readiness
+Intellect: Mental agility, innovation, judgment, critical thinking, problem solving, expertise, interpersonal tact
+Leads: Leading soldiers, influencing others, building trust, communication, directing teams, motivating people
+Develops: Mentoring, creating positive climate, stewardship of resources, self-development, developing subordinates
+Achieves: Mission accomplishment, getting results, meeting standards, task completion, operational performance`;
+
+  const prompt = `You are an Army NCOER expert. A leader placed the following bullets in the "${category}" category of an NCOER.
+
+Bullets:
+${bullets.join('\n')}
+
+Original description: ${action}
+
+NCOER Category Guide:${categoryGuide}
+
+Analyze whether these bullets fit best in "${category}" or if they would be better placed in a different category.
+
+If the category is correct or close enough, respond with exactly: CORRECT
+If a different category would be significantly better, respond with one short sentence starting with "These bullets describe" and ending with the better category name. Example: "These bullets describe physical fitness performance — consider moving them to Presence instead."
+
+Respond with ONLY "CORRECT" or the one-sentence suggestion. Nothing else.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 100, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await response.json();
+    const text = data.content?.map(i => i.text || '').join('').trim();
+    if (!text || text === 'CORRECT') return res.json({ suggestion: null });
+    res.json({ suggestion: text });
+  } catch (err) {
+    res.json({ suggestion: null });
+  }
+});
+
+
 
 // Save counseling
 app.post('/api/save/counseling', async (req, res) => {
