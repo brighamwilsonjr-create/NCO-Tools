@@ -1440,6 +1440,7 @@
       const div = document.createElement('div');
       div.className = 'card';
       div.style.marginTop = '16px';
+      const saveBtn = currentUser ? '<button class="btn btn-secondary btn-sm" onclick="saveBullets(this, \'' + name + '\', \'' + category + '\')">💾 Save Bullets</button>' : '';
       div.innerHTML = `
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
           <span>${category.toUpperCase()} — ${name}</span>
@@ -1450,7 +1451,7 @@
         </div>
         <div class="btn-row">
           <button class="btn btn-secondary btn-sm" onclick="copyBullets(this)">Copy All Bullets</button>
-          ${currentUser ? `<button class="btn btn-secondary btn-sm" onclick="saveBullets(this, '${name}', '${category}')">💾 Save Bullets</button>` : ''}
+          ${saveBtn}
         </div>
       `;
       container.prepend(div);
