@@ -1237,6 +1237,9 @@
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.getElementById('panel-' + name).classList.add('active');
     el.classList.add('active');
+    if (name === 'saves') {
+      switchSavesTab('counselings', document.getElementById('saveSubCounseling'));
+    }
   }
 
   // UPDATE STATS
