@@ -934,6 +934,22 @@ async function initDB() {
   }
 }
 
+// Admin route to gift premium access
+app.post('/api/admin/gift-premium', async (req, res) => {
+  const { secret, email } = req.body;
+  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  try {
+    const result = await pool.query(
+      'UPDATE users SET plan = $1, updated_at = NOW() WHERE email = $2 RETURNING email',
+      ['premium', email.toLowerCase()]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, message: `${email} granted premium access` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
