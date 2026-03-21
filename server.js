@@ -11,6 +11,9 @@ const rateLimit = require('express-rate-limit');
 
 const app = express();
 
+// Trust Render's proxy so rate limiting works correctly
+app.set('trust proxy', 1);
+
 // CORS — restrict to ncokit.com only
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
