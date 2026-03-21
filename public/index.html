@@ -677,6 +677,7 @@
     <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
     <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
     <button class="tab" id="savesTab" onclick="switchTab('saves', this)" style="display:none">💾 My Saves</button>
+    <button class="tab" onclick="switchTab('info', this)">ℹ️ About</button>
   </div>
 
   <!-- ===== COUNSELING PANEL ===== -->
@@ -1218,6 +1219,135 @@
       <div class="btn-row" style="margin-top:20px">
         <button class="btn btn-secondary btn-sm" id="saveAFTBtn" style="display:none" onclick="saveAFTScore()">💾 Save Score</button>
         <button class="btn btn-secondary btn-sm" onclick="clearAFT()">Clear</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== INFO PANEL ===== -->
+  <div class="panel" id="panel-info">
+    <div class="section-header">
+      <div>
+        <div class="section-title">About NCO Kit</div>
+        <div class="section-sub">AI-powered administrative tools built for Army enlisted leaders</div>
+      </div>
+    </div>
+
+    <!-- Hero -->
+    <div style="background:var(--od-dark); border:1px solid var(--tan); padding:32px; text-align:center; margin-bottom:24px;">
+      <div style="font-family:'Oswald',sans-serif; font-size:42px; letter-spacing:6px; color:var(--tan); margin-bottom:8px;">NCO KIT</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:15px; color:var(--white); margin-bottom:16px;">AI-Powered Administrative Tools for Army Enlisted Leaders</div>
+      <div style="font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan-dark);">ncokit.com &mdash; No installation required &mdash; Works on any device</div>
+    </div>
+
+    <!-- What is it -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">What Is NCO Kit?</div>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0 0 12px 0;">NCO Kit is a free, web-based toolkit built specifically for Army enlisted leaders. It uses AI to automate the most time-consuming administrative tasks NCOs face daily — counseling documentation, NCOER bullet writing, fitness test scoring, and soldier management.</p>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0;">The app runs entirely in your browser. No downloads, no CAC required, no Army network dependency. It works on your phone, your personal laptop, or any device with internet access.</p>
+    </div>
+
+    <!-- Features -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Current Features</div>
+      <table style="width:100%; border-collapse:collapse; font-family:'Libre Franklin',sans-serif; font-size:13px;">
+        <tbody>
+          ${[
+            ['📋', 'DA 4856 Generator', 'AI-assisted counseling form generator. Type rough notes in plain language — the AI rewrites them in proper Army regulatory language and generates a printable PDF.'],
+            ['⚡', 'NCOER Bullet Builder', 'Generates Army-standard NCOER bullets from plain language. Select MOS and rating category, describe what the soldier did, get properly formatted bullets instantly. Includes category fit advisory.'],
+            ['🏋️', 'AFT Scorer', 'Live score calculator using official June 2025 tables. All 10 age bands, M/F standards, combat and general MOS, and all 4 alternate aerobic events. For personal tracking and preparation only.'],
+            ['👥', 'Soldier Roster', "Track your formation's counseling status. Add soldiers, record last counseling dates, and see current/due/overdue status at a glance."],
+            ['💾', 'Save Feature', 'Logged-in users can save counselings, bullet sets, AFT scores, and soldier records — accessible from any device via the My Saves tab.'],
+          ].map(([icon, title, desc]) => `
+            <tr style="border-bottom:1px solid var(--border);">
+              <td style="padding:12px 8px; font-size:20px; width:40px; vertical-align:top;">${icon}</td>
+              <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap; width:160px;">${title}</td>
+              <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">${desc}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Time savings -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Time Savings</div>
+      <table style="width:100%; border-collapse:collapse; font-family:'Source Code Pro',monospace; font-size:12px;">
+        <thead>
+          <tr style="background:var(--od-dark);">
+            <th style="padding:10px 12px; text-align:left; color:var(--tan); border:1px solid var(--border);">Task</th>
+            <th style="padding:10px 12px; text-align:left; color:var(--tan-dark); border:1px solid var(--border);">Without NCO Kit</th>
+            <th style="padding:10px 12px; text-align:left; color:var(--tan); border:1px solid var(--border);">With NCO Kit</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${[
+            ['Monthly counseling (one soldier)', '30–45 minutes', '5–10 minutes'],
+            ['NCOER bullet writing (one rated NCO)', '2–3 hours', '20–30 minutes'],
+            ["Scoring a squad's AFT (12 soldiers)", '15–20 minutes', '5 minutes'],
+            ['Finding old counseling records', 'Search email/drives', 'Instant from My Saves'],
+          ].map(([task, before, after], i) => `
+            <tr style="background:${i % 2 === 0 ? 'var(--od-dark)' : 'transparent'};">
+              <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">${task}</td>
+              <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">${before}</td>
+              <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">${after}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pricing -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Pricing</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div style="border:1px solid var(--border); padding:20px;">
+          <div style="font-family:'Oswald',sans-serif; font-size:18px; letter-spacing:2px; color:var(--tan); margin-bottom:8px;">BASIC</div>
+          <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+            ✓ DA 4856 generator — unlimited<br>
+            ✓ NCOER bullet builder<br>
+            ✓ AFT scorer<br>
+            ✓ Soldier roster<br>
+            ✓ Save feature<br>
+            ✓ 10 AI generations/month
+          </div>
+        </div>
+        <div style="border:1px solid var(--tan); padding:20px; background:var(--od-dark);">
+          <div style="font-family:'Oswald',sans-serif; font-size:18px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">PREMIUM</div>
+          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan); margin-bottom:8px;">$8<span style="font-size:14px; color:var(--tan-dark);">/month</span></div>
+          <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+            ✓ Everything in Basic<br>
+            ✓ Unlimited AI generations<br>
+            ✓ NCOER Support Form Builder<br>
+            ✓ Awards Recommendation Writer<br>
+            ✓ Promotion Board Prep Tool<br>
+            ✓ Early access to new features
+          </div>
+          <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="showUpgradeModal()">Upgrade to Premium</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Privacy & Security</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+        <p style="margin:0 0 8px 0;">✓ Not connected to Army systems, IPPS-A, EES, or any official Army network</p>
+        <p style="margin:0 0 8px 0;">✓ Accounts secured with bcrypt password hashing and 30-day session tokens</p>
+        <p style="margin:0 0 8px 0;">✓ Saved data accessible only by the account holder</p>
+        <p style="margin:0 0 8px 0;">✓ Do not enter classified or CUI information into the tool</p>
+        <p style="margin:0;">✓ Treat generated documents like any other administrative document — review before signing</p>
+      </div>
+    </div>
+
+    <!-- Coming soon -->
+    <div class="card">
+      <div class="card-title">Coming Soon</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+        <p style="margin:0 0 8px 0;">⚙️ NCOER Support Form Builder — AI-assisted, all six Army leadership attributes</p>
+        <p style="margin:0 0 8px 0;">⚙️ Awards Recommendation Writer — citation narratives for AAM, ARCOM, MSM, BSM ready to paste into IPPSA</p>
+        <p style="margin:0 0 8px 0;">⚙️ Promotion Board Prep Tool — question banks, self-quiz mode, weak area tracking</p>
+        <p style="margin:0;">⚙️ PWA — install NCO Kit on your phone home screen like a native app</p>
       </div>
     </div>
 
