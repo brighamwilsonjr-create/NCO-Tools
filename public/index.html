@@ -521,6 +521,21 @@
   </div>
 </header>
 
+<!-- LIMIT MODAL -->
+<div id="limitModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border);">
+      <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;" id="limitModalTitle">Limit Reached</div>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.6; margin-bottom:20px;" id="limitModalMsg"></p>
+      <div id="limitModalType" data-type="anonymous"></div>
+      <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="limitModalAction()" id="limitModalBtn">Create Free Account</button>
+      <button class="btn btn-secondary" style="width:100%;" onclick="closeLimitModal()">Maybe Later</button>
+    </div>
+  </div>
+</div>
+
 <!-- UPGRADE MODAL -->
 <div id="upgradeModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
   <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:460px; margin:20px;">
@@ -1313,6 +1328,7 @@
     const field = document.getElementById(fieldId);
     const rawText = field.value.trim();
     if (!rawText) { alert('Enter some notes in this field first.'); return; }
+    if (checkAnonLimit()) return;
 
     const loader = document.getElementById('load_' + fieldId);
     loader.style.display = 'inline';
@@ -1324,10 +1340,11 @@
     try {
       const response = await fetch('/api/enhance-counseling', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getUsageHeaders(),
         body: JSON.stringify({ rawText, section, soldierName, rank, counselingType })
       });
       const data = await response.json();
+      if (handleUsageResponse(response, data)) return;
       if (data.error) throw new Error(data.error);
       field.value = data.enhanced;
     } catch (err) {
@@ -1338,6 +1355,7 @@
   }
 
   async function enhanceAllAndGenerate() {
+    if (checkAnonLimit()) return;
     const fields = [
       { id: 'c_situation', section: 'situation' },
       { id: 'c_strengths', section: 'strengths' },
@@ -1359,10 +1377,14 @@
         if (!field.value.trim()) continue;
         const response = await fetch('/api/enhance-counseling', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getUsageHeaders(),
           body: JSON.stringify({ rawText: field.value.trim(), section: f.section, soldierName, rank, counselingType })
         });
         const data = await response.json();
+        if (handleUsageResponse(response, data)) {
+          document.getElementById('counselingAILoading').style.display = 'none';
+          return;
+        }
         if (data.error) throw new Error(data.error);
         field.value = data.enhanced;
       }
@@ -1536,7 +1558,7 @@
     const count = document.getElementById('b_count').value;
     const mos = document.getElementById('b_mos').value;
 
-    if (!action) { alert('Please describe what the soldier did.'); return; }
+    if (checkAnonLimit()) return;
 
     // UI: loading state
     document.getElementById('buildBtn').disabled = true;
@@ -1554,11 +1576,18 @@
     try {
       const response = await fetch('/api/bullets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getUsageHeaders(),
         body: JSON.stringify({ name, category, action, impact, count, mos })
       });
 
       const data = await response.json();
+      if (handleUsageResponse(response, data)) {
+        clearInterval(loadingInterval);
+        document.getElementById('bulletLoading').style.display = 'none';
+        document.getElementById('buildBtn').disabled = false;
+        document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+        return;
+      }
       if (data.error) throw new Error(data.error);
       const bullets = data.bullets;
 
@@ -1840,6 +1869,7 @@
   function setLoggedIn(user, token) {
     currentUser = user;
     localStorage.setItem('ncokit_token', token);
+    resetAnonUsage(); // Clear anonymous usage counter on login
     document.getElementById('authButtons').style.display = 'none';
     document.getElementById('userMenu').style.display = 'flex';
     document.getElementById('userEmail').textContent = user.email;
@@ -2069,6 +2099,83 @@
   initAuth();
   handleVerifyToken();
   handlePaymentReturn();
+
+  // ── USAGE LIMITS ──────────────────────────────────────────────────────────────
+
+  const ANON_LIMIT = 3;
+  const FREE_LIMIT = 10;
+
+  function getAnonUsage() {
+    return parseInt(localStorage.getItem('ncokit_anon_usage') || '0');
+  }
+
+  function incrementAnonUsage() {
+    const count = getAnonUsage() + 1;
+    localStorage.setItem('ncokit_anon_usage', count);
+    return count;
+  }
+
+  function resetAnonUsage() {
+    localStorage.setItem('ncokit_anon_usage', '0');
+  }
+
+  function getUsageHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('ncokit_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    else headers['x-anon-usage'] = String(getAnonUsage());
+    return headers;
+  }
+
+  function checkAnonLimit() {
+    if (!currentUser && getAnonUsage() >= ANON_LIMIT) {
+      showLimitModal('anonymous');
+      return true;
+    }
+    return false;
+  }
+
+  function handleUsageResponse(res, data) {
+    if (res.status === 403 && data.error === 'limit_reached') {
+      showLimitModal(data.limitType);
+      return true;
+    }
+    if (!currentUser) incrementAnonUsage();
+    return false;
+  }
+
+  function showLimitModal(type) {
+    const modal = document.getElementById('limitModal');
+    const title = document.getElementById('limitModalTitle');
+    const msg = document.getElementById('limitModalMsg');
+    const btn = document.getElementById('limitModalBtn');
+    if (type === 'anonymous') {
+      title.textContent = "You've Used Your 3 Free Generations";
+      msg.textContent = "Create a free account to get 10 AI generations per month — no credit card required.";
+      btn.textContent = "Create Free Account";
+    } else {
+      title.textContent = "Monthly Limit Reached";
+      msg.textContent = "You've used all 10 of your free generations this month. Upgrade to Premium for unlimited access.";
+      btn.textContent = "Upgrade to Premium — $8/month";
+    }
+    document.getElementById('limitModalType').dataset.type = type;
+    modal.style.display = 'flex';
+  }
+
+  function closeLimitModal() {
+    document.getElementById('limitModal').style.display = 'none';
+  }
+
+  function limitModalAction() {
+    const type = document.getElementById('limitModalType').dataset.type;
+    closeLimitModal();
+    if (type === 'anonymous') showAuth('register');
+    else showUpgradeModal();
+  }
+
+  document.getElementById('limitModal').addEventListener('click', function(e) {
+    if (e.target === this) closeLimitModal();
+  });
 
   // ── SAVES ──────────────────────────────────────────────────────────────────
 
