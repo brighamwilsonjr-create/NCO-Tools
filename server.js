@@ -931,21 +931,6 @@ async function initDB() {
   }
 }
 
-// Temporary admin route to reset plan for testing
-app.post('/api/admin/reset-plan', async (req, res) => {
-  const { secret, email } = req.body;
-  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
-  try {
-    await pool.query(
-      'UPDATE users SET plan = $1, stripe_customer_id = NULL, stripe_subscription_id = NULL WHERE email = $2',
-      ['free', email.toLowerCase()]
-    );
-    res.json({ success: true, message: `Reset ${email} to free` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
