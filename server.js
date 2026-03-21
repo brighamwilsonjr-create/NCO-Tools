@@ -327,7 +327,54 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   }
 });
 
-app.post('/api/enhance-counseling', aiLimiter, async (req, res) => {
+// ── USAGE LIMITS ──────────────────────────────────────────────────────────────
+// Anonymous: 3 lifetime (localStorage on client)
+// Free account: 10/month tracked in DB
+// Premium: unlimited
+
+async function checkUsageLimit(req, res, next) {
+  const user = await getUserFromSession(req);
+
+  // Not logged in — anonymous usage tracked client-side, server trusts header
+  if (!user) {
+    const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
+    if (anonCount >= 3) {
+      return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
+    }
+    return next();
+  }
+
+  // Premium — unlimited
+  if (user.plan === 'premium') return next();
+
+  // Free account — 10/month limit
+  const now = new Date();
+  const resetDate = new Date(user.bullets_reset_date);
+  const needsReset = now.getFullYear() > resetDate.getFullYear() ||
+    now.getMonth() > resetDate.getMonth();
+
+  if (needsReset) {
+    await pool.query(
+      'UPDATE users SET bullets_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
+      [user.id]
+    );
+    user.bullets_used_this_month = 0;
+  }
+
+  if (user.bullets_used_this_month >= 10) {
+    return res.status(403).json({ error: 'limit_reached', limitType: 'free', used: user.bullets_used_this_month, limit: 10 });
+  }
+
+  // Increment usage
+  await pool.query(
+    'UPDATE users SET bullets_used_this_month = bullets_used_this_month + 1 WHERE id = $1',
+    [user.id]
+  );
+
+  next();
+}
+
+app.post('/api/enhance-counseling', aiLimiter, checkUsageLimit, async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
   const sectionContext = {
@@ -392,7 +439,7 @@ app.post('/api/generate-4856', (req, res) => {
   doc.end();
 });
 
-app.post('/api/bullets', aiLimiter, async (req, res) => {
+app.post('/api/bullets', aiLimiter, checkUsageLimit, async (req, res) => {
   const { name, category, action, impact, count, mos } = req.body;
   if (!action) return res.status(400).json({ error: 'Action field is required.' });
 
