@@ -7,9 +7,45 @@ const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const rateLimit = require('express-rate-limit');
 
 const app = express();
-app.use(cors());
+
+// CORS — restrict to ncokit.com only
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://ncokit.com', 'https://www.ncokit.com']
+    : '*',
+  credentials: true
+}));
+
+// Rate limiters
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20,
+  message: { error: 'Too many attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 10,
+  message: { error: 'Too many requests. Please slow down.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  message: { error: 'Too many requests. Please try again shortly.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// Apply general limiter to all routes
+app.use(generalLimiter);
 
 // Stripe webhook needs raw body BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -60,13 +96,25 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   res.json({ received: true });
 });
 
-app.use(express.json());
+// Body size limit — 10kb max
+app.use(express.json({ limit: '10kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
+
+// Clean up expired sessions periodically
+async function cleanupSessions() {
+  try {
+    const result = await pool.query('DELETE FROM sessions WHERE expires_at < NOW()');
+    if (result.rowCount > 0) console.log(`Cleaned up ${result.rowCount} expired sessions`);
+  } catch (err) {
+    console.error('Session cleanup error:', err.message);
+  }
+}
+
 
 // Email via Resend REST API - no SDK needed
 async function sendEmail(to, subject, html) {
@@ -96,7 +144,11 @@ async function getUserFromSession(req) {
   const token = req.headers['authorization']?.replace('Bearer ', '');
   if (!token) return null;
   const result = await pool.query(
-    'SELECT u.* FROM users u JOIN sessions s ON s.user_id = u.id WHERE s.token = $1 AND s.expires_at > NOW()',
+    `SELECT u.id, u.email, u.plan, u.verified, u.referral_code, u.referred_by,
+            u.stripe_customer_id, u.stripe_subscription_id, u.bullets_used_this_month,
+            u.bullets_reset_date, u.free_months_earned, u.free_months_used
+     FROM users u JOIN sessions s ON s.user_id = u.id
+     WHERE s.token = $1 AND s.expires_at > NOW()`,
     [token]
   );
   return result.rows[0] || null;
@@ -132,13 +184,8 @@ async function sendPasswordResetEmail(email, token) {
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
-app.get('/test-key', async (req, res) => {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) return res.json({ error: 'No API key found' });
-  res.json({ key_present: true, starts_with: key.substring(0, 12) + '...' });
-});
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { email, password, referredBy } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
@@ -188,7 +235,7 @@ app.post('/api/auth/verify', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authLimiter, async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   try {
@@ -228,7 +275,7 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'Email required' });
   try {
@@ -280,7 +327,7 @@ app.post('/api/auth/resend-verification', async (req, res) => {
   }
 });
 
-app.post('/api/enhance-counseling', async (req, res) => {
+app.post('/api/enhance-counseling', aiLimiter, async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
   const sectionContext = {
@@ -345,7 +392,7 @@ app.post('/api/generate-4856', (req, res) => {
   doc.end();
 });
 
-app.post('/api/bullets', async (req, res) => {
+app.post('/api/bullets', aiLimiter, async (req, res) => {
   const { name, category, action, impact, count, mos } = req.body;
   if (!action) return res.status(400).json({ error: 'Action field is required.' });
 
@@ -479,7 +526,7 @@ app.post('/api/stripe/portal', async (req, res) => {
 });
 
 // Category fit validation
-app.post('/api/validate-category', async (req, res) => {
+app.post('/api/validate-category', aiLimiter, async (req, res) => {
   const { bullets, category, action } = req.body;
   if (!bullets || !category) return res.json({ suggestion: null });
 
@@ -837,8 +884,16 @@ async function initDB() {
   }
 }
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`NCO Kit running on port ${PORT}`);
   await initDB();
+  // Clean up expired sessions on start, then every 6 hours
+  await cleanupSessions();
+  setInterval(cleanupSessions, 6 * 60 * 60 * 1000);
 });
