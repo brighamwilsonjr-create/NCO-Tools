@@ -1252,19 +1252,31 @@
       <div class="card-title">Current Features</div>
       <table style="width:100%; border-collapse:collapse; font-family:'Libre Franklin',sans-serif; font-size:13px;">
         <tbody>
-          ${[
-            ['📋', 'DA 4856 Generator', 'AI-assisted counseling form generator. Type rough notes in plain language — the AI rewrites them in proper Army regulatory language and generates a printable PDF.'],
-            ['⚡', 'NCOER Bullet Builder', 'Generates Army-standard NCOER bullets from plain language. Select MOS and rating category, describe what the soldier did, get properly formatted bullets instantly. Includes category fit advisory.'],
-            ['🏋️', 'AFT Scorer', 'Live score calculator using official June 2025 tables. All 10 age bands, M/F standards, combat and general MOS, and all 4 alternate aerobic events. For personal tracking and preparation only.'],
-            ['👥', 'Soldier Roster', "Track your formation's counseling status. Add soldiers, record last counseling dates, and see current/due/overdue status at a glance."],
-            ['💾', 'Save Feature', 'Logged-in users can save counselings, bullet sets, AFT scores, and soldier records — accessible from any device via the My Saves tab.'],
-          ].map(([icon, title, desc]) => `
-            <tr style="border-bottom:1px solid var(--border);">
-              <td style="padding:12px 8px; font-size:20px; width:40px; vertical-align:top;">${icon}</td>
-              <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap; width:160px;">${title}</td>
-              <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">${desc}</td>
-            </tr>
-          `).join('')}
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; width:40px; vertical-align:top;">📋</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap; width:160px;">DA 4856 Generator</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">AI-assisted counseling form generator. Type rough notes in plain language — the AI rewrites them in proper Army regulatory language and generates a printable PDF.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">⚡</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">NCOER Bullet Builder</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Generates Army-standard NCOER bullets from plain language. Select MOS and rating category, describe what the soldier did, get properly formatted bullets instantly. Includes category fit advisory.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">🏋️</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">AFT Scorer</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Live score calculator using official June 2025 tables. All 10 age bands, M/F standards, combat and general MOS, and all 4 alternate aerobic events. For personal tracking and preparation only.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">👥</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">Soldier Roster</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Track your formation's counseling status. Add soldiers, record last counseling dates, and see current/due/overdue status at a glance.</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">💾</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">Save Feature</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Logged-in users can save counselings, bullet sets, AFT scores, and soldier records — accessible from any device via the My Saves tab.</td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -1281,18 +1293,26 @@
           </tr>
         </thead>
         <tbody>
-          ${[
-            ['Monthly counseling (one soldier)', '30–45 minutes', '5–10 minutes'],
-            ['NCOER bullet writing (one rated NCO)', '2–3 hours', '20–30 minutes'],
-            ["Scoring a squad's AFT (12 soldiers)", '15–20 minutes', '5 minutes'],
-            ['Finding old counseling records', 'Search email/drives', 'Instant from My Saves'],
-          ].map(([task, before, after], i) => `
-            <tr style="background:${i % 2 === 0 ? 'var(--od-dark)' : 'transparent'};">
-              <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">${task}</td>
-              <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">${before}</td>
-              <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">${after}</td>
-            </tr>
-          `).join('')}
+          <tr>
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">Monthly counseling (one soldier)</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">30–45 minutes</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">5–10 minutes</td>
+          </tr>
+          <tr style="background:var(--od-dark);">
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">NCOER bullet writing (one rated NCO)</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">2–3 hours</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">20–30 minutes</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">Scoring a squad's AFT (12 soldiers)</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">15–20 minutes</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">5 minutes</td>
+          </tr>
+          <tr style="background:var(--od-dark);">
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">Finding old counseling records</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">Search email/drives</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">Instant from My Saves</td>
+          </tr>
         </tbody>
       </table>
     </div>
