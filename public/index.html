@@ -1584,6 +1584,41 @@
       </div>
     </div>
 
+    <!-- Contact -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">Contact & Support</div>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.6; margin-bottom:16px;">Have a bug to report, a feature request, or just want to share feedback? Send us a message and we'll get back to you.</p>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Your Name</label>
+          <input type="text" id="contact_name" placeholder="SSG Jones">
+        </div>
+        <div class="field">
+          <label>Your Email</label>
+          <input type="email" id="contact_email" placeholder="your@email.com">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Subject</label>
+        <select id="contact_subject">
+          <option value="">-- Select a subject --</option>
+          <option value="Bug Report">Bug Report</option>
+          <option value="Feature Request">Feature Request</option>
+          <option value="General Feedback">General Feedback</option>
+          <option value="Account Issue">Account Issue</option>
+          <option value="Billing Question">Billing Question</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Message</label>
+        <textarea id="contact_message" rows="5" placeholder="Describe your issue or feedback in detail..."></textarea>
+      </div>
+      <button class="btn btn-primary" id="contactBtn" onclick="submitContact()">Send Message</button>
+      <div id="contactSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;">✓ Message sent. We'll get back to you shortly.</div>
+      <div id="contactError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+
   </div>
 
   <!-- ===== SAVES PANEL ===== -->
@@ -2254,6 +2289,49 @@
     const scoreDisplay = document.getElementById('aft_score_display');
     if (scoreDisplay) scoreDisplay.style.display = 'none';
     lastAFTResult = null;
+  }
+
+  async function submitContact() {
+    const name = document.getElementById('contact_name').value.trim();
+    const email = document.getElementById('contact_email').value.trim();
+    const subject = document.getElementById('contact_subject').value;
+    const message = document.getElementById('contact_message').value.trim();
+    const btn = document.getElementById('contactBtn');
+    const sucEl = document.getElementById('contactSuccess');
+    const errEl = document.getElementById('contactError');
+
+    sucEl.style.display = 'none';
+    errEl.style.display = 'none';
+
+    if (!name || !email || !subject || !message) {
+      errEl.textContent = 'Please fill out all fields.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.textContent = 'Sending...';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, subject, message })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      sucEl.style.display = 'block';
+      document.getElementById('contact_name').value = '';
+      document.getElementById('contact_email').value = '';
+      document.getElementById('contact_subject').value = '';
+      document.getElementById('contact_message').value = '';
+    } catch (e) {
+      errEl.textContent = 'Failed to send. Please try again.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.textContent = 'Send Message';
+      btn.disabled = false;
+    }
   }
 
   // ── THEME TOGGLE ──────────────────────────────────────────────────────────────
