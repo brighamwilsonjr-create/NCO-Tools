@@ -2199,7 +2199,7 @@
       document.getElementById('loginError').style.display = 'block';
       window.history.replaceState({}, '', '/');
     } else if (isResetPath && token) {
-      showResetPasswordModal(token);
+      setTimeout(() => showResetPasswordModal(token), 100);
       window.history.replaceState({}, '', '/');
     }
   }
@@ -2267,12 +2267,7 @@
     }
   }
 
-  initAuth();
-  handleVerifyToken();
-  handlePaymentReturn();
-
   let pendingResetToken = null;
-
   function showResetPasswordModal(token) {
     pendingResetToken = token;
     document.getElementById('resetNewPassword').value = '';
@@ -2635,6 +2630,11 @@
   }
 
   updateStats();
+
+  // Initialize after all functions defined
+  initAuth();
+  handleVerifyToken();
+  handlePaymentReturn();
 </script>
 </body>
 </html>
