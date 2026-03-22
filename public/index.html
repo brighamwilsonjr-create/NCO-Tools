@@ -756,6 +756,7 @@
     <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
     <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
     <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
+    <button class="tab" onclick="switchTab('awards', this)">🎖️ Awards Writer</button>
     <button class="tab" id="savesTab" onclick="switchTab('saves', this)" style="display:none">💾 My Saves</button>
     <button class="tab" onclick="switchTab('info', this)">ℹ️ About</button>
   </div>
@@ -1304,6 +1305,89 @@
 
   </div>
 
+  <!-- ===== AWARDS PANEL ===== -->
+  <div class="panel" id="panel-awards">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Awards Recommendation Writer</div>
+        <div class="section-sub">AI-generated citations grounded in AR 600-8-22 and Army writing standards</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Soldier & Award Information</div>
+      <div class="form-grid three" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Soldier Name & Rank</label>
+          <input type="text" id="aw_name" placeholder="SGT Smith">
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <input type="text" id="aw_unit" placeholder="HHC, 1-12 IN, 4ID">
+        </div>
+        <div class="field">
+          <label>Award Level</label>
+          <select id="aw_level">
+            <option value="">-- Select Award --</option>
+            <option value="AAM">AAM — Army Achievement Medal</option>
+            <option value="ARCOM">ARCOM — Army Commendation Medal</option>
+            <option value="MSM">MSM — Meritorious Service Medal</option>
+            <option value="BSM">BSM — Bronze Star Medal</option>
+            <option value="LOM">LOM — Legion of Merit</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Period of Service</label>
+          <input type="text" id="aw_period" placeholder="1 June 2024 to 31 May 2025">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Accomplishments — Describe what the soldier did. Plain language is fine. More detail = better citation.</label>
+        <textarea id="aw_accomplishments" rows="8" placeholder="Examples:&#10;- Led squad through 6-month NTC rotation, all 9 soldiers qualified expert on M4&#10;- Managed $2.3M worth of equipment with zero losses&#10;- Coordinated logistics for 340-soldier task force during JRTC rotation&#10;- Reenlistment rate increased from 60% to 94% under their leadership&#10;- Mentored 3 soldiers through promotion board, all 3 selected&#10;&#10;Include numbers, percentages, dollar amounts, and timeframes whenever possible"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="awardsBtn" onclick="generateAward()">🎖️ Generate Citation</button>
+        <button class="btn btn-secondary" onclick="clearAwards()">Clear</button>
+      </div>
+      <div id="awardsLoading" style="display:none; margin-top:16px; font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:2px;">
+        <span id="awardsLoadingDots">GENERATING CITATION</span>
+      </div>
+      <div id="awardsError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+
+    <!-- Output -->
+    <div id="awardsOutput" style="display:none; margin-top:16px;">
+
+      <!-- Citation -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="awardsCitationTitle">CITATION</span>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <span id="awardsCharCount" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
+            <span id="awardsScore" style="font-family:'Oswald',sans-serif; font-size:18px; color:var(--tan);"></span>
+          </div>
+        </div>
+        <div id="awardsCitation" style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; padding:16px; background:var(--od-dark); border:1px solid var(--border); white-space:pre-wrap;"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="copyAwardCitation()">Copy Citation</button>
+          <button class="btn btn-secondary btn-sm" id="saveAwardBtn" style="display:none;" onclick="saveAward()">💾 Save Citation</button>
+          <span id="saveAwardConfirm" style="display:none; font-family:'Source Code Pro',monospace; font-size:11px; color:#4CAF50;">✓ SAVED</span>
+        </div>
+      </div>
+
+      <!-- Advisory -->
+      <div class="card" id="awardsAdvisory" style="display:none;">
+        <div class="card-title" style="color:var(--tan);">💡 Recommendation Advisory</div>
+        <div id="awardsAdvisoryText" style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;"></div>
+      </div>
+
+    </div>
+
+  </div>
+
   <!-- ===== INFO PANEL ===== -->
   <div class="panel" id="panel-info">
     <div class="section-header">
@@ -1466,6 +1550,7 @@
     <div style="display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--border);">
       <button class="tab active" id="saveSubCounseling" onclick="switchSavesTab('counselings', this)" style="font-size:12px; padding:8px 16px;">Counselings</button>
       <button class="tab" id="saveSubBullets" onclick="switchSavesTab('bullets', this)" style="font-size:12px; padding:8px 16px;">Bullets</button>
+      <button class="tab" id="saveSubAwards" onclick="switchSavesTab('awards', this)" style="font-size:12px; padding:8px 16px;">Awards</button>
       <button class="tab" id="saveSubAFT" onclick="switchSavesTab('aft', this)" style="font-size:12px; padding:8px 16px;">AFT Scores</button>
       <button class="tab" id="saveSubSoldiers" onclick="switchSavesTab('soldiers', this)" style="font-size:12px; padding:8px 16px;">Soldiers</button>
     </div>
@@ -1480,6 +1565,12 @@
     <div id="saves-bullets" style="display:none">
       <div class="empty-state" id="savedBulletsEmpty" style="display:none">NO SAVED BULLETS YET</div>
       <div id="savedBulletsList"></div>
+    </div>
+
+    <!-- Saved Awards -->
+    <div id="saves-awards" style="display:none">
+      <div class="empty-state" id="savedAwardsEmpty" style="display:none">NO SAVED AWARD CITATIONS YET</div>
+      <div id="savedAwardsList"></div>
     </div>
 
     <!-- Saved AFT Scores -->
@@ -2449,12 +2540,16 @@
       title.textContent = "You've Used Your 3 Free Generations";
       msg.textContent = "Create a free account to get 10 AI generations per month — no credit card required.";
       btn.textContent = "Create Free Account";
+    } else if (type === 'counseling') {
+      title.textContent = "Counseling Limit Reached";
+      msg.textContent = "You've used all 5 counseling enhancements this month. Upgrade to Premium for unlimited access.";
+      btn.textContent = "Upgrade to Premium — $8/month";
     } else {
       title.textContent = "Monthly Limit Reached";
-      msg.textContent = "You've used all 10 of your free generations this month. Upgrade to Premium for unlimited access.";
+      msg.textContent = "You've used all 10 of your free AI generations this month. Upgrade to Premium for unlimited access.";
       btn.textContent = "Upgrade to Premium — $8/month";
     }
-    document.getElementById('limitModalType').dataset.type = type;
+    document.getElementById('limitModalType').dataset.type = type === 'counseling' ? 'free' : type;
     modal.style.display = 'flex';
   }
 
@@ -2473,6 +2568,128 @@
     if (e.target === this) closeLimitModal();
   });
 
+  // ── AWARDS ────────────────────────────────────────────────────────────────
+
+  let awardsLoadingInterval = null;
+  let lastAwardResult = null;
+
+  async function generateAward() {
+    const name = document.getElementById('aw_name').value.trim();
+    const unit = document.getElementById('aw_unit').value.trim();
+    const level = document.getElementById('aw_level').value;
+    const period = document.getElementById('aw_period').value.trim();
+    const accomplishments = document.getElementById('aw_accomplishments').value.trim();
+
+    if (!level) { alert('Please select an award level.'); return; }
+    if (!accomplishments) { alert('Please describe the soldier\'s accomplishments.'); return; }
+    if (checkAnonLimit()) return;
+
+    const btn = document.getElementById('awardsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    document.getElementById('awardsLoading').style.display = 'block';
+    document.getElementById('awardsError').style.display = 'none';
+    document.getElementById('awardsOutput').style.display = 'none';
+
+    const dots = ['GENERATING CITATION', 'GENERATING CITATION.', 'GENERATING CITATION..', 'GENERATING CITATION...'];
+    let di = 0;
+    awardsLoadingInterval = setInterval(() => {
+      document.getElementById('awardsLoadingDots').textContent = dots[di++ % dots.length];
+    }, 400);
+
+    try {
+      const response = await fetch('/api/awards', {
+        method: 'POST',
+        headers: getUsageHeaders(),
+        body: JSON.stringify({ soldierName: name, rank: name, unit, awardLevel: level, period, accomplishments })
+      });
+
+      const data = await response.json();
+      clearInterval(awardsLoadingInterval);
+      document.getElementById('awardsLoading').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '🎖️ Generate Citation';
+
+      if (handleUsageResponse(response, data)) return;
+      if (data.error) throw new Error(data.error);
+
+      lastAwardResult = data;
+
+      // Render citation
+      document.getElementById('awardsCitationTitle').textContent = `${data.awardName} — CITATION`;
+      document.getElementById('awardsCitation').textContent = data.citation;
+
+      // Char count with color indicator
+      const charEl = document.getElementById('awardsCharCount');
+      const pct = Math.round((data.charCount / data.charLimit) * 100);
+      charEl.textContent = `${data.charCount} / ${data.charLimit} chars (${pct}%)`;
+      charEl.style.color = pct > 100 ? '#f44336' : pct > 90 ? '#FF9800' : '#4CAF50';
+
+      // Score
+      if (data.score) {
+        document.getElementById('awardsScore').textContent = `⭐ ${data.score}`;
+      }
+
+      // Advisory
+      if (data.advisory) {
+        document.getElementById('awardsAdvisoryText').textContent = data.advisory;
+        document.getElementById('awardsAdvisory').style.display = 'block';
+      }
+
+      // Save button
+      if (currentUser) document.getElementById('saveAwardBtn').style.display = 'inline-block';
+
+      document.getElementById('awardsOutput').style.display = 'block';
+      if (!currentUser) incrementAnonUsage();
+
+    } catch (err) {
+      clearInterval(awardsLoadingInterval);
+      document.getElementById('awardsLoading').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '🎖️ Generate Citation';
+      document.getElementById('awardsError').style.display = 'block';
+      document.getElementById('awardsError').textContent = 'ERROR: ' + err.message;
+    }
+  }
+
+  function copyAwardCitation() {
+    const text = document.getElementById('awardsCitation').textContent;
+    navigator.clipboard.writeText(text);
+    const btn = event.target;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = 'Copy Citation', 2000);
+  }
+
+  async function saveAward() {
+    if (!currentUser || !lastAwardResult) return;
+    const payload = {
+      soldierName: document.getElementById('aw_name').value,
+      rank: document.getElementById('aw_name').value,
+      unit: document.getElementById('aw_unit').value,
+      awardLevel: document.getElementById('aw_level').value,
+      period: document.getElementById('aw_period').value,
+      citation: lastAwardResult.citation,
+      score: lastAwardResult.score
+    };
+    try {
+      const res = await fetch('/api/save/award', { method: 'POST', headers: authHeader(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) {
+        const confirm = document.getElementById('saveAwardConfirm');
+        confirm.style.display = 'inline';
+        setTimeout(() => confirm.style.display = 'none', 2000);
+      }
+    } catch (e) { alert('Failed to save.'); }
+  }
+
+  function clearAwards() {
+    ['aw_name','aw_unit','aw_period','aw_accomplishments'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('aw_level').value = '';
+    document.getElementById('awardsOutput').style.display = 'none';
+    document.getElementById('awardsError').style.display = 'none';
+    lastAwardResult = null;
+  }
+
   // ── SAVES ──────────────────────────────────────────────────────────────────
 
   function authHeader() {
@@ -2481,7 +2698,7 @@
   }
 
   function switchSavesTab(tab, el) {
-    ['counselings','bullets','aft','soldiers'].forEach(t => {
+    ['counselings','bullets','awards','aft','soldiers'].forEach(t => {
       document.getElementById('saves-' + t).style.display = t === tab ? 'block' : 'none';
     });
     document.querySelectorAll('#panel-saves .tab').forEach(t => t.classList.remove('active'));
@@ -2500,6 +2717,10 @@
         const res = await fetch('/api/save/bullets', { headers: authHeader() });
         const data = await res.json();
         renderSavedBullets(data.bullets || []);
+      } else if (tab === 'awards') {
+        const res = await fetch('/api/save/awards', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedAwards(data.awards || []);
       } else if (tab === 'aft') {
         const res = await fetch('/api/save/aft', { headers: authHeader() });
         const data = await res.json();
@@ -2510,6 +2731,31 @@
         renderSavedSoldiers(data.soldiers || []);
       }
     } catch (e) { console.error('Load saves error:', e); }
+  }
+
+  function renderSavedAwards(items) {
+    const el = document.getElementById('savedAwardsList');
+    const empty = document.getElementById('savedAwardsEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(a => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${a.soldier_name || 'Unknown'} — ${a.award_level}</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${a.score ? `<span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);">⭐ ${a.score}</span>` : ''}
+            <button class="btn btn-danger" onclick="deleteSave('award','${a.id}')">Delete</button>
+          </div>
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:8px;">
+          ${a.unit || ''} | ${a.period || ''} | Saved ${new Date(a.created_at).toLocaleDateString()}
+        </div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8; background:var(--od-dark); padding:12px; border:1px solid var(--border);">${a.citation}</div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(this.closest('.card').querySelector('div[style*=Libre]').textContent); this.textContent='✓ Copied'; setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
+        </div>
+      </div>
+    `).join('');
   }
 
   function renderSavedCounselings(items) {
@@ -2650,7 +2896,7 @@
 
   async function deleteSave(type, id) {
     if (!confirm('Delete this saved record?')) return;
-    const endpoints = { counseling: 'counseling', bullets: 'bullets', aft: 'aft', soldier: 'soldier' };
+    const endpoints = { counseling: 'counseling', bullets: 'bullets', award: 'award', aft: 'aft', soldier: 'soldier' };
     try {
       await fetch(`/api/save/${endpoints[type]}/${id}`, { method: 'DELETE', headers: authHeader() });
       const currentTab = document.querySelector('#panel-saves .tab.active');
