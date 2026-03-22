@@ -1172,6 +1172,60 @@ async function initDB() {
   }
 }
 
+// Contact form
+app.post('/api/contact', async (req, res) => {
+  const { name, email, subject, message } = req.body;
+  if (!name || !email || !subject || !message) {
+    return res.status(400).json({ error: 'All fields are required.' });
+  }
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
+      },
+      body: JSON.stringify({
+        from: 'NCO Kit Contact <noreply@ncokit.com>',
+        to: 'brighamwilsonjr@gmail.com',
+        reply_to: email,
+        subject: `[NCO Kit] ${subject} — from ${name}`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+            <h1 style="color:#C8B48A;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;">NCO Kit</h1>
+            <h2 style="color:#F4F1EA;font-size:16px;margin-bottom:24px;border-bottom:1px solid #2B3A2E;padding-bottom:12px;">New Contact Form Submission</h2>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+              <tr>
+                <td style="padding:8px 12px;color:#a08e65;font-size:12px;width:100px;vertical-align:top;">FROM</td>
+                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${name}</td>
+              </tr>
+              <tr style="background:#1a2419;">
+                <td style="padding:8px 12px;color:#a08e65;font-size:12px;vertical-align:top;">EMAIL</td>
+                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;"><a href="mailto:${email}" style="color:#C8B48A;">${email}</a></td>
+              </tr>
+              <tr>
+                <td style="padding:8px 12px;color:#a08e65;font-size:12px;vertical-align:top;">SUBJECT</td>
+                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${subject}</td>
+              </tr>
+            </table>
+            <div style="background:#1a2419;padding:20px;border-left:3px solid #C8B48A;margin-bottom:24px;">
+              <div style="color:#a08e65;font-size:11px;letter-spacing:2px;margin-bottom:10px;">MESSAGE</div>
+              <div style="color:#F4F1EA;font-size:14px;line-height:1.7;white-space:pre-wrap;">${message}</div>
+            </div>
+            <p style="color:#666;font-size:11px;">Reply directly to this email to respond to ${name}.</p>
+          </div>
+        `
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(JSON.stringify(data));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Contact form error:', err.message);
+    res.status(500).json({ error: 'Failed to send message.' });
+  }
+});
+
 // Admin route to gift premium access
 app.post('/api/admin/gift-premium', async (req, res) => {
   const { secret, email } = req.body;
