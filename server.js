@@ -357,7 +357,6 @@ app.post('/api/auth/resend-verification', async (req, res) => {
 async function checkUsageLimit(req, res, next) {
   const user = await getUserFromSession(req);
 
-  // Not logged in — anonymous usage tracked client-side, server trusts header
   if (!user) {
     const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
     if (anonCount >= 3) {
@@ -366,10 +365,8 @@ async function checkUsageLimit(req, res, next) {
     return next();
   }
 
-  // Premium — unlimited
   if (user.plan === 'premium') return next();
 
-  // Free account — 10/month limit
   const now = new Date();
   const resetDate = new Date(user.bullets_reset_date);
   const needsReset = now.getFullYear() > resetDate.getFullYear() ||
@@ -377,17 +374,17 @@ async function checkUsageLimit(req, res, next) {
 
   if (needsReset) {
     await pool.query(
-      'UPDATE users SET bullets_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
+      'UPDATE users SET bullets_used_this_month = 0, counseling_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
       [user.id]
     );
     user.bullets_used_this_month = 0;
+    user.counseling_used_this_month = 0;
   }
 
   if (user.bullets_used_this_month >= 10) {
     return res.status(403).json({ error: 'limit_reached', limitType: 'free', used: user.bullets_used_this_month, limit: 10 });
   }
 
-  // Increment usage
   await pool.query(
     'UPDATE users SET bullets_used_this_month = bullets_used_this_month + 1 WHERE id = $1',
     [user.id]
@@ -396,7 +393,45 @@ async function checkUsageLimit(req, res, next) {
   next();
 }
 
-app.post('/api/enhance-counseling', aiLimiter, checkUsageLimit, async (req, res) => {
+async function checkCounselingLimit(req, res, next) {
+  const user = await getUserFromSession(req);
+
+  if (!user) {
+    const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
+    if (anonCount >= 3) {
+      return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
+    }
+    return next();
+  }
+
+  if (user.plan === 'premium') return next();
+
+  const now = new Date();
+  const resetDate = new Date(user.bullets_reset_date);
+  const needsReset = now.getFullYear() > resetDate.getFullYear() ||
+    now.getMonth() > resetDate.getMonth();
+
+  if (needsReset) {
+    await pool.query(
+      'UPDATE users SET bullets_used_this_month = 0, counseling_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
+      [user.id]
+    );
+    user.counseling_used_this_month = 0;
+  }
+
+  if ((user.counseling_used_this_month || 0) >= 5) {
+    return res.status(403).json({ error: 'limit_reached', limitType: 'counseling', used: user.counseling_used_this_month, limit: 5 });
+  }
+
+  await pool.query(
+    'UPDATE users SET counseling_used_this_month = counseling_used_this_month + 1 WHERE id = $1',
+    [user.id]
+  );
+
+  next();
+}
+
+app.post('/api/enhance-counseling', aiLimiter, checkCounselingLimit, async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
   const sectionContext = {
@@ -591,6 +626,115 @@ app.post('/api/stripe/portal', async (req, res) => {
   } catch (err) {
     console.error('Portal error:', err);
     res.status(500).json({ error: 'Failed to open billing portal' });
+  }
+});
+
+// Awards Recommendation Writer
+app.post('/api/awards', aiLimiter, checkUsageLimit, async (req, res) => {
+  const { soldierName, rank, unit, awardLevel, period, accomplishments } = req.body;
+  if (!accomplishments || !awardLevel) return res.status(400).json({ error: 'Award level and accomplishments are required.' });
+
+  const awardGuidance = {
+    'AAM': {
+      name: 'Army Achievement Medal',
+      charLimit: 500,
+      standard: 'Recognize specific short-term accomplishments. Language should be clear and direct. Quantify impact where possible. One strong paragraph.',
+      threshold: 'Local level impact. Section/platoon level accomplishments. Technical proficiency or single notable achievement.'
+    },
+    'ARCOM': {
+      name: 'Army Commendation Medal',
+      charLimit: 640,
+      standard: 'Recognize sustained superior performance or a specific achievement of significant merit. Should demonstrate clear impact beyond immediate section. Numbers and metrics are critical.',
+      threshold: 'Company/battalion level impact. Leadership demonstrated. Measurable results. Sustained performance over time.'
+    },
+    'MSM': {
+      name: 'Meritorious Service Medal',
+      charLimit: 750,
+      standard: 'Recognize outstanding meritorious service or achievement. Language must reflect senior NCO/officer-level responsibility and impact. Must demonstrate organizational-level results.',
+      threshold: 'Battalion/brigade level impact. Significant leadership responsibilities. Exceptional results that elevated unit readiness or capability.'
+    },
+    'BSM': {
+      name: 'Bronze Star Medal',
+      charLimit: 750,
+      standard: 'Recognize heroic or meritorious achievement or service in connection with military operations against an armed enemy OR meritorious service in a combat zone. Must clearly establish merit.',
+      threshold: 'Combat zone service or operations against armed enemy. Exceptional performance under adverse conditions. Life-safety or mission-critical impact.'
+    },
+    'LOM': {
+      name: 'Legion of Merit',
+      charLimit: 900,
+      standard: 'Recognize exceptionally meritorious conduct in the performance of outstanding services. Language must reflect senior leadership, strategic impact, and lasting organizational improvement.',
+      threshold: 'Brigade/division level impact. Senior leadership positions. Strategic contributions. Lasting improvements to Army readiness or capability.'
+    }
+  };
+
+  const award = awardGuidance[awardLevel];
+
+  const prompt = `You are an expert Army awards writer with deep knowledge of AR 600-8-22 (Military Awards) and Army writing standards. You write citations that get approved.
+
+Award: ${award.name} (${awardLevel})
+Soldier: ${rank} ${soldierName}
+Unit: ${unit || 'Not specified'}
+Period of Service: ${period || 'Not specified'}
+Award Standard: ${award.standard}
+Character Limit: ${award.charLimit} characters
+
+Accomplishments provided by the nominating NCO:
+${accomplishments}
+
+YOUR TASKS:
+
+1. CITATION: Write a single narrative paragraph citation that:
+   - Opens with "For [meritorious service/outstanding achievement/exceptional performance] from [period]..."
+   - Uses active voice and strong action verbs throughout
+   - Quantifies every accomplishment with specific numbers, percentages, or metrics
+   - Demonstrates impact at the appropriate level for a ${awardLevel}
+   - Ranks the strongest accomplishments first — most impactful content up front
+   - Closes with a sentence connecting the soldier's service to Army values and unit readiness
+   - Stays within ${award.charLimit} characters
+   - Reads as polished, professional Army writing ready for IPPSA submission
+
+2. STRENGTH SCORE: Rate the citation 1-10 based on:
+   - Quantification of accomplishments
+   - Active voice usage
+   - Impact level appropriate for ${awardLevel}
+   - Clarity and professionalism
+
+3. ADVISORY: Provide 2-3 specific, actionable recommendations to strengthen the citation. Be direct. If accomplishments are weak for the award level say so clearly. Reference specific lines.
+
+Format your response EXACTLY as:
+CITATION:
+[citation text here]
+
+SCORE: [X/10]
+
+ADVISORY:
+[advisory text here]`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await response.json();
+    if (data.error) return res.status(500).json({ error: data.error.message });
+
+    const text = data.content.map(i => i.text || '').join('').trim();
+
+    // Parse the structured response
+    const citationMatch = text.match(/CITATION:\s*([\s\S]*?)(?=SCORE:|$)/i);
+    const scoreMatch = text.match(/SCORE:\s*(\d+\/10|\d+)/i);
+    const advisoryMatch = text.match(/ADVISORY:\s*([\s\S]*?)$/i);
+
+    const citation = citationMatch ? citationMatch[1].trim() : text;
+    const score = scoreMatch ? scoreMatch[1].trim() : null;
+    const advisory = advisoryMatch ? advisoryMatch[1].trim() : null;
+    const charCount = citation.length;
+    const charLimit = award.charLimit;
+
+    res.json({ citation, score, advisory, charCount, charLimit, awardName: award.name });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
 
@@ -815,6 +959,47 @@ app.delete('/api/save/soldier/:id', async (req, res) => {
   }
 });
 
+// Save award citation
+app.post('/api/save/award', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { soldierName, rank, unit, awardLevel, period, citation, score } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO saved_awards (user_id, soldier_name, rank, unit, award_level, period, citation, score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+      [user.id, soldierName, rank, unit, awardLevel, period, citation, score]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save' });
+  }
+});
+
+app.get('/api/save/awards', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM saved_awards WHERE user_id = $1 ORDER BY created_at DESC',
+      [user.id]
+    );
+    res.json({ awards: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load' });
+  }
+});
+
+app.delete('/api/save/award/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_awards WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
 app.get('/verify', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.redirect('/?error=invalid_token');
@@ -863,6 +1048,7 @@ async function initDB() {
       free_months_earned INTEGER DEFAULT 0,
       free_months_used INTEGER DEFAULT 0,
       bullets_used_this_month INTEGER DEFAULT 0,
+      counseling_used_this_month INTEGER DEFAULT 0,
       bullets_reset_date DATE DEFAULT CURRENT_DATE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -946,6 +1132,22 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_bullets_user ON saved_bullets(user_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_aft_user ON saved_aft_scores(user_id)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_soldiers_user ON saved_soldiers(user_id)`);
+
+    // Migrations — add columns if they don't exist
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS counseling_used_this_month INTEGER DEFAULT 0`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS saved_awards (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      soldier_name VARCHAR(255),
+      rank VARCHAR(50),
+      unit VARCHAR(255),
+      award_level VARCHAR(20),
+      period VARCHAR(100),
+      citation TEXT,
+      score VARCHAR(20),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_awards_user ON saved_awards(user_id)`);
 
     console.log('Database initialized successfully');
   } catch (err) {
