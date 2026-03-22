@@ -1,0 +1,26 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#1a2419"/>
+  <rect width="1200" height="630" fill="none" stroke="#C8B48A" stroke-width="8"/>
+  
+  <!-- Badge -->
+  <polygon points="100,200 140,180 180,200 180,260 140,280 100,260" fill="#C8B48A"/>
+  <text x="140" y="240" font-family="Arial" font-weight="bold" font-size="28" fill="#1a2419" text-anchor="middle">NCO</text>
+  
+  <!-- Title -->
+  <text x="220" y="225" font-family="Arial" font-weight="bold" font-size="72" fill="#C8B48A" letter-spacing="8">NCO KIT</text>
+  <text x="220" y="270" font-family="Arial" font-size="24" fill="#a08e65" letter-spacing="3">ARMY LEADER'S TOOLKIT</text>
+  
+  <!-- Divider -->
+  <rect x="100" y="310" width="1000" height="2" fill="#C8B48A" opacity="0.4"/>
+  
+  <!-- Features -->
+  <text x="100" y="370" font-family="Arial" font-size="26" fill="#F4F1EA">📋 DA 4856 Counseling Generator</text>
+  <text x="100" y="415" font-family="Arial" font-size="26" fill="#F4F1EA">⚡ NCOER Bullet Builder by MOS</text>
+  <text x="620" y="370" font-family="Arial" font-size="26" fill="#F4F1EA">🏋️ AFT Score Calculator</text>
+  <text x="620" y="415" font-family="Arial" font-size="26" fill="#F4F1EA">👥 Soldier Roster Tracker</text>
+  
+  <!-- URL -->
+  <rect x="100" y="490" width="1000" height="2" fill="#C8B48A" opacity="0.4"/>
+  <text x="600" y="560" font-family="Arial" font-weight="bold" font-size="36" fill="#C8B48A" text-anchor="middle" letter-spacing="4">ncokit.com</text>
+  <text x="600" y="600" font-family="Arial" font-size="20" fill="#a08e65" text-anchor="middle">Built by NCOs, for NCOs</text>
+</svg>
