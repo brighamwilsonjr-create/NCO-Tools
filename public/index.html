@@ -3,7 +3,52 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NCO Tools — Leader's Toolkit</title>
+<title>NCO Kit — Army Leader's Toolkit | NCOER Bullets, DA 4856, AFT Scorer</title>
+
+<!-- Primary SEO -->
+<meta name="description" content="Free AI-powered toolkit for Army NCOs. Generate DA 4856 counseling forms, write NCOER bullets by MOS, calculate AFT scores with official 2025 tables, and track your soldier roster. Built by NCOs, for NCOs.">
+<meta name="keywords" content="NCOER bullet builder, DA 4856 generator, Army counseling form, AFT score calculator, Army fitness test 2025, NCOER bullets by MOS, Army leader tools, NCO toolkit, developmental counseling form, NCOER writing tool">
+<meta name="author" content="NCO Kit">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://ncokit.com">
+
+<!-- Open Graph (Facebook, LinkedIn) -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ncokit.com">
+<meta property="og:title" content="NCO Kit — AI-Powered Army Leader's Toolkit">
+<meta property="og:description" content="Generate DA 4856 counseling forms, write NCOER bullets by MOS, calculate AFT scores, and track your soldier roster. Free to use. Built by NCOs, for NCOs.">
+<meta property="og:image" content="https://ncokit.com/og-image.svg">
+<meta property="og:site_name" content="NCO Kit">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:url" content="https://ncokit.com">
+<meta name="twitter:title" content="NCO Kit — AI-Powered Army Leader's Toolkit">
+<meta name="twitter:description" content="Generate DA 4856 counseling forms, write NCOER bullets by MOS, calculate AFT scores, and track your soldier roster. Free to use.">
+<meta name="twitter:image" content="https://ncokit.com/og-image.svg">
+
+<!-- Structured Data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "NCO Kit",
+  "url": "https://ncokit.com",
+  "description": "AI-powered administrative toolkit for Army enlisted leaders. Features DA 4856 counseling generator, NCOER bullet builder, AFT score calculator, and soldier roster tracker.",
+  "applicationCategory": "ProductivityApplication",
+  "operatingSystem": "Web Browser",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "NCO Kit",
+    "url": "https://ncokit.com"
+  }
+}
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500&family=Libre+Franklin:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -531,11 +576,17 @@
     <div style="padding:24px;">
       <div class="field" style="margin-bottom:16px;">
         <label>New Password (min 8 characters)</label>
-        <input type="password" id="resetNewPassword" placeholder="••••••••">
+        <div style="position:relative;">
+          <input type="password" id="resetNewPassword" placeholder="••••••••" style="padding-right:40px; width:100%; box-sizing:border-box;">
+          <span onclick="togglePassword('resetNewPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+        </div>
       </div>
       <div class="field" style="margin-bottom:20px;">
         <label>Confirm New Password</label>
-        <input type="password" id="resetConfirmPassword" placeholder="••••••••">
+        <div style="position:relative;">
+          <input type="password" id="resetConfirmPassword" placeholder="••••••••" style="padding-right:40px; width:100%; box-sizing:border-box;">
+          <span onclick="togglePassword('resetConfirmPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+        </div>
       </div>
       <button class="btn btn-primary" style="width:100%;" id="resetSubmitBtn" onclick="submitResetPassword()">Set New Password</button>
       <div id="resetError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
@@ -617,7 +668,10 @@
         </div>
         <div class="field" style="margin-bottom:8px;">
           <label>Password</label>
-          <input type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+          <div style="position:relative;">
+            <input type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:40px; width:100%; box-sizing:border-box;">
+            <span onclick="togglePassword('loginPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+          </div>
         </div>
         <div style="text-align:right; margin-bottom:20px;">
           <a href="#" onclick="showForgotPassword()" style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-decoration:none;">Forgot password?</a>
@@ -635,7 +689,10 @@
         </div>
         <div class="field" style="margin-bottom:16px;">
           <label>Password (min 8 characters)</label>
-          <input type="password" id="regPassword" placeholder="••••••••">
+          <div style="position:relative;">
+            <input type="password" id="regPassword" placeholder="••••••••" style="padding-right:40px; width:100%; box-sizing:border-box;">
+            <span onclick="togglePassword('regPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+          </div>
         </div>
         <div class="field" style="margin-bottom:20px;">
           <label>Referral Code (optional)</label>
@@ -2264,6 +2321,17 @@
       window.history.replaceState({}, '', '/');
       // Show success message
       setTimeout(() => alert('Welcome to Premium! Your account has been upgraded.'), 500);
+    }
+  }
+
+  function togglePassword(fieldId, icon) {
+    const field = document.getElementById(fieldId);
+    if (field.type === 'password') {
+      field.type = 'text';
+      icon.textContent = '🙈';
+    } else {
+      field.type = 'password';
+      icon.textContent = '👁';
     }
   }
 
