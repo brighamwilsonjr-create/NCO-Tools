@@ -2679,7 +2679,8 @@
 
       // Score
       if (data.score) {
-        document.getElementById('awardsScore').textContent = `⭐ ${data.score}`;
+        const scoreEl = document.getElementById('awardsScore');
+        scoreEl.innerHTML = `<span style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; display:block; margin-bottom:2px;">PACKAGE STRENGTH</span>⭐ ${data.score}`;
       }
 
       // Advisory
