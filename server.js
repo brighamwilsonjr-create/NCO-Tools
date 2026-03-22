@@ -669,46 +669,52 @@ app.post('/api/awards', aiLimiter, checkUsageLimit, async (req, res) => {
 
   const award = awardGuidance[awardLevel];
 
-  const prompt = `You are an expert Army awards writer with deep knowledge of AR 600-8-22 (Military Awards) and Army writing standards. You write citations that get approved.
+  const prompt = `You are an expert Army awards writer with deep knowledge of AR 600-8-22 (Military Awards) and Army writing standards. You write award packages that get approved.
 
 Award: ${award.name} (${awardLevel})
 Soldier: ${rank} ${soldierName}
 Unit: ${unit || 'Not specified'}
 Period of Service: ${period || 'Not specified'}
 Award Standard: ${award.standard}
-Character Limit: ${award.charLimit} characters
+Citation Character Limit: ${award.charLimit} characters
 
 Accomplishments provided by the nominating NCO:
 ${accomplishments}
 
 YOUR TASKS:
 
-1. CITATION: Write a single narrative paragraph citation that:
-   - Opens with "For [meritorious service/outstanding achievement/exceptional performance] from [period]..."
-   - Uses active voice and strong action verbs throughout
-   - Quantifies every accomplishment with specific numbers, percentages, or metrics
-   - Demonstrates impact at the appropriate level for a ${awardLevel}
-   - Ranks the strongest accomplishments first — most impactful content up front
-   - Closes with a sentence connecting the soldier's service to Army values and unit readiness
+1. BULLETS: Rewrite each accomplishment as a standalone Army-standard bullet in NCOER style.
+   - Start with a strong action verb
+   - Active voice, third person, never use "I"
+   - Quantify with specific numbers, percentages, dollar amounts, timeframes
+   - Each bullet under 175 characters
+   - Rank bullets strongest to weakest — most impactful first
+   - Do NOT number them or add bullet symbols
+
+2. CITATION: Write a single narrative paragraph using those bullets as source material.
+   - Opens with "For [meritorious service/outstanding achievement] from [period]..."
+   - Flows naturally as connected sentences, not a list
    - Stays within ${award.charLimit} characters
-   - Reads as polished, professional Army writing ready for IPPSA submission
+   - Closes connecting the soldier's service to Army readiness and values
+   - Ready for direct IPPSA submission
 
-2. STRENGTH SCORE: Rate the citation 1-10 based on:
-   - Quantification of accomplishments
-   - Active voice usage
-   - Impact level appropriate for ${awardLevel}
-   - Clarity and professionalism
+3. SCORE: Rate the overall award package 1-10 based on quantification, active voice, and appropriateness for ${awardLevel} level.
 
-3. ADVISORY: Provide 2-3 specific, actionable recommendations to strengthen the citation. Be direct. If accomplishments are weak for the award level say so clearly. Reference specific lines.
+4. ADVISORY: Provide 2-3 specific actionable recommendations. If accomplishments are too weak for ${awardLevel} say so directly. Reference specific bullets.
 
 Format your response EXACTLY as:
+BULLETS:
+[bullet 1]
+[bullet 2]
+[etc]
+
 CITATION:
-[citation text here]
+[citation paragraph]
 
 SCORE: [X/10]
 
 ADVISORY:
-[advisory text here]`;
+[advisory text]`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -722,17 +728,20 @@ ADVISORY:
     const text = data.content.map(i => i.text || '').join('').trim();
 
     // Parse the structured response
+    const bulletsMatch = text.match(/BULLETS:\s*([\s\S]*?)(?=CITATION:|$)/i);
     const citationMatch = text.match(/CITATION:\s*([\s\S]*?)(?=SCORE:|$)/i);
     const scoreMatch = text.match(/SCORE:\s*(\d+\/10|\d+)/i);
     const advisoryMatch = text.match(/ADVISORY:\s*([\s\S]*?)$/i);
 
+    const bulletsRaw = bulletsMatch ? bulletsMatch[1].trim() : '';
+    const bullets = bulletsRaw.split('\n').map(b => b.trim()).filter(b => b.length > 0);
     const citation = citationMatch ? citationMatch[1].trim() : text;
     const score = scoreMatch ? scoreMatch[1].trim() : null;
     const advisory = advisoryMatch ? advisoryMatch[1].trim() : null;
     const charCount = citation.length;
     const charLimit = award.charLimit;
 
-    res.json({ citation, score, advisory, charCount, charLimit, awardName: award.name });
+    res.json({ bullets, citation, score, advisory, charCount, charLimit, awardName: award.name });
   } catch (err) {
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
