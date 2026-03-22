@@ -694,7 +694,7 @@ YOUR TASKS:
 2. CITATION: Write a single narrative paragraph using those bullets as source material.
    - Opens with "For [meritorious service/outstanding achievement] from [period]..."
    - Flows naturally as connected sentences, not a list
-   - Stays within ${award.charLimit} characters
+   - CRITICAL: Must be STRICTLY under ${award.charLimit} characters. Count carefully. If needed, cut less impactful content to stay under the limit. Do NOT exceed ${award.charLimit} characters under any circumstance.
    - Closes connecting the soldier's service to Army readiness and values
    - Ready for direct IPPSA submission
 
@@ -720,7 +720,7 @@ ADVISORY:
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
@@ -735,7 +735,15 @@ ADVISORY:
 
     const bulletsRaw = bulletsMatch ? bulletsMatch[1].trim() : '';
     const bullets = bulletsRaw.split('\n').map(b => b.trim()).filter(b => b.length > 0);
-    const citation = citationMatch ? citationMatch[1].trim() : text;
+    let citation = citationMatch ? citationMatch[1].trim() : text;
+    
+    // Safety net — truncate at last complete sentence if over limit
+    if (citation.length > award.charLimit) {
+      citation = citation.substring(0, award.charLimit);
+      const lastPeriod = citation.lastIndexOf('.');
+      if (lastPeriod > award.charLimit * 0.7) citation = citation.substring(0, lastPeriod + 1);
+    }
+    
     const score = scoreMatch ? scoreMatch[1].trim() : null;
     const advisory = advisoryMatch ? advisoryMatch[1].trim() : null;
     const charCount = citation.length;
