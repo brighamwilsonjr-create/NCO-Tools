@@ -66,6 +66,40 @@
     --border: #3d5440;
   }
 
+  /* Light mode overrides */
+  body.light-mode {
+    --od: #c8d4c9;
+    --od-light: #b0c0b2;
+    --od-dark: #e8efe9;
+    --tan: #7a6040;
+    --tan-light: #5a4020;
+    --tan-dark: #6b5535;
+    --black: #f0f4f0;
+    --white: #1a2419;
+    --red: #8B1A1A;
+    --grid: #2B3A2E11;
+    --card: #ffffff;
+    --border: #b0c0b2;
+  }
+
+  /* Theme toggle button */
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--tan);
+    color: var(--tan);
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+  .theme-toggle:hover {
+    background: var(--tan);
+    color: var(--od-dark);
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -562,6 +596,7 @@
     <div style="display:flex; align-items:center; gap:8px;">
       <div class="status-dot"></div>
       <span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">SYSTEM ONLINE</span>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">☀ LIGHT</button>
     </div>
   </div>
 </header>
@@ -2215,6 +2250,22 @@
     const scoreDisplay = document.getElementById('aft_score_display');
     if (scoreDisplay) scoreDisplay.style.display = 'none';
     lastAFTResult = null;
+  }
+
+  // ── THEME TOGGLE ──────────────────────────────────────────────────────────────
+
+  function toggleTheme() {
+    const body = document.body;
+    const btn = document.getElementById('themeToggle');
+    const isLight = body.classList.toggle('light-mode');
+    btn.textContent = isLight ? '🌙 DARK' : '☀ LIGHT';
+    localStorage.setItem('ncokit_theme', isLight ? 'light' : 'dark');
+  }
+
+  // Apply saved theme on load
+  if (localStorage.getItem('ncokit_theme') === 'light') {
+    document.body.classList.add('light-mode');
+    document.getElementById('themeToggle').textContent = '🌙 DARK';
   }
 
   // ── AUTH ──────────────────────────────────────────────────────────────────
