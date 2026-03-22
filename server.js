@@ -188,6 +188,25 @@ async function sendPasswordResetEmail(email, token) {
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
 
+// SEO
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.send(`User-agent: *\nAllow: /\nSitemap: https://ncokit.com/sitemap.xml`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  res.type('application/xml');
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://ncokit.com</loc>
+    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>`);
+});
+
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { email, password, referredBy } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
