@@ -1,1257 +1,3149 @@
-const express = require('express');
-const cors = require('cors');
-const path = require('path');
-const PDFDocument = require('pdfkit');
-const { calculateAFT } = require('./aft_tables');
-const { Pool } = require('pg');
-const bcrypt = require('bcrypt');
-const crypto = require('crypto');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const rateLimit = require('express-rate-limit');
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NCO Kit — Army Leader's Toolkit | NCOER Bullets, DA 4856, AFT Scorer</title>
 
-const app = express();
+<!-- Primary SEO -->
+<meta name="description" content="Free AI-powered toolkit for Army NCOs. Generate DA 4856 counseling forms, write NCOER bullets by MOS, calculate AFT scores with official 2025 tables, and track your soldier roster. Built by NCOs, for NCOs.">
+<meta name="keywords" content="NCOER bullet builder, DA 4856 generator, Army counseling form, AFT score calculator, Army fitness test 2025, NCOER bullets by MOS, Army leader tools, NCO toolkit, developmental counseling form, NCOER writing tool">
+<meta name="author" content="NCO Kit">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://ncokit.com">
 
-// Trust Render's proxy so rate limiting works correctly
-app.set('trust proxy', 1);
+<!-- Open Graph (Facebook, LinkedIn) -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ncokit.com">
+<meta property="og:title" content="NCO Kit — AI-Powered Army Leader's Toolkit">
+<meta property="og:description" content="Generate DA 4856 counseling forms, write NCOER bullets by MOS, calculate AFT scores, and track your soldier roster. Free to use. Built by NCOs, for NCOs.">
+<meta property="og:image" content="https://ncokit.com/og-image.svg">
+<meta property="og:site_name" content="NCO Kit">
 
-// CORS — restrict to ncokit.com only
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://ncokit.com', 'https://www.ncokit.com']
-    : '*',
-  credentials: true
-}));
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:url" content="https://ncokit.com">
+<meta name="twitter:title" content="NCO Kit — AI-Powered Army Leader's Toolkit">
+<meta name="twitter:description" content="Generate DA 4856 counseling forms, write NCOER bullets by MOS, calculate AFT scores, and track your soldier roster. Free to use.">
+<meta name="twitter:image" content="https://ncokit.com/og-image.svg">
 
-// Rate limiters
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
-  message: { error: 'Too many attempts. Please try again in 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const aiLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10,
-  message: { error: 'Too many requests. Please slow down.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  message: { error: 'Too many requests. Please try again shortly.' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
-
-// Apply general limiter to all routes
-app.use(generalLimiter);
-
-// Stripe webhook needs raw body BEFORE express.json()
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook signature error:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+<!-- Structured Data -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "NCO Kit",
+  "url": "https://ncokit.com",
+  "description": "AI-powered administrative toolkit for Army enlisted leaders. Features DA 4856 counseling generator, NCOER bullet builder, AFT score calculator, and soldier roster tracker.",
+  "applicationCategory": "ProductivityApplication",
+  "operatingSystem": "Web Browser",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "author": {
+    "@type": "Organization",
+    "name": "NCO Kit",
+    "url": "https://ncokit.com"
   }
-  try {
-    if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const userId = session.metadata?.userId;
-      const customerId = session.customer;
-      const subscriptionId = session.subscription;
-      if (userId) {
-        await pool.query(
-          'UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW() WHERE id = $4',
-          ['premium', customerId, subscriptionId, userId]
-        );
-        const userResult = await pool.query('SELECT referred_by FROM users WHERE id = $1', [userId]);
-        const referredBy = userResult.rows[0]?.referred_by;
-        if (referredBy) {
-          await pool.query(
-            'UPDATE users SET free_months_earned = free_months_earned + 1 WHERE referral_code = $1',
-            [referredBy]
-          );
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Source+Code+Pro:wght@400;500&family=Libre+Franklin:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --od: #2B3A2E;
+    --od-light: #3d5440;
+    --od-dark: #1a2419;
+    --tan: #C8B48A;
+    --tan-light: #e2d4b8;
+    --tan-dark: #a08e65;
+    --black: #0d0f0d;
+    --white: #F4F1EA;
+    --red: #8B1A1A;
+    --grid: #2B3A2E22;
+    --card: #1e271f;
+    --border: #3d5440;
+  }
+
+  /* Light mode overrides */
+  body.light-mode {
+    --od: #c8d4c9;
+    --od-light: #b0c0b2;
+    --od-dark: #e8efe9;
+    --tan: #7a6040;
+    --tan-light: #5a4020;
+    --tan-dark: #6b5535;
+    --black: #f0f4f0;
+    --white: #1a2419;
+    --red: #8B1A1A;
+    --grid: #2B3A2E11;
+    --card: #ffffff;
+    --border: #b0c0b2;
+  }
+
+  /* Theme toggle button */
+  .theme-toggle {
+    background: none;
+    border: 1px solid var(--tan);
+    color: var(--tan);
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+  .theme-toggle:hover {
+    background: var(--tan);
+    color: var(--od-dark);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background-color: var(--black);
+    color: var(--white);
+    font-family: 'Libre Franklin', sans-serif;
+    min-height: 100vh;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--od-dark);
+    border-bottom: 2px solid var(--tan);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .logo-badge {
+    width: 36px;
+    height: 36px;
+    background: var(--tan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  }
+
+  .logo-badge span {
+    font-family: 'Oswald', sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--od-dark);
+    letter-spacing: 1px;
+  }
+
+  .logo-text {
+    font-family: 'Oswald', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--tan);
+    text-transform: uppercase;
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--tan-dark);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    font-family: 'Source Code Pro', monospace;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px;
+    color: var(--tan-dark);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: #4CAF50;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* MAIN LAYOUT */
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+  /* NAV TABS */
+  .tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 32px;
+    border-bottom: 2px solid var(--border);
+  }
+
+  .tab {
+    padding: 12px 24px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 14px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan-dark);
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+  }
+
+  .tab:hover { color: var(--tan); }
+
+  .tab.active {
+    color: var(--tan);
+    border-bottom-color: var(--tan);
+    background: var(--od-dark);
+  }
+
+  /* PANELS */
+  .panel { display: none; animation: fadeIn 0.3s ease; }
+  .panel.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* SECTION HEADER */
+  .section-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .section-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: var(--tan);
+    line-height: 1;
+  }
+
+  .section-sub {
+    font-size: 12px;
+    color: var(--tan-dark);
+    letter-spacing: 2px;
+    font-family: 'Source Code Pro', monospace;
+    margin-top: 4px;
+  }
+
+  /* CARDS */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 24px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--tan);
+  }
+
+  .card-title {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--tan);
+    margin-bottom: 16px;
+  }
+
+  /* FORM ELEMENTS */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .form-grid.three { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid.full { grid-template-columns: 1fr; }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  label {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan-dark);
+  }
+
+  input, select, textarea {
+    background: var(--od-dark);
+    border: 1px solid var(--border);
+    color: var(--white);
+    padding: 10px 12px;
+    font-family: 'Libre Franklin', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--tan);
+  }
+
+  select option { background: var(--od-dark); }
+
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    padding: 12px 28px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--tan);
+    color: var(--od-dark);
+  }
+  .btn-primary:hover { background: var(--tan-light); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--tan);
+    border: 1px solid var(--tan);
+  }
+  .btn-secondary:hover { background: var(--tan); color: var(--od-dark); }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+    font-size: 11px;
+    padding: 6px 14px;
+  }
+  .btn-danger:hover { background: var(--red); color: var(--white); }
+
+  .btn-sm {
+    font-size: 11px;
+    padding: 7px 16px;
+    letter-spacing: 2px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+    align-items: center;
+  }
+
+  /* OUTPUT BOX */
+  .output-box {
+    background: var(--od-dark);
+    border: 1px solid var(--tan);
+    padding: 24px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    color: var(--tan-light);
+    margin-top: 20px;
+    display: none;
+    position: relative;
+  }
+
+  .output-box.visible { display: block; }
+
+  .output-label {
+    position: absolute;
+    top: -10px;
+    left: 16px;
+    background: var(--black);
+    padding: 0 8px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--tan);
+    text-transform: uppercase;
+  }
+
+  /* SOLDIER ROSTER */
+  .roster-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .roster-table th {
+    background: var(--od);
+    font-family: 'Oswald', sans-serif;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan);
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .roster-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--white);
+    vertical-align: middle;
+  }
+
+  .roster-table tr:hover td { background: var(--od-dark); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-family: 'Source Code Pro', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .badge-green { background: #1a3d1a; color: #4CAF50; border: 1px solid #4CAF50; }
+  .badge-yellow { background: #3d3010; color: #FFC107; border: 1px solid #FFC107; }
+  .badge-red { background: #3d1010; color: #f44336; border: 1px solid #f44336; }
+
+  /* BULLET BUILDER */
+  .bullet-output {
+    background: var(--od-dark);
+    border-left: 3px solid var(--tan);
+    padding: 16px 20px;
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--tan-light);
+    margin-top: 12px;
+    display: none;
+  }
+  .bullet-output.visible { display: block; }
+
+  .bullet-line { margin-bottom: 8px; }
+  .bullet-line::before { content: '• '; color: var(--tan); }
+
+  /* DIVIDER */
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 24px 0;
+  }
+
+  /* STATS ROW */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--tan);
+  }
+
+  .stat-number {
+    font-family: 'Oswald', sans-serif;
+    font-size: 32px;
+    color: var(--tan);
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tan-dark);
+    margin-top: 4px;
+  }
+
+  /* EMPTY STATE */
+  .empty-state {
+    text-align: center;
+    padding: 48px;
+    color: var(--tan-dark);
+    font-family: 'Source Code Pro', monospace;
+    font-size: 12px;
+    letter-spacing: 2px;
+  }
+
+  .copy-confirm {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 11px;
+    color: #4CAF50;
+    letter-spacing: 1px;
+    display: none;
+  }
+
+  .copy-confirm.visible { display: inline; }
+
+  /* PREMIUM BANNER */
+  .premium-banner {
+    background: linear-gradient(135deg, var(--od-dark), var(--od));
+    border: 1px solid var(--tan);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+
+  .premium-text {
+    font-family: 'Oswald', sans-serif;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--tan);
+    text-transform: uppercase;
+  }
+
+  .premium-sub {
+    font-size: 11px;
+    color: var(--tan-dark);
+    font-family: 'Source Code Pro', monospace;
+    margin-top: 2px;
+  }
+
+  @media (max-width: 700px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .form-grid.three { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .tabs { flex-wrap: wrap; }
+  }
+</style>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VV26RCZYJ0"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-VV26RCZYJ0');
+</script>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-badge"><span>NCO</span></div>
+    <div>
+      <div class="logo-text">NCO Kit</div>
+      <div class="logo-sub">Leader's Toolkit — ncokit.com</div>
+    </div>
+  </div>
+  <div class="header-right" style="gap:16px">
+    <div id="authButtons" style="display:flex; gap:8px; align-items:center;">
+      <button class="btn btn-secondary btn-sm" onclick="showAuth('login')">Login</button>
+      <button class="btn btn-primary btn-sm" onclick="showAuth('register')">Sign Up — Free</button>
+    </div>
+    <div id="userMenu" style="display:none; align-items:center; gap:12px;">
+      <span id="userEmail" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
+      <span id="userPlan" style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px; padding:2px 8px; border:1px solid var(--tan); color:var(--tan); cursor:pointer;" onclick="handlePlanClick()"></span>
+      <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="status-dot"></div>
+      <span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">SYSTEM ONLINE</span>
+      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">☀ LIGHT</button>
+    </div>
+  </div>
+</header>
+
+<!-- RESET PASSWORD MODAL -->
+<div id="resetModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border);">
+      <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;">Reset Password</div>
+      <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;">Enter your new password below</div>
+    </div>
+    <div style="padding:24px;">
+      <div class="field" style="margin-bottom:16px;">
+        <label>New Password (min 8 characters)</label>
+        <div style="position:relative;">
+          <input type="password" id="resetNewPassword" placeholder="••••••••" style="padding-right:40px; width:100%; box-sizing:border-box;">
+          <span onclick="togglePassword('resetNewPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Confirm New Password</label>
+        <div style="position:relative;">
+          <input type="password" id="resetConfirmPassword" placeholder="••••••••" style="padding-right:40px; width:100%; box-sizing:border-box;">
+          <span onclick="togglePassword('resetConfirmPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;" id="resetSubmitBtn" onclick="submitResetPassword()">Set New Password</button>
+      <div id="resetError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      <div id="resetSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LIMIT MODAL -->
+<div id="limitModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border);">
+      <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;" id="limitModalTitle">Limit Reached</div>
+    </div>
+    <div style="padding:24px;">
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.6; margin-bottom:20px;" id="limitModalMsg"></p>
+      <div id="limitModalType" data-type="anonymous"></div>
+      <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="limitModalAction()" id="limitModalBtn">Create Free Account</button>
+      <button class="btn btn-secondary" style="width:100%;" onclick="closeLimitModal()">Maybe Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPGRADE MODAL -->
+<div id="upgradeModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:460px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;">Upgrade to Premium</div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;">Unlock the full NCO Kit toolkit</div>
+      </div>
+      <button onclick="closeUpgradeModal()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:24px;">
+      <div style="font-family:'Oswald',sans-serif; font-size:36px; color:var(--tan); text-align:center; margin-bottom:4px;">$8<span style="font-size:16px; color:var(--tan-dark);">/month</span></div>
+      <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-align:center; margin-bottom:20px; letter-spacing:1px;">CANCEL ANYTIME</div>
+      <div style="border:1px solid var(--border); padding:16px; margin-bottom:20px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); margin-bottom:10px; letter-spacing:2px;">PREMIUM INCLUDES:</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Unlimited saves across all tools</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ NCOER Support Form Builder (coming soon)</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Awards Recommendation Writer (coming soon)</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Promotion Board Prep Tool (coming soon)</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Priority AI response speed</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0;">✓ Early access to new features</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $8/month</button>
+      <div style="text-align:center; margin-top:12px; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark);">Secured by Stripe · Cancel anytime from your account</div>
+    </div>
+  </div>
+</div>
+
+<!-- AUTH MODAL -->
+<div id="authModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px; position:relative;">
+
+    <!-- Modal Header -->
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;" id="modalTitle">Sign In</div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;" id="modalSub">Access your NCO Kit account</div>
+      </div>
+      <button onclick="closeAuth()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer; padding:4px;">✕</button>
+    </div>
+
+    <!-- Modal Body -->
+    <div style="padding:24px;">
+
+      <!-- Tab switcher -->
+      <div style="display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--border);">
+        <button id="loginTab" class="tab active" style="font-size:12px; padding:8px 16px;" onclick="switchAuthTab('login')">Login</button>
+        <button id="registerTab" class="tab" style="font-size:12px; padding:8px 16px;" onclick="switchAuthTab('register')">Create Account</button>
+      </div>
+
+      <!-- Login Form -->
+      <div id="loginForm">
+        <div class="field" style="margin-bottom:16px;">
+          <label>Email Address</label>
+          <input type="email" id="loginEmail" placeholder="your@email.com" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label>Password</label>
+          <div style="position:relative;">
+            <input type="password" id="loginPassword" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" style="padding-right:40px; width:100%; box-sizing:border-box;">
+            <span onclick="togglePassword('loginPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+          </div>
+        </div>
+        <div style="text-align:right; margin-bottom:20px;">
+          <a href="#" onclick="showForgotPassword()" style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-decoration:none;">Forgot password?</a>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="doLogin()" id="loginBtn">Login</button>
+        <div id="loginError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+        <div id="loginSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      </div>
+
+      <!-- Register Form -->
+      <div id="registerForm" style="display:none;">
+        <div class="field" style="margin-bottom:16px;">
+          <label>Email Address</label>
+          <input type="email" id="regEmail" placeholder="your@email.com">
+        </div>
+        <div class="field" style="margin-bottom:16px;">
+          <label>Password (min 8 characters)</label>
+          <div style="position:relative;">
+            <input type="password" id="regPassword" placeholder="••••••••" style="padding-right:40px; width:100%; box-sizing:border-box;">
+            <span onclick="togglePassword('regPassword', this)" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px; color:var(--tan-dark); user-select:none;">👁</span>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:20px;">
+          <label>Referral Code (optional)</label>
+          <input type="text" id="regReferral" placeholder="e.g. ABC123" style="text-transform:uppercase;">
+          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:4px;">Get 50% off your first premium month with a referral code</div>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="doRegister()" id="registerBtn">Create Free Account</button>
+        <div id="registerError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+        <div id="registerSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      </div>
+
+      <!-- Forgot Password Form -->
+      <div id="forgotForm" style="display:none;">
+        <p style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:16px; line-height:1.6;">Enter your email and we'll send you a reset link.</p>
+        <div class="field" style="margin-bottom:20px;">
+          <label>Email Address</label>
+          <input type="email" id="forgotEmail" placeholder="your@email.com">
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="doForgotPassword()" id="forgotBtn">Send Reset Link</button>
+        <div style="margin-top:12px; text-align:center;">
+          <a href="#" onclick="switchAuthTab('login')" style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-decoration:none;">← Back to login</a>
+        </div>
+        <div id="forgotMsg" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      </div>
+
+    </div>
+
+    <!-- Footer note -->
+    <div style="padding:12px 24px; border-top:1px solid var(--border); font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-align:center;">
+      Free to use during testing — no credit card required
+    </div>
+  </div>
+</div>
+
+
+<div class="container">
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-card">
+      <div class="stat-number" id="statSoldiers">0</div>
+      <div class="stat-label">Soldiers Tracked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statCounselings">0</div>
+      <div class="stat-label">Counselings Generated</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statBullets">0</div>
+      <div class="stat-label">Bullets Built</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statOverdue">0</div>
+      <div class="stat-label">Overdue Counselings</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
+    <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
+    <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
+    <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
+    <button class="tab" onclick="switchTab('awards', this)">🎖️ Awards Writer</button>
+    <button class="tab" id="savesTab" onclick="switchTab('saves', this)" style="display:none">💾 My Saves</button>
+    <button class="tab" onclick="switchTab('info', this)">ℹ️ About</button>
+  </div>
+
+  <!-- ===== COUNSELING PANEL ===== -->
+  <div class="panel active" id="panel-counseling">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">DA Form 4856</div>
+        <div class="section-sub">Developmental Counseling Form Generator</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Header Information</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Name of Soldier (Last, First MI)</label>
+          <input type="text" id="c_soldierName" placeholder="SMITH, John A.">
+        </div>
+        <div class="field">
+          <label>Rank / Grade</label>
+          <select id="c_rank">
+            <option value="">-- Select --</option>
+            <option>PVT / E-1</option><option>PV2 / E-2</option><option>PFC / E-3</option>
+            <option>SPC / E-4</option><option>CPL / E-4</option><option>SGT / E-5</option>
+            <option>SSG / E-6</option><option>SFC / E-7</option><option>MSG / E-8</option>
+            <option>1SG / E-8</option><option>SGM / E-9</option><option>CSM / E-9</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Date of Counseling</label>
+          <input type="date" id="c_date">
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-top:16px">
+        <div class="field">
+          <label>Organization / Unit</label>
+          <input type="text" id="c_unit" placeholder="HHC, 1-12 IN, 4ID">
+        </div>
+        <div class="field">
+          <label>Name of Counselor</label>
+          <input type="text" id="c_counselor" placeholder="SSG JONES, Marcus T.">
+        </div>
+        <div class="field">
+          <label>Counselor Rank</label>
+          <select id="c_counselorRank">
+            <option value="">-- Select --</option>
+            <option>SGT / E-5</option><option>SSG / E-6</option><option>SFC / E-7</option>
+            <option>MSG / E-8</option><option>1SG / E-8</option><option>SGM / E-9</option>
+            <option>CSM / E-9</option><option>2LT / O-1</option><option>1LT / O-2</option>
+            <option>CPT / O-3</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Purpose of Counseling</div>
+      <div class="form-grid" style="margin-bottom:16px">
+        <div class="field">
+          <label>Counseling Type</label>
+          <select id="c_type" onchange="updatePurpose()">
+            <option value="">-- Select Type --</option>
+            <option value="initial">Initial Counseling</option>
+            <option value="performance">Performance Counseling (Monthly)</option>
+            <option value="event_positive">Event-Oriented — Commendable Performance</option>
+            <option value="event_negative">Event-Oriented — Substandard Performance</option>
+            <option value="ncoer_support">NCOER Support Form</option>
+            <option value="profile">Profile / Physical Limitations</option>
+            <option value="custom">Custom / Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Subject</label>
+          <input type="text" id="c_subject" placeholder="e.g. Initial Counseling / Monthly Performance">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Key Facts / Observations</div>
+      <div class="section-sub" style="margin-bottom:14px; font-size:11px; color: var(--tan-dark);">Type rough notes — hit ⚡ AI Enhance on any field to rewrite in Army regulatory language</div>
+
+      <div class="form-grid full">
+        <div class="field">
+          <label>Situation / Background</label>
+          <textarea id="c_situation" rows="3" placeholder="e.g. Smith was late to PT again, third time, didn't tell anyone..."></textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_situation', 'situation', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+            <span class="ai-loading" id="load_c_situation" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>Strengths / Positives (optional)</label>
+          <textarea id="c_strengths" rows="3" placeholder="e.g. Good soldier overall, strong at PT, knows his job well..."></textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_strengths', 'strengths', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+            <span class="ai-loading" id="load_c_strengths" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Areas Requiring Improvement (optional)</label>
+          <textarea id="c_improve" rows="3" placeholder="e.g. Needs to be on time, needs to communicate better with chain of command..."></textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_improve', 'improvement', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+            <span class="ai-loading" id="load_c_improve" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>Plan of Action / Expected Outcomes</label>
+          <textarea id="c_poa" rows="3" placeholder="e.g. He needs to show up on time and tell someone if he can't make it..."></textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_poa', 'plan_of_action', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+            <span class="ai-loading" id="load_c_poa" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+          </div>
+        </div>
+        <div class="field">
+          <label>Leader Responsibilities</label>
+          <textarea id="c_leader" rows="3" placeholder="e.g. I'll check in with him every week and follow up next counseling..."></textarea>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_leader', 'leader_responsibilities', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+            <span class="ai-loading" id="load_c_leader" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row" style="margin-top:20px">
+        <button class="btn btn-primary" onclick="enhanceAllAndGenerate()">⚡ AI Enhance All + Generate PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="generatePDF()">Generate PDF As-Is</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearCounseling()">Clear</button>
+      </div>
+      <div id="counselingAILoading" style="display:none; margin-top:16px; padding:16px; background:var(--od-dark); border:1px solid var(--border); text-align:center; font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:3px;">
+        AI ENHANCING ALL FIELDS...
+      </div>
+      <div id="counselingAIError" style="display:none; margin-top:16px; padding:14px 18px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:12px;"></div>
+      <span class="copy-confirm" id="copyCounselingConfirm" style="margin-top:8px; display:block; min-height:16px;">✓ COPIED TO CLIPBOARD</span>
+    </div>
+
+    <div class="output-box" id="counselingOutput">
+      <div class="output-label">Generated DA 4856</div>
+    </div>
+
+    <div class="btn-row" id="counselingCopyRow" style="display:none">
+      <button class="btn btn-secondary btn-sm" onclick="copyOutput('counselingOutput', 'copyCounselingConfirm')">Copy to Clipboard</button>
+      <button class="btn btn-secondary btn-sm" id="saveCounselingBtn" style="display:none" onclick="saveCounseling()">💾 Save Counseling</button>
+      <span style="font-family:'Source Code Pro',monospace; font-size:11px; color:#4CAF50; display:none;" id="saveCounselingConfirm">✓ SAVED</span>
+    </div>
+
+  </div>
+
+  <!-- ===== ROSTER PANEL ===== -->
+  <div class="panel" id="panel-roster">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Soldier Roster</div>
+        <div class="section-sub">Track counseling status across your formation</div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="toggleAddSoldier()">+ Add Soldier</button>
+    </div>
+
+    <div class="card" id="addSoldierForm" style="display:none">
+      <div class="card-title">Add Soldier to Roster</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Name (Last, First MI)</label>
+          <input type="text" id="r_name" placeholder="SMITH, John A.">
+        </div>
+        <div class="field">
+          <label>Rank</label>
+          <select id="r_rank">
+            <option>PVT</option><option>PV2</option><option>PFC</option>
+            <option>SPC</option><option>CPL</option><option>SGT</option>
+            <option>SSG</option><option>SFC</option><option>MSG</option>
+            <option>1SG</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>MOS</label>
+          <input type="text" id="r_mos" placeholder="11B, 25U, 42A...">
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-top:14px">
+        <div class="field">
+          <label>Last Counseling Date</label>
+          <input type="date" id="r_lastCounseling">
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="r_status">
+            <option value="current">Current</option>
+            <option value="due">Due This Month</option>
+            <option value="overdue">Overdue</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Notes</label>
+          <input type="text" id="r_notes" placeholder="Optional notes...">
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary btn-sm" onclick="addSoldier()">Add to Roster</button>
+        <button class="btn btn-secondary btn-sm" onclick="toggleAddSoldier()">Cancel</button>
+      </div>
+    </div>
+
+    <div id="rosterContainer">
+      <div class="empty-state" id="rosterEmpty">NO SOLDIERS ADDED YET — CLICK + ADD SOLDIER TO BEGIN</div>
+      <table class="roster-table" id="rosterTable" style="display:none">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Rank</th>
+            <th>MOS</th>
+            <th>Last Counseling</th>
+            <th>Status</th>
+            <th>Notes</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="rosterBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ===== BULLETS PANEL ===== -->
+  <div class="panel" id="panel-bullets">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">NCOER Bullet Builder</div>
+        <div class="section-sub">AI-powered — type plain language, get Army-standard bullets</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Accomplishment Input</div>
+      <div class="form-grid three" style="margin-bottom:16px">
+        <div class="field">
+          <label>Soldier Name &amp; Rank</label>
+          <input type="text" id="b_name" placeholder="SGT Smith">
+        </div>
+        <div class="field">
+          <label>MOS</label>
+          <select id="b_mos">
+            <option value="">-- Select MOS --</option>
+            <optgroup label="Infantry / Combat Arms">
+              <option value="11A">11A — Infantry Officer</option>
+              <option value="11B">11B — Infantryman</option>
+              <option value="11C">11C — Indirect Fire Infantryman</option>
+              <option value="12B">12B — Combat Engineer</option>
+              <option value="12W">12W — Carpentry & Masonry Specialist</option>
+              <option value="13B">13B — Cannon Crewmember</option>
+              <option value="13F">13F — Fire Support Specialist</option>
+              <option value="19D">19D — Cavalry Scout</option>
+              <option value="19K">19K — M1 Armor Crewman</option>
+            </optgroup>
+            <optgroup label="Aviation">
+              <option value="15B">15B — Aircraft Powerplant Repairer</option>
+              <option value="15T">15T — UH-60 Helicopter Repairer</option>
+              <option value="15U">15U — CH-47 Helicopter Repairer</option>
+              <option value="15W">15W — Unmanned Aircraft Systems Operator</option>
+            </optgroup>
+            <optgroup label="Signal / Cyber / IT">
+              <option value="25B">25B — IT Specialist</option>
+              <option value="25L">25L — Cable Systems Installer-Maintainer</option>
+              <option value="25N">25N — Nodal Network Systems Operator-Maintainer</option>
+              <option value="25P">25P — Microwave Systems Operator-Maintainer</option>
+              <option value="25S">25S — Satellite Communication Systems Operator-Maintainer</option>
+              <option value="25U">25U — Signal Support Systems Specialist</option>
+              <option value="17C">17C — Cyber Operations Specialist</option>
+            </optgroup>
+            <optgroup label="Intelligence">
+              <option value="35F">35F — Intelligence Analyst</option>
+              <option value="35L">35L — Counterintelligence Agent</option>
+              <option value="35M">35M — Human Intelligence Collector</option>
+              <option value="35N">35N — Signals Intelligence Analyst</option>
+              <option value="35P">35P — Cryptologic Linguist</option>
+            </optgroup>
+            <optgroup label="Medical">
+              <option value="68A">68A — Biomedical Equipment Specialist</option>
+              <option value="68D">68D — Operating Room Specialist</option>
+              <option value="68E">68E — Dental Specialist</option>
+              <option value="68J">68J — Medical Logistics Specialist</option>
+              <option value="68W">68W — Combat Medic Specialist</option>
+              <option value="68X">68X — Behavioral Health Specialist</option>
+            </optgroup>
+            <optgroup label="Maintenance / Mechanical">
+              <option value="91A">91A — M1 Abrams Tank System Maintainer</option>
+              <option value="91B">91B — Wheeled Vehicle Mechanic</option>
+              <option value="91C">91C — Utilities Equipment Repairer</option>
+              <option value="91D">91D — Power Generation Equipment Repairer</option>
+              <option value="91E">91E — Allied Trades Specialist</option>
+              <option value="91F">91F — Small Arms/Artillery Repairer</option>
+              <option value="91H">91H — Track Vehicle Repairer</option>
+              <option value="91L">91L — Construction Equipment Repairer</option>
+              <option value="91M">91M — Bradley Fighting Vehicle System Maintainer</option>
+              <option value="91S">91S — Stryker Systems Maintainer</option>
+            </optgroup>
+            <optgroup label="Logistics / Supply">
+              <option value="88H">88H — Cargo Specialist</option>
+              <option value="88M">88M — Motor Transport Operator</option>
+              <option value="88N">88N — Transportation Management Coordinator</option>
+              <option value="89B">89B — Ammunition Specialist</option>
+              <option value="92A">92A — Automated Logistical Specialist</option>
+              <option value="92F">92F — Petroleum Supply Specialist</option>
+              <option value="92G">92G — Culinary Specialist</option>
+              <option value="92L">92L — Petroleum Laboratory Specialist</option>
+              <option value="92W">92W — Water Treatment Specialist</option>
+              <option value="92Y">92Y — Unit Supply Specialist</option>
+            </optgroup>
+            <optgroup label="HR / Finance / Admin">
+              <option value="36B">36B — Financial Management Technician</option>
+              <option value="42A">42A — Human Resources Specialist</option>
+              <option value="42T">42T — Talent Acquisition Specialist</option>
+              <option value="56M">56M — Religious Affairs Specialist</option>
+              <option value="79S">79S — Career Counselor</option>
+            </optgroup>
+            <optgroup label="Military Police / Legal">
+              <option value="27D">27D — Paralegal Specialist</option>
+              <option value="31B">31B — Military Police</option>
+              <option value="31D">31D — Criminal Investigation Agent</option>
+              <option value="31E">31E — Internment/Resettlement Specialist</option>
+            </optgroup>
+            <optgroup label="Civil Affairs / PSYOP / Special Operations">
+              <option value="37F">37F — Psychological Operations Specialist</option>
+              <option value="38B">38B — Civil Affairs Specialist</option>
+              <option value="18B">18B — Special Forces Weapons Sergeant</option>
+              <option value="18C">18C — Special Forces Engineer Sergeant</option>
+              <option value="18D">18D — Special Forces Medical Sergeant</option>
+              <option value="18E">18E — Special Forces Communications Sergeant</option>
+              <option value="18F">18F — Special Forces Intelligence Sergeant</option>
+              <option value="18Z">18Z — Special Forces Senior Sergeant</option>
+            </optgroup>
+            <optgroup label="Chemical / NBC">
+              <option value="74D">74D — Chemical, Biological, Radiological & Nuclear Specialist</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="field">
+          <label>Rating Category</label>
+          <select id="b_category">
+            <option>Character</option>
+            <option>Presence</option>
+            <option>Intellect</option>
+            <option>Leads</option>
+            <option>Develops</option>
+            <option>Achieves</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid full">
+        <div class="field">
+          <label>Describe what they did — plain language is fine</label>
+          <textarea id="b_action" rows="4" placeholder="e.g. John Smith did good during the field exercise... or SGT Smith led the team through a live fire and everyone passed..."></textarea>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>Any numbers / metrics to include? (optional)</label>
+          <input type="text" id="b_impact" placeholder="e.g. 12 soldiers, 100% pass rate, 3 weeks ahead of schedule">
+        </div>
+        <div class="field">
+          <label>Bullet Count</label>
+          <select id="b_count">
+            <option value="3">3 bullets</option>
+            <option value="5">5 bullets</option>
+            <option value="1">1 bullet (single best)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="buildBtn" onclick="buildBulletAI()">⚡ Generate AI Bullets</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearBullets()">Clear</button>
+      </div>
+
+      <!-- LOADING STATE -->
+      <div id="bulletLoading" style="display:none; margin-top:20px; padding:20px; background:var(--od-dark); border:1px solid var(--border); text-align:center;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:3px;">
+          <span id="loadingDots">GENERATING</span>
+        </div>
+        <div style="margin-top:8px; font-size:11px; color:var(--tan-dark); font-family:'Source Code Pro',monospace; letter-spacing:1px;">
+          AI is writing Army-standard bullets...
+        </div>
+      </div>
+
+      <!-- ERROR STATE -->
+      <div id="bulletError" style="display:none; margin-top:16px; padding:14px 18px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:12px;"></div>
+    </div>
+
+    <div id="bulletsContainer"></div>
+
+  </div>
+
+  <!-- ===== AFT PANEL ===== -->
+  <div class="panel" id="panel-aft">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">AFT Scorer</div>
+        <div class="section-sub">Live score calculator — enter raw scores and see points and pass/fail instantly</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Soldier Information</div>
+      <div class="form-grid three">
+        <div class="field">
+          <label>Name (Last, First MI)</label>
+          <input type="text" id="aft_name" placeholder="SMITH, John A.">
+        </div>
+        <div class="field">
+          <label>Sex</label>
+          <select id="aft_sex">
+            <option value="M">Male</option>
+            <option value="F">Female</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Age</label>
+          <input type="number" id="aft_age" placeholder="25" min="17" max="80">
+        </div>
+      </div>
+      <div class="form-grid three" style="margin-top:14px">
+        <div class="field">
+          <label>Unit</label>
+          <input type="text" id="aft_unit" placeholder="HHC, 1-12 IN">
+        </div>
+        <div class="field">
+          <label>MOS</label>
+          <input type="text" id="aft_mos" placeholder="11B">
+        </div>
+        <div class="field">
+          <label>Pay Grade</label>
+          <select id="aft_grade">
+            <option>E-1</option><option>E-2</option><option>E-3</option>
+            <option>E-4</option><option>E-5</option><option>E-6</option>
+            <option>E-7</option><option>E-8</option><option>E-9</option>
+            <option>O-1</option><option>O-2</option><option>O-3</option>
+            <option>O-4</option><option>O-5</option><option>O-6</option>
+            <option>W-1</option><option>W-2</option><option>W-3</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:14px">
+        <div class="field">
+          <label>Test Date (YYYYMMDD)</label>
+          <input type="text" id="aft_date" placeholder="20260318">
+        </div>
+        <div class="field">
+          <label>Standard</label>
+          <select id="aft_standard">
+            <option value="general">General (300 min total)</option>
+            <option value="combat">Combat MOS (350 min total)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Event Raw Scores</div>
+      <div class="section-sub" style="margin-bottom:14px; font-size:11px; color:var(--tan-dark);">Enter raw performance — points calculate automatically from official AFT tables</div>
+
+      <div class="form-grid three">
+        <div class="field">
+          <label>MDL — Max Deadlift (lbs)</label>
+          <input type="number" id="aft_mdl" placeholder="e.g. 280" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_mdl">— pts</div>
+        </div>
+        <div class="field">
+          <label>HRP — Hand-Release Push-Ups (reps)</label>
+          <input type="number" id="aft_hrp" placeholder="e.g. 42" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_hrp">— pts</div>
+        </div>
+        <div class="field">
+          <label>SDC — Sprint-Drag-Carry (M:SS)</label>
+          <input type="text" id="aft_sdc" placeholder="e.g. 1:45" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_sdc">— pts</div>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="field">
+          <label>PLK — Plank (M:SS)</label>
+          <input type="text" id="aft_plk" placeholder="e.g. 2:30" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_plk">— pts</div>
+        </div>
+        <div class="field">
+          <label>Alternate Aerobic Event</label>
+          <select id="aft_alternate" onchange="toggleAlternate()">
+            <option value="no">No — Taking 2MR</option>
+            <option value="bike">12K Bike</option>
+            <option value="walk">2.5 Mile Walk</option>
+            <option value="swim">1K Swim</option>
+            <option value="row">5K Rower</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 2MR field — shown when no alternate selected -->
+      <div class="form-grid" style="margin-top:16px" id="tmr_field">
+        <div class="field">
+          <label>2MR — Two-Mile Run (MM:SS)</label>
+          <input type="text" id="aft_tmr" placeholder="e.g. 15:30" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_tmr">— pts</div>
+        </div>
+      </div>
+
+      <!-- Alternate event time field — shown when alternate selected -->
+      <div class="form-grid" style="margin-top:16px; display:none" id="alt_field">
+        <div class="field">
+          <label id="alt_event_label">Alternate Event Time (MM:SS)</label>
+          <input type="text" id="aft_alt_time" placeholder="e.g. 26:25" oninput="liveScore()">
+          <div style="margin-top:4px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);" id="pts_alt">— GO/NO-GO</div>
+        </div>
+      </div>
+
+      <!-- LIVE SCORE DISPLAY -->
+      <div id="aft_score_display" style="display:none; margin-top:20px; padding:16px; background:var(--od-dark); border:1px solid var(--tan);">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <div style="font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:3px; color:var(--tan-dark); text-transform:uppercase;">Total Score</div>
+            <div style="font-family:'Oswald',sans-serif; font-size:48px; color:var(--tan); line-height:1;" id="aft_total_display">0</div>
+          </div>
+          <div id="aft_result_badge" style="font-family:'Oswald',sans-serif; font-size:24px; letter-spacing:4px; padding:12px 24px; border:2px solid var(--tan);">
+            —
+          </div>
+        </div>
+        <div style="margin-top:8px; font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);" id="aft_result_detail"></div>
+      </div>
+
+      <div class="btn-row" style="margin-top:20px">
+        <button class="btn btn-secondary btn-sm" id="saveAFTBtn" style="display:none" onclick="saveAFTScore()">💾 Save Score</button>
+        <button class="btn btn-secondary btn-sm" onclick="clearAFT()">Clear</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ===== AWARDS PANEL ===== -->
+  <div class="panel" id="panel-awards">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Awards Recommendation Writer</div>
+        <div class="section-sub">AI-generated citations grounded in AR 600-8-22 and Army writing standards</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Soldier & Award Information</div>
+      <div class="form-grid three" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Soldier Name & Rank</label>
+          <input type="text" id="aw_name" placeholder="SGT Smith">
+        </div>
+        <div class="field">
+          <label>Unit</label>
+          <input type="text" id="aw_unit" placeholder="HHC, 1-12 IN, 4ID">
+        </div>
+        <div class="field">
+          <label>Award Level</label>
+          <select id="aw_level">
+            <option value="">-- Select Award --</option>
+            <option value="AAM">AAM — Army Achievement Medal</option>
+            <option value="ARCOM">ARCOM — Army Commendation Medal</option>
+            <option value="MSM">MSM — Meritorious Service Medal</option>
+            <option value="BSM">BSM — Bronze Star Medal</option>
+            <option value="LOM">LOM — Legion of Merit</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Period of Service</label>
+          <input type="text" id="aw_period" placeholder="1 June 2024 to 31 May 2025">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Accomplishments — Describe what the soldier did. Plain language is fine. More detail = better citation.</label>
+        <textarea id="aw_accomplishments" rows="8" placeholder="Examples:&#10;- Led squad through 6-month NTC rotation, all 9 soldiers qualified expert on M4&#10;- Managed $2.3M worth of equipment with zero losses&#10;- Coordinated logistics for 340-soldier task force during JRTC rotation&#10;- Reenlistment rate increased from 60% to 94% under their leadership&#10;- Mentored 3 soldiers through promotion board, all 3 selected&#10;&#10;Include numbers, percentages, dollar amounts, and timeframes whenever possible"></textarea>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="awardsBtn" onclick="generateAward()">🎖️ Generate Citation</button>
+        <button class="btn btn-secondary" onclick="clearAwards()">Clear</button>
+      </div>
+      <div id="awardsLoading" style="display:none; margin-top:16px; font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:2px;">
+        <span id="awardsLoadingDots">GENERATING CITATION</span>
+      </div>
+      <div id="awardsError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+
+    <!-- Output -->
+    <div id="awardsOutput" style="display:none; margin-top:16px;">
+
+      <!-- Bullets -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">Accomplishment Bullets — Ranked Strongest First</div>
+        <div id="awardsBulletsList" class="bullet-output visible"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="copyAwardBullets()">Copy All Bullets</button>
+        </div>
+      </div>
+
+      <!-- Citation -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span id="awardsCitationTitle">NARRATIVE CITATION</span>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <span id="awardsCharCount" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
+            <span id="awardsScore" style="font-family:'Oswald',sans-serif; font-size:18px; color:var(--tan);"></span>
+          </div>
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:8px;">Ready to paste into IPPSA</div>
+        <div id="awardsCitation" style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; padding:16px; background:var(--od-dark); border:1px solid var(--border); white-space:pre-wrap;"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="copyAwardCitation()">Copy Citation</button>
+          <button class="btn btn-secondary btn-sm" id="saveAwardBtn" style="display:none;" onclick="saveAward()">💾 Save Citation</button>
+          <span id="saveAwardConfirm" style="display:none; font-family:'Source Code Pro',monospace; font-size:11px; color:#4CAF50;">✓ SAVED</span>
+        </div>
+      </div>
+
+      <!-- Advisory -->
+      <div class="card" id="awardsAdvisory" style="display:none;">
+        <div class="card-title" style="color:var(--tan);">💡 Recommendation Advisory</div>
+        <div id="awardsAdvisoryText" style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;"></div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ===== INFO PANEL ===== -->
+  <div class="panel" id="panel-info">
+    <div class="section-header">
+      <div>
+        <div class="section-title">About NCO Kit</div>
+        <div class="section-sub">AI-powered administrative tools built for Army enlisted leaders</div>
+      </div>
+    </div>
+
+    <!-- Hero -->
+    <div style="background:var(--od-dark); border:1px solid var(--tan); padding:32px; text-align:center; margin-bottom:24px;">
+      <div style="font-family:'Oswald',sans-serif; font-size:42px; letter-spacing:6px; color:var(--tan); margin-bottom:8px;">NCO KIT</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:15px; color:var(--white); margin-bottom:16px;">AI-Powered Administrative Tools for Army Enlisted Leaders</div>
+      <div style="font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan-dark);">ncokit.com &mdash; No installation required &mdash; Works on any device</div>
+    </div>
+
+    <!-- What is it -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">What Is NCO Kit?</div>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0 0 12px 0;">NCO Kit is a free, web-based toolkit built specifically for Army enlisted leaders. It uses AI to automate the most time-consuming administrative tasks NCOs face daily — counseling documentation, NCOER bullet writing, fitness test scoring, and soldier management.</p>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0;">The app runs entirely in your browser. No downloads, no CAC required, no Army network dependency. It works on your phone, your personal laptop, or any device with internet access.</p>
+    </div>
+
+    <!-- Features -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Current Features</div>
+      <table style="width:100%; border-collapse:collapse; font-family:'Libre Franklin',sans-serif; font-size:13px;">
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; width:40px; vertical-align:top;">📋</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap; width:160px;">DA 4856 Generator</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">AI-assisted counseling form generator. Type rough notes in plain language — the AI rewrites them in proper Army regulatory language and generates a printable PDF.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">⚡</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">NCOER Bullet Builder</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Generates Army-standard NCOER bullets from plain language. Select MOS and rating category, describe what the soldier did, get properly formatted bullets instantly. Includes category fit advisory.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">🏋️</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">AFT Scorer</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Live score calculator using official June 2025 tables. All 10 age bands, M/F standards, combat and general MOS, and all 4 alternate aerobic events. For personal tracking and preparation only.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">👥</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">Soldier Roster</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Track your formation's counseling status. Add soldiers, record last counseling dates, and see current/due/overdue status at a glance.</td>
+          </tr>
+          <tr style="border-bottom:1px solid var(--border);">
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">🎖️</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">Awards Writer</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Generates ranked accomplishment bullets and IPPSA-ready narrative citations for AAM, ARCOM, MSM, BSM, and LOM. Includes package strength score and specific advisory on how to improve for the award level. Grounded in AR 600-8-22.</td>
+          </tr>
+          <tr>
+            <td style="padding:12px 8px; font-size:20px; vertical-align:top;">💾</td>
+            <td style="padding:12px 8px; font-weight:bold; color:var(--tan); vertical-align:top; white-space:nowrap;">Save Feature</td>
+            <td style="padding:12px 8px; color:var(--white); line-height:1.6; vertical-align:top;">Logged-in users can save counselings, bullet sets, award citations, AFT scores, and soldier records — accessible from any device via the My Saves tab.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Time savings -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Time Savings</div>
+      <table style="width:100%; border-collapse:collapse; font-family:'Source Code Pro',monospace; font-size:12px;">
+        <thead>
+          <tr style="background:var(--od-dark);">
+            <th style="padding:10px 12px; text-align:left; color:var(--tan); border:1px solid var(--border);">Task</th>
+            <th style="padding:10px 12px; text-align:left; color:var(--tan-dark); border:1px solid var(--border);">Without NCO Kit</th>
+            <th style="padding:10px 12px; text-align:left; color:var(--tan); border:1px solid var(--border);">With NCO Kit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">Monthly counseling (one soldier)</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">30–45 minutes</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">5–10 minutes</td>
+          </tr>
+          <tr style="background:var(--od-dark);">
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">NCOER bullet writing (one rated NCO)</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">2–3 hours</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">20–30 minutes</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">Scoring a squad's AFT (12 soldiers)</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">15–20 minutes</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">5 minutes</td>
+          </tr>
+          <tr style="background:var(--od-dark);">
+            <td style="padding:10px 12px; color:var(--white); border:1px solid var(--border);">Finding old counseling records</td>
+            <td style="padding:10px 12px; color:var(--tan-dark); border:1px solid var(--border);">Search email/drives</td>
+            <td style="padding:10px 12px; color:#4CAF50; font-weight:bold; border:1px solid var(--border);">Instant from My Saves</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pricing -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Pricing</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div style="border:1px solid var(--border); padding:20px;">
+          <div style="font-family:'Oswald',sans-serif; font-size:18px; letter-spacing:2px; color:var(--tan); margin-bottom:8px;">BASIC</div>
+          <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+            ✓ DA 4856 generator — unlimited<br>
+            ✓ NCOER bullet builder<br>
+            ✓ AFT scorer<br>
+            ✓ Soldier roster<br>
+            ✓ Save feature<br>
+            ✓ 10 AI generations/month
+          </div>
+        </div>
+        <div style="border:1px solid var(--tan); padding:20px; background:var(--od-dark);">
+          <div style="font-family:'Oswald',sans-serif; font-size:18px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">PREMIUM</div>
+          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan); margin-bottom:8px;">$8<span style="font-size:14px; color:var(--tan-dark);">/month</span></div>
+          <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+            ✓ Everything in Basic<br>
+            ✓ Unlimited AI generations<br>
+            ✓ NCOER Support Form Builder<br>
+            ✓ Awards Recommendation Writer<br>
+            ✓ Promotion Board Prep Tool<br>
+            ✓ Early access to new features
+          </div>
+          <button class="btn btn-primary" style="width:100%; margin-top:16px;" onclick="showUpgradeModal()">Upgrade to Premium</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Privacy & Security</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+        <p style="margin:0 0 8px 0;">✓ Not connected to Army systems, IPPS-A, EES, or any official Army network</p>
+        <p style="margin:0 0 8px 0;">✓ Accounts secured with bcrypt password hashing and 30-day session tokens</p>
+        <p style="margin:0 0 8px 0;">✓ Saved data accessible only by the account holder</p>
+        <p style="margin:0 0 8px 0;">✓ Do not enter classified or CUI information into the tool</p>
+        <p style="margin:0;">✓ Treat generated documents like any other administrative document — review before signing</p>
+      </div>
+    </div>
+
+    <!-- Coming soon -->
+    <div class="card">
+      <div class="card-title">Coming Soon</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+        <p style="margin:0 0 8px 0;">⚙️ NCOER Support Form Builder — AI-assisted, all six Army leadership attributes</p>
+        <p style="margin:0 0 8px 0;">⚙️ Promotion Board Prep Tool — question banks, self-quiz mode, weak area tracking</p>
+        <p style="margin:0;">⚙️ PWA — install NCO Kit on your phone home screen like a native app</p>
+      </div>
+    </div>
+
+    <!-- Contact -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title">Contact & Support</div>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.6; margin-bottom:16px;">Have a bug to report, a feature request, or just want to share feedback? Send us a message and we'll get back to you.</p>
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Your Name</label>
+          <input type="text" id="contact_name" placeholder="SSG Jones">
+        </div>
+        <div class="field">
+          <label>Your Email</label>
+          <input type="email" id="contact_email" placeholder="your@email.com">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label>Subject</label>
+        <select id="contact_subject">
+          <option value="">-- Select a subject --</option>
+          <option value="Bug Report">Bug Report</option>
+          <option value="Feature Request">Feature Request</option>
+          <option value="General Feedback">General Feedback</option>
+          <option value="Account Issue">Account Issue</option>
+          <option value="Billing Question">Billing Question</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Message</label>
+        <textarea id="contact_message" rows="5" placeholder="Describe your issue or feedback in detail..."></textarea>
+      </div>
+      <button class="btn btn-primary" id="contactBtn" onclick="submitContact()">Send Message</button>
+      <div id="contactSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;">✓ Message sent. We'll get back to you shortly.</div>
+      <div id="contactError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+
+  </div>
+
+  <!-- ===== SAVES PANEL ===== -->
+  <div class="panel" id="panel-saves">
+    <div class="section-header">
+      <div>
+        <div class="section-title">My Saves</div>
+        <div class="section-sub">Your saved counselings, bullets, AFT scores, and soldier roster</div>
+      </div>
+    </div>
+
+    <!-- Saves sub-tabs -->
+    <div style="display:flex; gap:2px; margin-bottom:24px; border-bottom:1px solid var(--border);">
+      <button class="tab active" id="saveSubCounseling" onclick="switchSavesTab('counselings', this)" style="font-size:12px; padding:8px 16px;">Counselings</button>
+      <button class="tab" id="saveSubBullets" onclick="switchSavesTab('bullets', this)" style="font-size:12px; padding:8px 16px;">Bullets</button>
+      <button class="tab" id="saveSubAwards" onclick="switchSavesTab('awards', this)" style="font-size:12px; padding:8px 16px;">Awards</button>
+      <button class="tab" id="saveSubAFT" onclick="switchSavesTab('aft', this)" style="font-size:12px; padding:8px 16px;">AFT Scores</button>
+      <button class="tab" id="saveSubSoldiers" onclick="switchSavesTab('soldiers', this)" style="font-size:12px; padding:8px 16px;">Soldiers</button>
+    </div>
+
+    <!-- Saved Counselings -->
+    <div id="saves-counselings">
+      <div class="empty-state" id="savedCounselingsEmpty" style="display:none">NO SAVED COUNSELINGS YET</div>
+      <div id="savedCounselingsList"></div>
+    </div>
+
+    <!-- Saved Bullets -->
+    <div id="saves-bullets" style="display:none">
+      <div class="empty-state" id="savedBulletsEmpty" style="display:none">NO SAVED BULLETS YET</div>
+      <div id="savedBulletsList"></div>
+    </div>
+
+    <!-- Saved Awards -->
+    <div id="saves-awards" style="display:none">
+      <div class="empty-state" id="savedAwardsEmpty" style="display:none">NO SAVED AWARD CITATIONS YET</div>
+      <div id="savedAwardsList"></div>
+    </div>
+
+    <!-- Saved AFT Scores -->
+    <div id="saves-aft" style="display:none">
+      <div class="empty-state" id="savedAFTEmpty" style="display:none">NO SAVED AFT SCORES YET</div>
+      <div id="savedAFTList"></div>
+    </div>
+
+    <!-- Saved Soldiers -->
+    <div id="saves-soldiers" style="display:none">
+      <div class="empty-state" id="savedSoldiersEmpty" style="display:none">NO SAVED SOLDIERS YET</div>
+      <div id="savedSoldiersList"></div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- SEO Content — keyword-rich static text for Google indexing -->
+<div style="max-width:900px; margin:48px auto; padding:0 24px 48px;">
+
+  <div style="border-top:1px solid #2a3a2a; padding-top:40px;">
+
+    <h2 style="font-family:'Oswald',sans-serif; font-size:22px; letter-spacing:3px; color:#C8B48A; margin-bottom:16px; text-transform:uppercase;">Army Administrative Tools for Enlisted Leaders</h2>
+    <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:#a08e65; line-height:1.8; margin-bottom:24px;">NCO Kit is a free AI-powered web application built for Army NCOs and enlisted leaders. It automates the most time-consuming administrative tasks in daily Army life — from writing NCOER evaluation bullets to generating DA Form 4856 developmental counseling forms. No installation required. Works on any device.</p>
+
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-bottom:32px;">
+
+      <div>
+        <h3 style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:2px; color:#C8B48A; margin-bottom:10px;">NCOER Bullet Builder</h3>
+        <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:#a08e65; line-height:1.7;">Generate Army-standard NCOER evaluation bullets by MOS. Describe what the soldier did in plain language and get properly formatted bullets for the Character, Presence, Intellect, Leads, Develops, and Achieves sections of the NCOER. Includes automatic category fit advisory based on AR 623-3 and FM 6-22.</p>
+      </div>
+
+      <div>
+        <h3 style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:2px; color:#C8B48A; margin-bottom:10px;">DA 4856 Counseling Generator</h3>
+        <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:#a08e65; line-height:1.7;">Generate DA Form 4856 developmental counseling forms with AI-enhanced language. Type rough notes and the AI rewrites them in proper Army regulatory language. Supports initial counseling, monthly performance counseling, event-oriented counseling, and corrective training. Generates a printable PDF.</p>
+      </div>
+
+      <div>
+        <h3 style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:2px; color:#C8B48A; margin-bottom:10px;">Army Fitness Test Score Calculator</h3>
+        <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:#a08e65; line-height:1.7;">Calculate AFT scores using the official Army Fitness Test scoring tables effective June 2025. Supports all five AFT events — 3-Rep Max Deadlift, Hand-Release Push-Up, Sprint-Drag-Carry, Plank, and Two-Mile Run. Covers all 10 age bands, male and female standards, combat MOS and general MOS standards, and all four alternate aerobic events for profiled soldiers.</p>
+      </div>
+
+      <div>
+        <h3 style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:2px; color:#C8B48A; margin-bottom:10px;">Awards Recommendation Writer</h3>
+        <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:#a08e65; line-height:1.7;">Generate Army award citation bullets and IPPSA-ready narrative citations for AAM, ARCOM, MSM, BSM, and LOM. Accomplishment bullets are ranked strongest first. Includes a strength score and specific advisory on how to improve the package for the award level. Grounded in AR 600-8-22.</p>
+      </div>
+
+    </div>
+
+    <p style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:#666; line-height:1.7; text-align:center;">NCO Kit is not affiliated with or endorsed by the Department of the Army. All content should be reviewed by the responsible leader before official use. Do not enter classified or CUI information.</p>
+
+  </div>
+
+</div>
+
+<script>
+  // STATE
+  let soldiers = [];
+  let counselingCount = 0;
+  let bulletCount = 0;
+
+  // TAB SWITCHING
+  function switchTab(name, el) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('panel-' + name).classList.add('active');
+    el.classList.add('active');
+    if (name === 'saves') {
+      switchSavesTab('counselings', document.getElementById('saveSubCounseling'));
+    }
+  }
+
+  // UPDATE STATS
+  function updateStats() {
+    document.getElementById('statSoldiers').textContent = soldiers.length;
+    document.getElementById('statCounselings').textContent = counselingCount;
+    document.getElementById('statBullets').textContent = bulletCount;
+    const overdue = soldiers.filter(s => s.status === 'overdue').length;
+    document.getElementById('statOverdue').textContent = overdue;
+  }
+
+  // SET TODAY'S DATE
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('c_date').value = today;
+
+  // COUNSELING TYPE → AUTO-FILL SUBJECT
+  function updatePurpose() {
+    const type = document.getElementById('c_type').value;
+    const subjects = {
+      initial: 'Initial Counseling',
+      performance: 'Monthly Performance Counseling',
+      event_positive: 'Commendable Performance',
+      event_negative: 'Substandard Performance / Corrective Training',
+      ncoer_support: 'NCOER Support Form Counseling',
+      profile: 'Profile / Physical Limitations Counseling',
+      custom: ''
+    };
+    if (subjects[type] !== undefined) {
+      document.getElementById('c_subject').value = subjects[type];
+    }
+  }
+
+  // AI COUNSELING ENHANCEMENT
+  const sectionDescriptions = {
+    situation: 'the background/situation section describing what occurred',
+    strengths: 'the strengths and commendable performance section',
+    improvement: 'the areas requiring improvement section',
+    plan_of_action: 'the plan of action and expected outcomes section',
+    leader_responsibilities: 'the leader responsibilities section'
+  };
+
+  async function enhanceField(fieldId, section, confirmId) {
+    const field = document.getElementById(fieldId);
+    const rawText = field.value.trim();
+    if (!rawText) { alert('Enter some notes in this field first.'); return; }
+    if (checkAnonLimit()) return;
+
+    const loader = document.getElementById('load_' + fieldId);
+    loader.style.display = 'inline';
+
+    const soldierName = document.getElementById('c_soldierName').value || 'the soldier';
+    const rank = document.getElementById('c_rank').value || '';
+    const counselingType = document.getElementById('c_type').value || 'general';
+
+    try {
+      const response = await fetch('/api/enhance-counseling', {
+        method: 'POST',
+        headers: getUsageHeaders(),
+        body: JSON.stringify({ rawText, section, soldierName, rank, counselingType })
+      });
+      const data = await response.json();
+      if (handleUsageResponse(response, data)) return;
+      if (data.error) throw new Error(data.error);
+      field.value = data.enhanced;
+    } catch (err) {
+      alert('AI enhancement failed: ' + err.message);
+    } finally {
+      loader.style.display = 'none';
+    }
+  }
+
+  async function enhanceAllAndGenerate() {
+    if (checkAnonLimit()) return;
+    const fields = [
+      { id: 'c_situation', section: 'situation' },
+      { id: 'c_strengths', section: 'strengths' },
+      { id: 'c_improve', section: 'improvement' },
+      { id: 'c_poa', section: 'plan_of_action' },
+      { id: 'c_leader', section: 'leader_responsibilities' }
+    ];
+
+    const soldierName = document.getElementById('c_soldierName').value || 'the soldier';
+    const rank = document.getElementById('c_rank').value || '';
+    const counselingType = document.getElementById('c_type').value || 'general';
+
+    document.getElementById('counselingAILoading').style.display = 'block';
+    document.getElementById('counselingAIError').style.display = 'none';
+
+    try {
+      for (const f of fields) {
+        const field = document.getElementById(f.id);
+        if (!field.value.trim()) continue;
+        const response = await fetch('/api/enhance-counseling', {
+          method: 'POST',
+          headers: getUsageHeaders(),
+          body: JSON.stringify({ rawText: field.value.trim(), section: f.section, soldierName, rank, counselingType })
+        });
+        const data = await response.json();
+        if (handleUsageResponse(response, data)) {
+          document.getElementById('counselingAILoading').style.display = 'none';
+          return;
         }
-        console.log(`User ${userId} upgraded to premium`);
+        if (data.error) throw new Error(data.error);
+        field.value = data.enhanced;
+      }
+      document.getElementById('counselingAILoading').style.display = 'none';
+      generatePDF();
+    } catch (err) {
+      document.getElementById('counselingAILoading').style.display = 'none';
+      document.getElementById('counselingAIError').style.display = 'block';
+      document.getElementById('counselingAIError').textContent = 'AI enhancement failed: ' + err.message;
+    }
+  }
+
+  // GENERATE PDF
+  async function generatePDF() {
+    const soldierName = document.getElementById('c_soldierName').value || '';
+    const rank = document.getElementById('c_rank').value || '';
+    const date = document.getElementById('c_date').value || today;
+    const unit = document.getElementById('c_unit').value || '';
+    const counselor = document.getElementById('c_counselor').value || '';
+    const counselorRank = document.getElementById('c_counselorRank').value || '';
+    const subject = document.getElementById('c_subject').value || '';
+    const situation = document.getElementById('c_situation').value || '';
+    const strengths = document.getElementById('c_strengths').value || '';
+    const improve = document.getElementById('c_improve').value || '';
+    const poa = document.getElementById('c_poa').value || '';
+    const leader = document.getElementById('c_leader').value || '';
+
+    if (!soldierName) { alert('Please enter the soldier name before generating.'); return; }
+
+    document.getElementById('counselingAILoading').style.display = 'block';
+    document.getElementById('counselingAILoading').textContent = 'GENERATING PDF...';
+    document.getElementById('counselingAIError').style.display = 'none';
+
+    try {
+      const response = await fetch('/api/generate-4856', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ soldierName, rank, date, unit, counselor, counselorRank, subject, situation, strengths, improve, poa, leader })
+      });
+
+      if (!response.ok) throw new Error('PDF generation failed');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+
+      // Open in new tab
+      const newTab = window.open(url, '_blank');
+
+      // Also trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `DA4856_${soldierName.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+      a.click();
+
+      document.getElementById('counselingAILoading').style.display = 'none';
+      document.getElementById('counselingCopyRow').style.display = 'flex';
+      counselingCount++;
+      updateStats();
+
+    } catch (err) {
+      document.getElementById('counselingAILoading').style.display = 'none';
+      document.getElementById('counselingAIError').style.display = 'block';
+      document.getElementById('counselingAIError').textContent = 'PDF generation failed: ' + err.message;
+    }
+  }
+
+  // GENERATE COUNSELING (legacy text output kept as fallback)
+  function generateCounseling() {
+    generatePDF();
+  }
+
+  function clearCounseling() {
+    ['c_soldierName','c_unit','c_counselor','c_subject','c_situation','c_strengths','c_improve','c_poa','c_leader'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('c_rank').value = '';
+    document.getElementById('c_counselorRank').value = '';
+    document.getElementById('c_type').value = '';
+    document.getElementById('c_date').value = today;
+    document.getElementById('counselingOutput').classList.remove('visible');
+    document.getElementById('counselingCopyRow').style.display = 'none';
+  }
+
+  function copyOutput(outputId, confirmId) {
+    const text = document.getElementById(outputId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const el = document.getElementById(confirmId);
+      el.classList.add('visible');
+      setTimeout(() => el.classList.remove('visible'), 2000);
+    });
+  }
+
+  // ROSTER
+  function toggleAddSoldier() {
+    const form = document.getElementById('addSoldierForm');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+  }
+
+  function addSoldier() {
+    const name = document.getElementById('r_name').value.trim();
+    if (!name) { alert('Name is required.'); return; }
+
+    const soldier = {
+      id: Date.now(),
+      name,
+      rank: document.getElementById('r_rank').value,
+      mos: document.getElementById('r_mos').value || '—',
+      lastCounseling: document.getElementById('r_lastCounseling').value || '—',
+      status: document.getElementById('r_status').value,
+      notes: document.getElementById('r_notes').value || '—'
+    };
+
+    soldiers.push(soldier);
+    renderRoster();
+    updateStats();
+    toggleAddSoldier();
+
+    ['r_name','r_mos','r_notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('r_lastCounseling').value = '';
+    document.getElementById('r_rank').value = 'SPC';
+    document.getElementById('r_status').value = 'current';
+  }
+
+  function removeSoldier(id) {
+    soldiers = soldiers.filter(s => s.id !== id);
+    renderRoster();
+    updateStats();
+  }
+
+  function renderRoster() {
+    const tbody = document.getElementById('rosterBody');
+    const table = document.getElementById('rosterTable');
+    const empty = document.getElementById('rosterEmpty');
+
+    if (soldiers.length === 0) {
+      table.style.display = 'none';
+      empty.style.display = 'block';
+      return;
+    }
+
+    table.style.display = 'table';
+    empty.style.display = 'none';
+
+    tbody.innerHTML = soldiers.map(s => {
+      const badgeClass = s.status === 'current' ? 'badge-green' : s.status === 'due' ? 'badge-yellow' : 'badge-red';
+      const badgeText = s.status === 'current' ? 'Current' : s.status === 'due' ? 'Due' : 'Overdue';
+      const lastDate = s.lastCounseling !== '—' ?
+        new Date(s.lastCounseling + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) :
+        '—';
+
+      return `<tr>
+        <td><strong>${s.name}</strong></td>
+        <td>${s.rank}</td>
+        <td>${s.mos}</td>
+        <td>${lastDate}</td>
+        <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+        <td style="font-size:12px; color: var(--tan-dark)">${s.notes}</td>
+        <td><button class="btn btn-danger" onclick="removeSoldier(${s.id})">Remove</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // BULLET BUILDER — AI POWERED
+  let loadingInterval = null;
+
+  async function buildBulletAI() {
+    const name = document.getElementById('b_name').value.trim() || 'Soldier';
+    const category = document.getElementById('b_category').value;
+    const action = document.getElementById('b_action').value.trim();
+    const impact = document.getElementById('b_impact').value.trim();
+    const count = document.getElementById('b_count').value;
+    const mos = document.getElementById('b_mos').value;
+
+    if (checkAnonLimit()) return;
+
+    // UI: loading state
+    document.getElementById('buildBtn').disabled = true;
+    document.getElementById('buildBtn').textContent = 'Generating...';
+    document.getElementById('bulletLoading').style.display = 'block';
+    document.getElementById('bulletError').style.display = 'none';
+
+    // Animate loading dots
+    const dots = ['GENERATING', 'GENERATING.', 'GENERATING..', 'GENERATING...'];
+    let di = 0;
+    loadingInterval = setInterval(() => {
+      document.getElementById('loadingDots').textContent = dots[di++ % dots.length];
+    }, 400);
+
+    try {
+      const response = await fetch('/api/bullets', {
+        method: 'POST',
+        headers: getUsageHeaders(),
+        body: JSON.stringify({ name, category, action, impact, count, mos })
+      });
+
+      const data = await response.json();
+      if (handleUsageResponse(response, data)) {
+        clearInterval(loadingInterval);
+        document.getElementById('bulletLoading').style.display = 'none';
+        document.getElementById('buildBtn').disabled = false;
+        document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+        return;
+      }
+      if (data.error) throw new Error(data.error);
+      const bullets = data.bullets;
+
+      clearInterval(loadingInterval);
+      document.getElementById('bulletLoading').style.display = 'none';
+      document.getElementById('buildBtn').disabled = false;
+      document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+
+      // Render result card
+      const container = document.getElementById('bulletsContainer');
+      const div = document.createElement('div');
+      div.className = 'card';
+      div.style.marginTop = '16px';
+      const cardId = 'bulletCard_' + Date.now();
+      div.id = cardId;
+      const saveBtn = currentUser ? '<button class="btn btn-secondary btn-sm" onclick="saveBullets(this, \'' + name + '\', \'' + category + '\')">💾 Save Bullets</button>' : '';
+      div.innerHTML = `
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center">
+          <span>${category.toUpperCase()} — ${name}</span>
+          <button class="btn btn-danger" onclick="this.closest('.card').remove(); bulletCount = Math.max(0, bulletCount-1); updateStats();">Remove</button>
+        </div>
+        <div class="bullet-output visible" id="bulletResult_${Date.now()}">
+          ${bullets.map(b => `<div class="bullet-line">${b}</div>`).join('')}
+        </div>
+        <div id="categoryAdvisory_${cardId}" style="display:none; margin-top:12px; padding:10px 14px; background:var(--od-dark); border-left:3px solid var(--tan); font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); line-height:1.6;"></div>
+        <div class="btn-row">
+          <button class="btn btn-secondary btn-sm" onclick="copyBullets(this)">Copy All Bullets</button>
+          ${saveBtn}
+        </div>
+      `;
+      container.prepend(div);
+
+      bulletCount++;
+      updateStats();
+
+      // Run category validation in background
+      checkCategoryFit(bullets, category, action, cardId);
+
+    } catch (err) {
+      clearInterval(loadingInterval);
+      document.getElementById('bulletLoading').style.display = 'none';
+      document.getElementById('buildBtn').disabled = false;
+      document.getElementById('buildBtn').textContent = '⚡ Generate AI Bullets';
+      document.getElementById('bulletError').style.display = 'block';
+      document.getElementById('bulletError').textContent = 'ERROR: Could not reach AI service. Check connection and try again. (' + err.message + ')';
+    }
+  }
+
+  async function checkCategoryFit(bullets, category, action, cardId) {
+    try {
+      const res = await fetch('/api/validate-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bullets, category, action })
+      });
+      const data = await res.json();
+      if (data.suggestion) {
+        const el = document.getElementById('categoryAdvisory_' + cardId);
+        if (el) {
+          el.innerHTML = '💡 ' + data.suggestion;
+          el.style.display = 'block';
+        }
+      }
+    } catch (e) {
+      // Silent fail — advisory is non-critical
+    }
+  }
+
+  function copyBullets(btn) {
+    const bullets = btn.closest('.card').querySelectorAll('.bullet-line');
+    const text = Array.from(bullets).map(b => '• ' + b.textContent.trim()).join('\n');
+    navigator.clipboard.writeText(text);
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = 'Copy All Bullets', 2000);
+  }
+
+  function clearBullets() {
+    ['b_name','b_action','b_impact'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('bulletError').style.display = 'none';
+  }
+
+  // AFT ALTERNATE EVENT TABLES (Go/No-Go cutoff times by age band - lower is better)
+  // Format: [M, F] per age band index 0-9
+  const ALT_TABLES = {
+    walk: ['31:00','34:00', '30:45','33:30', '30:30','33:00', '30:45','33:30', '31:00','34:00', '31:00','34:00', '32:00','35:00', '32:00','35:00', '33:00','36:00', '33:00','36:00'],
+    bike: ['26:25','28:58', '26:12','28:31', '26:00','28:07', '26:12','28:31', '26:25','28:58', '26:25','28:58', '27:16','29:50', '27:16','29:50', '28:07','30:41', '28:07','30:41'],
+    swim: ['30:48','33:48', '30:30','33:18', '30:20','32:48', '30:30','33:18', '30:48','33:48', '30:48','33:48', '31:48','34:48', '31:48','34:48', '32:50','35:48', '32:50','35:48'],
+    row:  ['30:48','33:48', '30:30','33:18', '30:20','32:48', '30:30','33:18', '30:48','33:48', '30:48','33:48', '31:48','34:48', '31:48','34:48', '32:50','35:48', '32:50','35:48'],
+  };
+
+  const ALT_LABELS = {
+    bike: '12K Bike (MM:SS)',
+    walk: '2.5 Mile Walk (MM:SS)',
+    swim: '1K Swim (MM:SS)',
+    row: '5K Rower (MM:SS)',
+  };
+
+  const ALT_PLACEHOLDERS = {
+    bike: 'e.g. 26:25',
+    walk: 'e.g. 31:00',
+    swim: 'e.g. 30:48',
+    row: 'e.g. 30:48',
+  };
+
+  function toggleAlternate() {
+    const val = document.getElementById('aft_alternate').value;
+    const tmrField = document.getElementById('tmr_field');
+    const altField = document.getElementById('alt_field');
+
+    if (val === 'no') {
+      tmrField.style.display = 'block';
+      altField.style.display = 'none';
+      document.getElementById('pts_alt').textContent = '— GO/NO-GO';
+    } else {
+      tmrField.style.display = 'none';
+      altField.style.display = 'block';
+      document.getElementById('alt_event_label').textContent = ALT_LABELS[val];
+      document.getElementById('aft_alt_time').placeholder = ALT_PLACEHOLDERS[val];
+    }
+    liveScore();
+  }
+
+  function scoreAlternate(timeStr, eventKey, age, sex) {
+    const table = ALT_TABLES[eventKey];
+    if (!table) return null;
+    const bandIdx = getAgeBandIndex(parseInt(age));
+    const colIdx = bandIdx * 2 + (sex === 'F' ? 1 : 0);
+    const cutoff = table[colIdx];
+    if (!cutoff) return null;
+
+    const inputSecs = timeToSeconds(timeStr);
+    const cutoffSecs = timeToSeconds(cutoff);
+    if (!inputSecs || !cutoffSecs) return null;
+
+    return { go: inputSecs <= cutoffSecs, cutoff };
+  }
+
+  function getAgeBandIndex(age) {
+    const bands = [21, 26, 31, 36, 41, 46, 51, 56, 61];
+    for (let i = 0; i < bands.length; i++) {
+      if (age <= bands[i]) return i;
+    }
+    return 9;
+  }
+
+  function timeToSeconds(t) {
+    if (!t || t === '---') return null;
+    const parts = t.split(':');
+    if (parts.length !== 2) return null;
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+  }
+
+  // AFT SCORER
+  let lastAFTResult = null;
+
+  async function liveScore() {
+    const age = document.getElementById('aft_age').value;
+    const sex = document.getElementById('aft_sex').value;
+    const standard = document.getElementById('aft_standard').value;
+    const mdl = document.getElementById('aft_mdl').value;
+    const hrp = document.getElementById('aft_hrp').value;
+    const sdc = document.getElementById('aft_sdc').value;
+    const plk = document.getElementById('aft_plk').value;
+    const alternate = document.getElementById('aft_alternate').value;
+    const tmr = alternate === 'no' ? document.getElementById('aft_tmr').value : '';
+    const altTime = alternate !== 'no' ? document.getElementById('aft_alt_time').value : '';
+
+    if (!age || !sex) return;
+    if (!mdl && !hrp && !sdc && !plk && !tmr && !altTime) return;
+
+    // Handle alternate event display
+    if (alternate !== 'no' && altTime) {
+      const altResult = scoreAlternate(altTime, alternate, age, sex);
+      if (altResult) {
+        const el = document.getElementById('pts_alt');
+        el.textContent = altResult.go ? `✓ GO (cutoff: ${altResult.cutoff})` : `✗ NO-GO (cutoff: ${altResult.cutoff})`;
+        el.style.color = altResult.go ? '#4CAF50' : '#f44336';
       }
     }
-    if (event.type === 'customer.subscription.deleted') {
-      const subscription = event.data.object;
-      await pool.query(
-        'UPDATE users SET plan = $1, stripe_subscription_id = NULL, updated_at = NOW() WHERE stripe_subscription_id = $2',
-        ['free', subscription.id]
-      );
-      console.log(`Subscription ${subscription.id} cancelled`);
-    }
-    if (event.type === 'invoice.payment_failed') {
-      console.log(`Payment failed for customer ${event.data.object.customer}`);
-    }
-  } catch (err) {
-    console.error('Webhook processing error:', err);
-  }
-  res.json({ received: true });
-});
 
-// Body size limit — 10kb max
-app.use(express.json({ limit: '10kb' }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
-
-// Clean up expired sessions periodically
-async function cleanupSessions() {
-  try {
-    const result = await pool.query('DELETE FROM sessions WHERE expires_at < NOW()');
-    if (result.rowCount > 0) console.log(`Cleaned up ${result.rowCount} expired sessions`);
-  } catch (err) {
-    console.error('Session cleanup error:', err.message);
-  }
-}
-
-
-// Email via Resend REST API - no SDK needed
-async function sendEmail(to, subject, html) {
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
-    },
-    body: JSON.stringify({ from: 'NCO Kit <noreply@ncokit.com>', to, subject, html })
-  });
-  const data = await response.json();
-  console.log('Resend response:', JSON.stringify(data));
-  if (!response.ok) throw new Error(`Email failed: ${JSON.stringify(data)}`);
-  return data;
-}
-
-function generateToken(length = 32) {
-  return crypto.randomBytes(length).toString('hex');
-}
-
-function generateReferralCode() {
-  return crypto.randomBytes(4).toString('hex').toUpperCase();
-}
-
-async function getUserFromSession(req) {
-  const token = req.headers['authorization']?.replace('Bearer ', '');
-  if (!token) return null;
-  const result = await pool.query(
-    `SELECT u.id, u.email, u.plan, u.verified, u.referral_code, u.referred_by,
-            u.stripe_customer_id, u.stripe_subscription_id, u.bullets_used_this_month,
-            u.bullets_reset_date, u.free_months_earned, u.free_months_used
-     FROM users u JOIN sessions s ON s.user_id = u.id
-     WHERE s.token = $1 AND s.expires_at > NOW()`,
-    [token]
-  );
-  return result.rows[0] || null;
-}
-
-async function sendVerificationEmail(email, token) {
-  const verifyUrl = `https://ncokit.com/verify?token=${token}`;
-  await sendEmail(email, 'Verify your NCO Kit account', `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
-      <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
-      <h2 style="color:#F4F1EA;">Verify Your Email</h2>
-      <p style="color:#a08e65;font-size:14px;line-height:1.6;">Click below to verify your email and activate your account.</p>
-      <a href="${verifyUrl}" style="display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Verify Email</a>
-      <p style="color:#666;font-size:12px;">This link expires in 24 hours.</p>
-      <p style="color:#666;font-size:11px;">Or copy: ${verifyUrl}</p>
-    </div>
-  `);
-}
-
-async function sendPasswordResetEmail(email, token) {
-  const resetUrl = `https://ncokit.com/reset-password?token=${token}`;
-  await sendEmail(email, 'Reset your NCO Kit password', `
-    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
-      <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
-      <h2 style="color:#F4F1EA;">Reset Your Password</h2>
-      <p style="color:#a08e65;font-size:14px;line-height:1.6;">Click below to reset your password. Expires in 1 hour.</p>
-      <a href="${resetUrl}" style="display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Reset Password</a>
-      <p style="color:#666;font-size:12px;">If you didn't request this, ignore this email.</p>
-    </div>
-  `);
-}
-
-// ── ROUTES ────────────────────────────────────────────────────────────────────
-
-app.get('/health', (req, res) => res.json({ status: 'online' }));
-
-// SEO
-app.get('/robots.txt', (req, res) => {
-  res.type('text/plain');
-  res.send(`User-agent: *\nAllow: /\nSitemap: https://ncokit.com/sitemap.xml`);
-});
-
-app.get('/sitemap.xml', (req, res) => {
-  res.type('application/xml');
-  res.send(`<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>https://ncokit.com</loc>
-    <lastmod>${new Date().toISOString().split('T')[0]}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-</urlset>`);
-});
-
-app.post('/api/auth/register', authLimiter, async (req, res) => {
-  const { email, password, referredBy } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
-  try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (existing.rows.length > 0) return res.status(400).json({ error: 'An account with this email already exists' });
-    const passwordHash = await bcrypt.hash(password, 12);
-    const verificationToken = generateToken();
-    const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    const referralCode = generateReferralCode();
-    let validReferredBy = null;
-    if (referredBy) {
-      const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referredBy.toUpperCase()]);
-      if (referrer.rows.length > 0) validReferredBy = referredBy.toUpperCase();
-    }
-    await pool.query(
-      `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, referralCode, validReferredBy]
-    );
     try {
-      await sendVerificationEmail(email.toLowerCase(), verificationToken);
-    } catch (emailErr) {
-      console.error('Verification email failed:', emailErr.message);
-    }
-    res.json({ success: true, message: 'Account created. Check your email to verify your account.' });
-  } catch (err) {
-    console.error('Register error:', err);
-    res.status(500).json({ error: 'Registration failed. Please try again.' });
-  }
-});
+      const response = await fetch('/api/aft-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ age, sex, standard, mdl, hrp, sdc, plk, tmr })
+      });
+      const data = await response.json();
+      if (data.error) return;
 
-app.post('/api/auth/verify', async (req, res) => {
-  const { token } = req.body;
-  if (!token) return res.status(400).json({ error: 'Token required' });
-  try {
-    const result = await pool.query(
-      'SELECT id FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
-      [token]
-    );
-    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired verification link' });
-    await pool.query('UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = $1', [result.rows[0].id]);
-    res.json({ success: true, message: 'Email verified. You can now log in.' });
-  } catch (err) {
-    console.error('Verify error:', err);
-    res.status(500).json({ error: 'Verification failed' });
-  }
-});
+      lastAFTResult = data;
+      lastAFTResult.alternate = alternate;
+      lastAFTResult.altTime = altTime;
 
-app.post('/api/auth/login', authLimiter, async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-  try {
-    const result = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    const user = result.rows[0];
-    if (!user) return res.status(401).json({ error: 'Invalid email or password' });
-    if (!user.verified) return res.status(401).json({ error: 'Please verify your email before logging in', needsVerification: true });
-    const passwordMatch = await bcrypt.compare(password, user.password_hash);
-    if (!passwordMatch) return res.status(401).json({ error: 'Invalid email or password' });
-    const sessionToken = generateToken();
-    const sessionExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await pool.query('INSERT INTO sessions (user_id, token, expires_at) VALUES ($1, $2, $3)', [user.id, sessionToken, sessionExpires]);
-    res.json({
-      success: true,
-      token: sessionToken,
-      user: { id: user.id, email: user.email, plan: user.plan, referralCode: user.referral_code, bulletsUsed: user.bullets_used_this_month }
+      const events = ['mdl','hrp','sdc','plk','tmr'];
+      events.forEach(ev => {
+        const el = document.getElementById('pts_' + ev);
+        if (!el) return;
+        const pts = data.scores[ev];
+        if (pts !== undefined && ev !== 'tmr' || (ev === 'tmr' && alternate === 'no')) {
+          el.textContent = pts + ' pts';
+          el.style.color = pts >= 60 ? '#4CAF50' : '#f44336';
+        }
+      });
+
+      // For alternate events, check alt go/no-go for overall pass
+      let altGo = true;
+      if (alternate !== 'no' && altTime) {
+        const altResult = scoreAlternate(altTime, alternate, age, sex);
+        altGo = altResult ? altResult.go : false;
+      }
+
+      // Recalculate pass considering alternate
+      const altOverallPass = alternate !== 'no'
+        ? data.eventPass && altGo && data.total >= data.minTotal
+        : data.overallPass;
+
+      document.getElementById('aft_score_display').style.display = 'block';
+      document.getElementById('aft_total_display').textContent = data.total;
+      const badge = document.getElementById('aft_result_badge');
+      const detail = document.getElementById('aft_result_detail');
+
+      if (altOverallPass) {
+        badge.textContent = 'GO';
+        badge.style.color = '#4CAF50';
+        badge.style.borderColor = '#4CAF50';
+        detail.textContent = `All events passed | Total meets ${standard === 'combat' ? 'Combat (350)' : 'General (300)'} standard${alternate !== 'no' ? ' | Alternate: GO' : ''}`;
+      } else {
+        badge.textContent = 'NO-GO';
+        badge.style.color = '#f44336';
+        badge.style.borderColor = '#f44336';
+        const reasons = [];
+        if (!data.eventPass) reasons.push('one or more events below 60 pts');
+        if (!data.totalPass) reasons.push(`total below ${data.minTotal}`);
+        if (alternate !== 'no' && !altGo) reasons.push('alternate event no-go');
+        detail.textContent = 'Failed: ' + reasons.join(', ');
+      }
+
+    } catch (err) {}
+  }
+
+  async function generateDA705() {}
+
+  function clearAFT() {
+    ['aft_name','aft_age','aft_unit','aft_mos','aft_date','aft_mdl','aft_hrp','aft_sdc','aft_plk','aft_tmr','aft_alt_time'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
     });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ error: 'Login failed. Please try again.' });
-  }
-});
-
-app.post('/api/auth/logout', async (req, res) => {
-  const token = req.headers['authorization']?.replace('Bearer ', '');
-  if (token) await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
-  res.json({ success: true });
-});
-
-app.get('/api/auth/me', async (req, res) => {
-  try {
-    const user = await getUserFromSession(req);
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
-    res.json({ id: user.id, email: user.email, plan: user.plan, referralCode: user.referral_code, bulletsUsed: user.bullets_used_this_month, verified: user.verified });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to get user' });
-  }
-});
-
-app.post('/api/auth/forgot-password', authLimiter, async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email required' });
-  try {
-    const result = await pool.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (result.rows.length > 0) {
-      const resetToken = generateToken();
-      const resetExpires = new Date(Date.now() + 60 * 60 * 1000);
-      await pool.query('UPDATE users SET reset_token = $1, reset_expires = $2 WHERE email = $3', [resetToken, resetExpires, email.toLowerCase()]);
-      await sendPasswordResetEmail(email.toLowerCase(), resetToken);
-    }
-    res.json({ success: true, message: 'If an account exists with that email, a reset link has been sent.' });
-  } catch (err) {
-    console.error('Forgot password error:', err);
-    res.status(500).json({ error: 'Failed to process request' });
-  }
-});
-
-app.post('/api/auth/reset-password', async (req, res) => {
-  const { token, password } = req.body;
-  if (!token || !password) return res.status(400).json({ error: 'Token and password required' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-  try {
-    const result = await pool.query('SELECT id FROM users WHERE reset_token = $1 AND reset_expires > NOW()', [token]);
-    if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired reset link' });
-    const passwordHash = await bcrypt.hash(password, 12);
-    await pool.query('UPDATE users SET password_hash = $1, reset_token = NULL, reset_expires = NULL WHERE id = $2', [passwordHash, result.rows[0].id]);
-    await pool.query('DELETE FROM sessions WHERE user_id = $1', [result.rows[0].id]);
-    res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
-  } catch (err) {
-    console.error('Reset password error:', err);
-    res.status(500).json({ error: 'Password reset failed' });
-  }
-});
-
-app.post('/api/auth/resend-verification', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.status(400).json({ error: 'Email required' });
-  try {
-    const result = await pool.query('SELECT id FROM users WHERE email = $1 AND verified = FALSE', [email.toLowerCase()]);
-    if (result.rows.length > 0) {
-      const verificationToken = generateToken();
-      const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      await pool.query('UPDATE users SET verification_token = $1, verification_expires = $2 WHERE email = $3', [verificationToken, verificationExpires, email.toLowerCase()]);
-      await sendVerificationEmail(email.toLowerCase(), verificationToken);
-    }
-    res.json({ success: true, message: 'Verification email sent if account exists.' });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to resend verification' });
-  }
-});
-
-// ── USAGE LIMITS ──────────────────────────────────────────────────────────────
-// Anonymous: 3 lifetime (localStorage on client)
-// Free account: 10/month tracked in DB
-// Premium: unlimited
-
-async function checkUsageLimit(req, res, next) {
-  const user = await getUserFromSession(req);
-
-  if (!user) {
-    const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
-    if (anonCount >= 3) {
-      return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
-    }
-    return next();
-  }
-
-  if (user.plan === 'premium') return next();
-
-  const now = new Date();
-  const resetDate = new Date(user.bullets_reset_date);
-  const needsReset = now.getFullYear() > resetDate.getFullYear() ||
-    now.getMonth() > resetDate.getMonth();
-
-  if (needsReset) {
-    await pool.query(
-      'UPDATE users SET bullets_used_this_month = 0, counseling_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
-      [user.id]
-    );
-    user.bullets_used_this_month = 0;
-    user.counseling_used_this_month = 0;
-  }
-
-  if (user.bullets_used_this_month >= 10) {
-    return res.status(403).json({ error: 'limit_reached', limitType: 'free', used: user.bullets_used_this_month, limit: 10 });
-  }
-
-  await pool.query(
-    'UPDATE users SET bullets_used_this_month = bullets_used_this_month + 1 WHERE id = $1',
-    [user.id]
-  );
-
-  next();
-}
-
-async function checkCounselingLimit(req, res, next) {
-  const user = await getUserFromSession(req);
-
-  if (!user) {
-    const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
-    if (anonCount >= 3) {
-      return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
-    }
-    return next();
-  }
-
-  if (user.plan === 'premium') return next();
-
-  const now = new Date();
-  const resetDate = new Date(user.bullets_reset_date);
-  const needsReset = now.getFullYear() > resetDate.getFullYear() ||
-    now.getMonth() > resetDate.getMonth();
-
-  if (needsReset) {
-    await pool.query(
-      'UPDATE users SET bullets_used_this_month = 0, counseling_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
-      [user.id]
-    );
-    user.counseling_used_this_month = 0;
-  }
-
-  if ((user.counseling_used_this_month || 0) >= 5) {
-    return res.status(403).json({ error: 'limit_reached', limitType: 'counseling', used: user.counseling_used_this_month, limit: 5 });
-  }
-
-  await pool.query(
-    'UPDATE users SET counseling_used_this_month = counseling_used_this_month + 1 WHERE id = $1',
-    [user.id]
-  );
-
-  next();
-}
-
-app.post('/api/enhance-counseling', aiLimiter, checkCounselingLimit, async (req, res) => {
-  const { rawText, section, soldierName, rank, counselingType } = req.body;
-  if (!rawText) return res.status(400).json({ error: 'Text is required.' });
-  const sectionContext = {
-    situation: 'the Background Information / Purpose of Counseling section',
-    strengths: 'the Strengths and Commendable Performance section',
-    improvement: 'the Areas Requiring Improvement section',
-    plan_of_action: 'the Plan of Action section',
-    leader_responsibilities: 'the Leader Responsibilities section'
-  };
-  const prompt = `You are an expert Army NCO writer specializing in DA Form 4856. Rewrite the following rough notes into professional Army regulatory language for ${sectionContext[section] || 'a DA 4856'}.\n\nSoldier: ${rank} ${soldierName}\nCounseling Type: ${counselingType}\nRaw Notes: ${rawText}\n\nRules: Write in third person. Professional Army language. No bullet points. No headers. Output ONLY the rewritten text.`;
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
+    ['mdl','hrp','sdc','plk','tmr'].forEach(ev => {
+      const el = document.getElementById('pts_' + ev);
+      if (el) { el.textContent = '— pts'; el.style.color = 'var(--tan)'; }
     });
-    const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
-    res.json({ enhanced: data.content.map(i => i.text || '').join('').trim() });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to reach AI service.' });
+    document.getElementById('aft_alternate').value = 'no';
+    document.getElementById('tmr_field').style.display = 'block';
+    document.getElementById('alt_field').style.display = 'none';
+    document.getElementById('pts_alt').textContent = '— GO/NO-GO';
+    const scoreDisplay = document.getElementById('aft_score_display');
+    if (scoreDisplay) scoreDisplay.style.display = 'none';
+    lastAFTResult = null;
   }
-});
 
-app.post('/api/generate-4856', (req, res) => {
-  const { soldierName, rank, date, unit, counselor, counselorRank, subject, situation, strengths, improve, poa, leader } = req.body;
-  const doc = new PDFDocument({ margin: 40, size: 'letter' });
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="DA4856_${(soldierName || 'counseling').replace(/[^a-z0-9]/gi, '_')}.pdf"`);
-  doc.pipe(res);
-  const W = 595 - 80, L = 40;
-  const formattedDate = date ? new Date(date + 'T12:00:00').toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' }) : '___________________';
-  const box = (x, y, w, h) => doc.rect(x, y, w, h).stroke();
-  const label = (text, x, y, opts = {}) => doc.fontSize(6.5).font('Helvetica').fillColor('#000').text(text, x, y, { ...opts, lineBreak: false });
-  const field = (text, x, y, w, opts = {}) => doc.fontSize(9).font('Helvetica').fillColor('#000').text(text || '', x, y, { width: w, ...opts });
-  const sHdr = (text, x, y, w) => { doc.rect(x, y, w, 14).fillAndStroke('#000', '#000'); doc.fontSize(8).font('Helvetica-Bold').fillColor('#fff').text(text, x + 4, y + 3, { lineBreak: false }); doc.fillColor('#000'); };
-  let y = 40;
-  doc.fontSize(10).font('Helvetica-Bold').text('DEVELOPMENTAL COUNSELING FORM', L, y, { align: 'center', width: W }); y += 24;
-  sHdr('PART I - ADMINISTRATIVE DATA', L, y, W); y += 16;
-  box(L, y, W*.45, 28); box(L+W*.45, y, W*.25, 28); box(L+W*.70, y, W*.30, 28);
-  label('Name (Last, First, MI)', L+3, y+2); label('Rank/Grade', L+W*.45+3, y+2); label('Date of Counseling', L+W*.70+3, y+2);
-  field(soldierName||'', L+3, y+12, W*.45-6); field(rank||'', L+W*.45+3, y+12, W*.25-6); field(formattedDate, L+W*.70+3, y+12, W*.30-6); y += 28;
-  box(L, y, W*.45, 28); box(L+W*.45, y, W*.30, 28); box(L+W*.75, y, W*.25, 28);
-  label('Organization', L+3, y+2); label('Name and Title of Counselor', L+W*.45+3, y+2); label('Counselor Rank', L+W*.75+3, y+2);
-  field(unit||'', L+3, y+12, W*.45-6); field(counselor||'', L+W*.45+3, y+12, W*.30-6); field(counselorRank||'', L+W*.75+3, y+12, W*.25-6); y += 28;
-  sHdr('PART II - BACKGROUND INFORMATION', L, y, W); y += 16;
-  box(L, y, W, 24); label('Purpose of Counseling', L+3, y+2); field(subject||'', L+3, y+13, W-6); y += 24;
-  const sitH = Math.min(Math.max(Math.ceil((situation||'').length/90)*13, 60), 130);
-  box(L, y, W, sitH); label('Key Facts / Background', L+3, y+2); doc.fontSize(8.5).font('Helvetica').text(situation||'', L+3, y+13, { width: W-6, height: sitH-16 }); y += sitH;
-  sHdr('PART III - SUMMARY OF COUNSELING', L, y, W); y += 16;
-  if (strengths) { const h=Math.min(Math.max(Math.ceil(strengths.length/90)*13,45),100); box(L,y,W,h); label('STRENGTHS',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(strengths,L+3,y+13,{width:W-6,height:h-16}); y+=h; }
-  if (improve) { const h=Math.min(Math.max(Math.ceil(improve.length/90)*13,45),100); box(L,y,W,h); label('AREAS REQUIRING IMPROVEMENT',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(improve,L+3,y+13,{width:W-6,height:h-16}); y+=h; }
-  const poaH=Math.min(Math.max(Math.ceil((poa||'').length/90)*13,60),120); box(L,y,W,poaH); label('Plan of Action',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(poa||'',L+3,y+13,{width:W-6,height:poaH-16}); y+=poaH;
-  const ldrH=Math.min(Math.max(Math.ceil((leader||'').length/90)*13,50),100); box(L,y,W,ldrH); label('Leader Responsibilities',L+3,y+2); doc.fontSize(8.5).font('Helvetica').text(leader||'',L+3,y+13,{width:W-6,height:ldrH-16}); y+=ldrH;
-  if(y>680){doc.addPage();y=40;}
-  sHdr('PART IV - ASSESSMENT', L, y, W); y+=16;
-  box(L,y,W,50); label('[ ] Plan of Action was/was not accomplished.',L+3,y+6); label('Follow-up required: [ ] Yes  [ ] No',L+3,y+18); label('Date of next counseling: _______________',L+3,y+30); y+=54;
-  sHdr('SIGNATURES', L, y, W); y+=16;
-  box(L,y,W,45); label('INDIVIDUAL COUNSELED — [ ] I agree  [ ] I disagree',L+3,y+2); label('Signature: ________________________________',L+3,y+14); label('Date: ________________',L+W*.6,y+14); y+=45;
-  box(L,y,W,40); label('LEADER/COUNSELOR',L+3,y+2); label('Signature: ________________________________',L+3,y+14); label('Date: ________________',L+W*.6,y+14); label(`${counselorRank||''} ${counselor||''}`,L+3,y+28); y+=44;
-  doc.fontSize(6).font('Helvetica').fillColor('#666').text('DA FORM 4856 | Generated by NCO Kit — ncokit.com | Review before official use', L, y, { width: W, align: 'center' });
-  doc.end();
-});
+  async function submitContact() {
+    const name = document.getElementById('contact_name').value.trim();
+    const email = document.getElementById('contact_email').value.trim();
+    const subject = document.getElementById('contact_subject').value;
+    const message = document.getElementById('contact_message').value.trim();
+    const btn = document.getElementById('contactBtn');
+    const sucEl = document.getElementById('contactSuccess');
+    const errEl = document.getElementById('contactError');
 
-app.post('/api/bullets', aiLimiter, checkUsageLimit, async (req, res) => {
-  const { name, category, action, impact, count, mos } = req.body;
-  if (!action) return res.status(400).json({ error: 'Action field is required.' });
+    sucEl.style.display = 'none';
+    errEl.style.display = 'none';
 
-  const mosContext = {
-    '11B': 'Infantryman. Focuses on direct combat operations, small unit tactics, physical readiness, weapons proficiency, and leading soldiers in austere environments.',
-    '11C': 'Indirect Fire Infantryman. Focuses on indirect fire support, crew-served weapons, fire mission execution, and supporting maneuver elements.',
-    '12B': 'Combat Engineer. Focuses on mobility, countermobility, survivability operations, demolitions, route clearance, and construction support.',
-    '13B': 'Cannon Crewmember. Focuses on artillery fire support, howitzer operations, crew drills, ammunition handling, and fire mission execution.',
-    '13F': 'Fire Support Specialist. Focuses on coordinating fire support, calling for fires, target acquisition, and integrating combined arms effects.',
-    '15W': 'UAS Operator. Focuses on unmanned aircraft operations, reconnaissance missions, sensor employment, and providing ISR support to ground forces.',
-    '17C': 'Cyber Operations Specialist. Focuses on cyberspace operations, network defense, vulnerability assessment, and supporting information operations.',
-    '19D': 'Cavalry Scout. Focuses on reconnaissance, surveillance, target acquisition, screen operations, and providing battlefield intelligence.',
-    '19K': 'M1 Armor Crewman. Focuses on tank gunnery, crew proficiency, maneuver operations, and combined arms integration.',
-    '25B': 'IT Specialist. Focuses on network administration, information systems maintenance, cybersecurity, and ensuring communications readiness.',
-    '25U': 'Signal Support Systems Specialist. Focuses on communications systems installation, maintenance, and ensuring signal support across the formation.',
-    '31B': 'Military Police. Focuses on law enforcement, force protection, area security, detainee operations, and maintaining good order and discipline.',
-    '35F': 'Intelligence Analyst. Focuses on all-source intelligence analysis, intelligence preparation of the battlefield, and providing decision-quality intelligence products.',
-    '35M': 'HUMINT Collector. Focuses on human intelligence collection, source operations, debriefings, and supporting commander intelligence requirements.',
-    '36B': 'Financial Management Technician. Focuses on finance operations, pay support, vendor payments, and ensuring financial accountability.',
-    '37F': 'PSYOP Specialist. Focuses on psychological operations planning, target audience analysis, influence activities, and supporting information operations.',
-    '38B': 'Civil Affairs Specialist. Focuses on civil-military operations, engagement with local populations and governments, and minimizing civilian impacts.',
-    '42A': 'Human Resources Specialist. Focuses on personnel actions, strength management, casualty operations, evaluations, and awards processing.',
-    '42T': 'Talent Acquisition Specialist. Focuses on Army recruiting, mission accomplishment, community engagement, and identifying qualified applicants.',
-    '68W': 'Combat Medic. Focuses on trauma care, medical readiness, preventive medicine, soldier health, and casualty management.',
-    '74D': 'CBRN Specialist. Focuses on chemical, biological, radiological, and nuclear defense operations, detection, and decontamination.',
-    '79S': 'Career Counselor. Focuses on soldier retention, career development counseling, reenlistment operations, and force shaping.',
-    '88M': 'Motor Transport Operator. Focuses on convoy operations, vehicle operations, load planning, and sustainment movement.',
-    '89B': 'Ammunition Specialist. Focuses on ammunition accountability, storage operations, explosives safety, and supporting unit ammunition requirements.',
-    '91B': 'Wheeled Vehicle Mechanic. Focuses on vehicle maintenance, diagnostics, repair operations, and ensuring fleet readiness.',
-    '92A': 'Automated Logistical Specialist. Focuses on supply operations, property accountability, stock control, and sustainment support.',
-    '92F': 'Petroleum Supply Specialist. Focuses on bulk fuel operations, fuel accountability, and ensuring petroleum support to the force.',
-    '92G': 'Culinary Specialist. Focuses on food service operations, field feeding, nutritional support, and maintaining food safety standards.',
-    '92Y': 'Unit Supply Specialist. Focuses on supply room operations, property accountability, equipment readiness, and logistical support.',
-  };
-
-  const mosInfo = mos && mosContext[mos] ? `\nSoldier's Role Context: ${mosContext[mos]}` : '';
-  const mosLabel = mos ? ` (${mos})` : '';
-
-  const prompt = `You are an expert Army NCO who writes exceptional NCOER evaluation bullets. Your bullets are concise, action-oriented, and follow Army writing standards.${mosInfo}
-
-Generate exactly ${count||3} NCOER bullet(s) for the "${category}" section of an NCOER.
-
-Soldier: ${name||'Soldier'}${mosLabel}
-What they did: ${action}
-${impact?`Metrics/Impact: ${impact}`:''}
-
-Rules:
-- Start with a strong action verb appropriate to the soldier's role
-- Use the MOS context to frame accomplishments correctly — but avoid MOS-specific jargon or acronyms
-- Write clean, readable Army language that any promotion board member can understand
-- Be specific and measurable where possible
-- Use third person — never use "I"
-- Each bullet should be one sentence, punchy and direct
-- Do NOT use the soldier's name in the bullet
-- Format: action verb + what + result/impact
-- Keep each bullet under 175 characters
-- Do NOT number the bullets or add bullet symbols
-
-Respond with ONLY the bullets, one per line, nothing else.`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
-    });
-    const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
-    const bullets = data.content.map(i=>i.text||'').join('').trim().split('\n').map(b=>b.trim()).filter(b=>b.length>0);
-    res.json({ bullets });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to reach AI service.' });
-  }
-});
-
-app.post('/api/aft-score', (req, res) => {
-  try {
-    res.json(calculateAFT(req.body));
-  } catch (err) {
-    res.status(500).json({ error: 'Score calculation failed: ' + err.message });
-  }
-});
-
-// ── STRIPE ENDPOINTS ──────────────────────────────────────────────────────────
-
-app.post('/api/stripe/create-checkout', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  if (user.plan === 'premium') return res.status(400).json({ error: 'Already premium' });
-
-  try {
-    let discounts = [];
-    if (user.referred_by && !user.stripe_customer_id) {
-      const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
-      discounts = [{ coupon: coupon.id }];
+    if (!name || !email || !subject || !message) {
+      errEl.textContent = 'Please fill out all fields.';
+      errEl.style.display = 'block';
+      return;
     }
 
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
-      mode: 'subscription',
-      customer_email: user.email,
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
-      discounts,
-      metadata: { userId: user.id },
-      success_url: 'https://ncokit.com/?upgraded=true',
-      cancel_url: 'https://ncokit.com/?upgrade=cancelled',
-    });
+    btn.textContent = 'Sending...';
+    btn.disabled = true;
 
-    res.json({ url: session.url });
-  } catch (err) {
-    console.error('Checkout error:', err);
-    res.status(500).json({ error: 'Failed to create checkout session' });
-  }
-});
-
-app.post('/api/stripe/portal', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  if (!user.stripe_customer_id) return res.status(400).json({ error: 'No subscription found' });
-
-  try {
-    const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripe_customer_id,
-      return_url: 'https://ncokit.com/',
-    });
-    res.json({ url: session.url });
-  } catch (err) {
-    console.error('Portal error:', err);
-    res.status(500).json({ error: 'Failed to open billing portal' });
-  }
-});
-
-// Awards Recommendation Writer
-app.post('/api/awards', aiLimiter, checkUsageLimit, async (req, res) => {
-  const { soldierName, rank, unit, awardLevel, period, accomplishments } = req.body;
-  if (!accomplishments || !awardLevel) return res.status(400).json({ error: 'Award level and accomplishments are required.' });
-
-  const awardGuidance = {
-    'AAM': {
-      name: 'Army Achievement Medal',
-      charLimit: 500,
-      standard: 'Recognize specific short-term accomplishments. Language should be clear and direct. Quantify impact where possible. One strong paragraph.',
-      threshold: 'Local level impact. Section/platoon level accomplishments. Technical proficiency or single notable achievement.'
-    },
-    'ARCOM': {
-      name: 'Army Commendation Medal',
-      charLimit: 640,
-      standard: 'Recognize sustained superior performance or a specific achievement of significant merit. Should demonstrate clear impact beyond immediate section. Numbers and metrics are critical.',
-      threshold: 'Company/battalion level impact. Leadership demonstrated. Measurable results. Sustained performance over time.'
-    },
-    'MSM': {
-      name: 'Meritorious Service Medal',
-      charLimit: 750,
-      standard: 'Recognize outstanding meritorious service or achievement. Language must reflect senior NCO/officer-level responsibility and impact. Must demonstrate organizational-level results.',
-      threshold: 'Battalion/brigade level impact. Significant leadership responsibilities. Exceptional results that elevated unit readiness or capability.'
-    },
-    'BSM': {
-      name: 'Bronze Star Medal',
-      charLimit: 750,
-      standard: 'Recognize heroic or meritorious achievement or service in connection with military operations against an armed enemy OR meritorious service in a combat zone. Must clearly establish merit.',
-      threshold: 'Combat zone service or operations against armed enemy. Exceptional performance under adverse conditions. Life-safety or mission-critical impact.'
-    },
-    'LOM': {
-      name: 'Legion of Merit',
-      charLimit: 900,
-      standard: 'Recognize exceptionally meritorious conduct in the performance of outstanding services. Language must reflect senior leadership, strategic impact, and lasting organizational improvement.',
-      threshold: 'Brigade/division level impact. Senior leadership positions. Strategic contributions. Lasting improvements to Army readiness or capability.'
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, subject, message })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send');
+      sucEl.style.display = 'block';
+      document.getElementById('contact_name').value = '';
+      document.getElementById('contact_email').value = '';
+      document.getElementById('contact_subject').value = '';
+      document.getElementById('contact_message').value = '';
+    } catch (e) {
+      errEl.textContent = 'Failed to send. Please try again.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.textContent = 'Send Message';
+      btn.disabled = false;
     }
-  };
+  }
 
-  const award = awardGuidance[awardLevel];
+  // ── THEME TOGGLE ──────────────────────────────────────────────────────────────
 
-  const prompt = `You are an expert Army awards writer with deep knowledge of AR 600-8-22 (Military Awards) and Army writing standards. You write award packages that get approved.
+  function toggleTheme() {
+    const body = document.body;
+    const btn = document.getElementById('themeToggle');
+    const isLight = body.classList.toggle('light-mode');
+    btn.textContent = isLight ? '🌙 DARK' : '☀ LIGHT';
+    localStorage.setItem('ncokit_theme', isLight ? 'light' : 'dark');
+  }
 
-Award: ${award.name} (${awardLevel})
-Soldier: ${rank} ${soldierName}
-Unit: ${unit || 'Not specified'}
-Period of Service: ${period || 'Not specified'}
-Award Standard: ${award.standard}
-Citation Character Limit: ${award.charLimit} characters
+  // Apply saved theme on load
+  if (localStorage.getItem('ncokit_theme') === 'light') {
+    document.body.classList.add('light-mode');
+    document.getElementById('themeToggle').textContent = '🌙 DARK';
+  }
 
-Accomplishments provided by the nominating NCO:
-${accomplishments}
+  // ── AUTH ──────────────────────────────────────────────────────────────────
 
-YOUR TASKS:
+  let currentUser = null;
 
-1. BULLETS: Rewrite each accomplishment as a standalone Army-standard bullet in NCOER style.
-   - Start with a strong action verb
-   - Active voice, third person, never use "I"
-   - Quantify with specific numbers, percentages, dollar amounts, timeframes
-   - Each bullet under 175 characters
-   - Rank bullets strongest to weakest — most impactful first
-   - Do NOT number them or add bullet symbols
+  async function initAuth() {
+    const token = localStorage.getItem('ncokit_token');
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const user = await res.json();
+        setLoggedIn(user, token);
+      } else {
+        localStorage.removeItem('ncokit_token');
+      }
+    } catch (e) {}
+  }
 
-2. CITATION: Write a single narrative paragraph using those bullets as source material.
-   - Opens with "For [meritorious service/outstanding achievement] from [period]..."
-   - Flows naturally as connected sentences, not a list
-   - CRITICAL: Must be STRICTLY under ${award.charLimit} characters. Count carefully. If needed, cut less impactful content to stay under the limit. Do NOT exceed ${award.charLimit} characters under any circumstance.
-   - Closes connecting the soldier's service to Army readiness and values
-   - Ready for direct IPPSA submission
+  function setLoggedIn(user, token) {
+    currentUser = user;
+    localStorage.setItem('ncokit_token', token);
+    resetAnonUsage(); // Clear anonymous usage counter on login
+    document.getElementById('authButtons').style.display = 'none';
+    document.getElementById('userMenu').style.display = 'flex';
+    document.getElementById('userEmail').textContent = user.email;
+    document.getElementById('userPlan').textContent = user.plan === 'premium' ? '⭐ PREMIUM' : 'FREE';
+    document.getElementById('savesTab').style.display = 'block';
+    document.getElementById('saveCounselingBtn').style.display = 'inline-block';
+    const saveAFTBtn = document.getElementById('saveAFTBtn');
+    if (saveAFTBtn) saveAFTBtn.style.display = 'inline-block';
+    closeAuth();
+  }
 
-3. SCORE: Rate the overall award package 1-10 based on quantification, active voice, and appropriateness for ${awardLevel} level.
+  function showAuth(tab) {
+    document.getElementById('authModal').style.display = 'flex';
+    switchAuthTab(tab || 'login');
+  }
 
-4. ADVISORY: Provide 2-3 specific actionable recommendations. If accomplishments are too weak for ${awardLevel} say so directly. Reference specific bullets.
+  function closeAuth() {
+    document.getElementById('authModal').style.display = 'none';
+    clearAuthForms();
+  }
 
-Format your response EXACTLY as:
-BULLETS:
-[bullet 1]
-[bullet 2]
-[etc]
-
-CITATION:
-[citation paragraph]
-
-SCORE: [X/10]
-
-ADVISORY:
-[advisory text]`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+  function clearAuthForms() {
+    ['loginEmail','loginPassword','regEmail','regPassword','regReferral','forgotEmail'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
     });
-    const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
-
-    const text = data.content.map(i => i.text || '').join('').trim();
-
-    // Parse the structured response
-    const bulletsMatch = text.match(/BULLETS:\s*([\s\S]*?)(?=CITATION:|$)/i);
-    const citationMatch = text.match(/CITATION:\s*([\s\S]*?)(?=SCORE:|$)/i);
-    const scoreMatch = text.match(/SCORE:\s*(\d+\/10|\d+)/i);
-    const advisoryMatch = text.match(/ADVISORY:\s*([\s\S]*?)$/i);
-
-    const bulletsRaw = bulletsMatch ? bulletsMatch[1].trim() : '';
-    const bullets = bulletsRaw.split('\n').map(b => b.trim()).filter(b => b.length > 0);
-    let citation = citationMatch ? citationMatch[1].trim() : text;
-    
-    // Safety net — truncate at last complete sentence if over limit
-    if (citation.length > award.charLimit) {
-      citation = citation.substring(0, award.charLimit);
-      const lastPeriod = citation.lastIndexOf('.');
-      if (lastPeriod > award.charLimit * 0.7) citation = citation.substring(0, lastPeriod + 1);
-    }
-    
-    const score = scoreMatch ? scoreMatch[1].trim() : null;
-    const advisory = advisoryMatch ? advisoryMatch[1].trim() : null;
-    const charCount = citation.length;
-    const charLimit = award.charLimit;
-
-    res.json({ bullets, citation, score, advisory, charCount, charLimit, awardName: award.name });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to reach AI service.' });
-  }
-});
-
-// Category fit validation
-app.post('/api/validate-category', aiLimiter, async (req, res) => {
-  const { bullets, category, action } = req.body;
-  if (!bullets || !category) return res.json({ suggestion: null });
-
-  const categoryGuide = `
-Character: Army values, ethics, integrity, empathy, warrior ethos, moral courage, discipline, doing what's right
-Presence: Physical fitness, military bearing, confidence, resilience, appearance, PT scores, physical readiness
-Intellect: Mental agility, innovation, judgment, critical thinking, problem solving, expertise, interpersonal tact
-Leads: Leading soldiers, influencing others, building trust, communication, directing teams, motivating people
-Develops: Mentoring, creating positive climate, stewardship of resources, self-development, developing subordinates
-Achieves: Mission accomplishment, getting results, meeting standards, task completion, operational performance`;
-
-  const prompt = `You are an Army NCOER expert. A leader placed the following bullets in the "${category}" category of an NCOER.
-
-Bullets:
-${bullets.join('\n')}
-
-Original description: ${action}
-
-NCOER Category Guide:${categoryGuide}
-
-Analyze whether these bullets fit best in "${category}" or if they would be better placed in a different category.
-
-If the category is correct or close enough, respond with exactly: CORRECT
-If a different category would be significantly better, respond with one short sentence starting with "These bullets describe" and ending with the better category name. Example: "These bullets describe physical fitness performance — consider moving them to Presence instead."
-
-Respond with ONLY "CORRECT" or the one-sentence suggestion. Nothing else.`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 100, messages: [{ role: 'user', content: prompt }] })
+    ['loginError','loginSuccess','registerError','registerSuccess','forgotMsg'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
     });
-    const data = await response.json();
-    const text = data.content?.map(i => i.text || '').join('').trim();
-    if (!text || text === 'CORRECT') return res.json({ suggestion: null });
-    res.json({ suggestion: text });
-  } catch (err) {
-    res.json({ suggestion: null });
   }
-});
 
-
-
-// Save counseling
-app.post('/api/save/counseling', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const { soldierName, rank, unit, counselor, counselorRank, date, counselingType, subject, situation, strengths, improve, poa, leader } = req.body;
-  try {
-    const result = await pool.query(
-      `INSERT INTO saved_counselings (user_id, soldier_name, rank, unit, counselor, counselor_rank, date, counseling_type, subject, situation, strengths, improve, poa, leader)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id`,
-      [user.id, soldierName, rank, unit, counselor, counselorRank, date, counselingType, subject, situation, strengths, improve, poa, leader]
-    );
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (err) {
-    console.error('Save counseling error:', err);
-    res.status(500).json({ error: 'Failed to save' });
+  function switchAuthTab(tab) {
+    document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+    document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+    document.getElementById('forgotForm').style.display = tab === 'forgot' ? 'block' : 'none';
+    document.getElementById('loginTab').classList.toggle('active', tab === 'login');
+    document.getElementById('registerTab').classList.toggle('active', tab === 'register');
+    document.getElementById('modalTitle').textContent = tab === 'register' ? 'Create Account' : tab === 'forgot' ? 'Reset Password' : 'Sign In';
+    document.getElementById('modalSub').textContent = tab === 'register' ? 'Free to use — no credit card required' : tab === 'forgot' ? 'We\'ll email you a reset link' : 'Access your NCO Kit account';
   }
-});
 
-// Get saved counselings
-app.get('/api/save/counselings', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    const result = await pool.query(
-      'SELECT * FROM saved_counselings WHERE user_id = $1 ORDER BY created_at DESC',
-      [user.id]
-    );
-    res.json({ counselings: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load' });
+  function showForgotPassword() { switchAuthTab('forgot'); }
+
+  async function doLogin() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const btn = document.getElementById('loginBtn');
+    const errEl = document.getElementById('loginError');
+    const sucEl = document.getElementById('loginSuccess');
+    if (!email || !password) { showAuthError(errEl, 'Please enter your email and password.'); return; }
+    btn.textContent = 'Logging in...'; btn.disabled = true;
+    errEl.style.display = 'none'; sucEl.style.display = 'none';
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showAuthError(errEl, data.error);
+        if (data.needsVerification) {
+          errEl.innerHTML = data.error + ' <a href="#" onclick="resendVerification(\'' + email + '\')" style="color:#C8B48A;">Resend verification email</a>';
+        }
+      } else {
+        setLoggedIn(data.user, data.token);
+      }
+    } catch (e) { showAuthError(errEl, 'Connection error. Please try again.'); }
+    finally { btn.textContent = 'Login'; btn.disabled = false; }
   }
-});
 
-// Delete saved counseling
-app.delete('/api/save/counseling/:id', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    await pool.query('DELETE FROM saved_counselings WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete' });
+  async function doRegister() {
+    const email = document.getElementById('regEmail').value.trim();
+    const password = document.getElementById('regPassword').value;
+    const referredBy = document.getElementById('regReferral').value.trim();
+    const btn = document.getElementById('registerBtn');
+    const errEl = document.getElementById('registerError');
+    const sucEl = document.getElementById('registerSuccess');
+    if (!email || !password) { showAuthError(errEl, 'Please enter your email and password.'); return; }
+    btn.textContent = 'Creating account...'; btn.disabled = true;
+    errEl.style.display = 'none'; sucEl.style.display = 'none';
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, referredBy: referredBy || undefined })
+      });
+      const data = await res.json();
+      if (!res.ok) { showAuthError(errEl, data.error); }
+      else {
+        sucEl.textContent = '✓ Account created! Check your email to verify your account before logging in.';
+        sucEl.style.display = 'block';
+        document.getElementById('regEmail').value = '';
+        document.getElementById('regPassword').value = '';
+      }
+    } catch (e) { showAuthError(errEl, 'Connection error. Please try again.'); }
+    finally { btn.textContent = 'Create Free Account'; btn.disabled = false; }
   }
-});
 
-// Save bullets
-app.post('/api/save/bullets', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const { soldierName, category, bullets } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO saved_bullets (user_id, soldier_name, category, bullets) VALUES ($1,$2,$3,$4) RETURNING id',
-      [user.id, soldierName, category, JSON.stringify(bullets)]
-    );
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save' });
+  async function doForgotPassword() {
+    const email = document.getElementById('forgotEmail').value.trim();
+    const btn = document.getElementById('forgotBtn');
+    const msgEl = document.getElementById('forgotMsg');
+    if (!email) { msgEl.textContent = 'Please enter your email.'; msgEl.style.cssText = 'display:block;background:#3d1010;border:1px solid var(--red);color:#f44336;'; return; }
+    btn.textContent = 'Sending...'; btn.disabled = true;
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      msgEl.textContent = data.message || 'Reset link sent.';
+      msgEl.style.cssText = 'display:block;background:#1a3d1a;border:1px solid #4CAF50;color:#4CAF50;padding:10px 14px;font-family:Source Code Pro,monospace;font-size:11px;margin-top:12px;';
+    } catch (e) { msgEl.textContent = 'Connection error.'; }
+    finally { btn.textContent = 'Send Reset Link'; btn.disabled = false; }
   }
-});
 
-// Get saved bullets
-app.get('/api/save/bullets', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    const result = await pool.query(
-      'SELECT * FROM saved_bullets WHERE user_id = $1 ORDER BY created_at DESC',
-      [user.id]
-    );
-    res.json({ bullets: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load' });
+  async function resendVerification(email) {
+    await fetch('/api/auth/resend-verification', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    alert('Verification email resent. Check your inbox.');
   }
-});
 
-// Delete saved bullets
-app.delete('/api/save/bullets/:id', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    await pool.query('DELETE FROM saved_bullets WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete' });
+  async function logout() {
+    const token = localStorage.getItem('ncokit_token');
+    if (token) await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
+    localStorage.removeItem('ncokit_token');
+    currentUser = null;
+    document.getElementById('authButtons').style.display = 'flex';
+    document.getElementById('userMenu').style.display = 'none';
+    document.getElementById('savesTab').style.display = 'none';
+    document.getElementById('saveCounselingBtn').style.display = 'none';
+    document.querySelectorAll('.tab')[0].click();
   }
-});
 
-// Save AFT score
-app.post('/api/save/aft', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const { soldierName, age, sex, standard, testDate, mdl, hrp, sdc, plk, tmr, scores, total, overallPass } = req.body;
-  try {
-    const result = await pool.query(
-      `INSERT INTO saved_aft_scores (user_id, soldier_name, age, sex, standard, test_date, mdl_raw, hrp_raw, sdc_raw, plk_raw, tmr_raw, mdl_pts, hrp_pts, sdc_pts, plk_pts, tmr_pts, total, pass_fail)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING id`,
-      [user.id, soldierName, age, sex, standard, testDate, mdl, hrp, sdc, plk, tmr, scores?.mdl, scores?.hrp, scores?.sdc, scores?.plk, scores?.tmr, total, overallPass]
-    );
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save' });
-  }
-});
+  function showAuthError(el, msg) { el.textContent = msg; el.style.display = 'block'; }
 
-// Get saved AFT scores
-app.get('/api/save/aft', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    const result = await pool.query(
-      'SELECT * FROM saved_aft_scores WHERE user_id = $1 ORDER BY created_at DESC',
-      [user.id]
-    );
-    res.json({ scores: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load' });
-  }
-});
+  async function handleVerifyToken() {
+    const params = new URLSearchParams(window.location.search);
+    const verified = params.get('verified');
+    const error = params.get('error');
+    const token = params.get('token');
+    const isResetPath = window.location.pathname === '/reset-password';
 
-// Delete saved AFT score
-app.delete('/api/save/aft/:id', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    await pool.query('DELETE FROM saved_aft_scores WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete' });
-  }
-});
-
-// Save soldier to roster
-app.post('/api/save/soldier', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const { name, rank, mos, lastCounseling, status, notes } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO saved_soldiers (user_id, name, rank, mos, last_counseling, status, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-      [user.id, name, rank, mos, lastCounseling, status, notes]
-    );
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save' });
-  }
-});
-
-// Get saved soldiers
-app.get('/api/save/soldiers', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    const result = await pool.query(
-      'SELECT * FROM saved_soldiers WHERE user_id = $1 ORDER BY name ASC',
-      [user.id]
-    );
-    res.json({ soldiers: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load' });
-  }
-});
-
-// Delete saved soldier
-app.delete('/api/save/soldier/:id', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    await pool.query('DELETE FROM saved_soldiers WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete' });
-  }
-});
-
-// Save award citation
-app.post('/api/save/award', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  const { soldierName, rank, unit, awardLevel, period, citation, score } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO saved_awards (user_id, soldier_name, rank, unit, award_level, period, citation, score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [user.id, soldierName, rank, unit, awardLevel, period, citation, score]
-    );
-    res.json({ success: true, id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to save' });
-  }
-});
-
-app.get('/api/save/awards', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    const result = await pool.query(
-      'SELECT * FROM saved_awards WHERE user_id = $1 ORDER BY created_at DESC',
-      [user.id]
-    );
-    res.json({ awards: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to load' });
-  }
-});
-
-app.delete('/api/save/award/:id', async (req, res) => {
-  const user = await getUserFromSession(req);
-  if (!user) return res.status(401).json({ error: 'Not authenticated' });
-  try {
-    await pool.query('DELETE FROM saved_awards WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete' });
-  }
-});
-
-app.get('/verify', async (req, res) => {
-  const { token } = req.query;
-  if (!token) return res.redirect('/?error=invalid_token');
-  try {
-    const result = await pool.query(
-      'SELECT id FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
-      [token]
-    );
-    if (result.rows.length === 0) {
-      return res.redirect('/?error=invalid_token');
+    if (verified === 'true') {
+      showAuth('login');
+      document.getElementById('loginSuccess').textContent = '✓ Email verified! You can now log in.';
+      document.getElementById('loginSuccess').style.display = 'block';
+      window.history.replaceState({}, '', '/');
+    } else if (error === 'invalid_token') {
+      showAuth('login');
+      document.getElementById('loginError').textContent = 'Verification link is invalid or expired. Request a new one below.';
+      document.getElementById('loginError').style.display = 'block';
+      window.history.replaceState({}, '', '/');
+    } else if (isResetPath && token) {
+      setTimeout(() => showResetPasswordModal(token), 100);
+      window.history.replaceState({}, '', '/');
     }
-    await pool.query(
-      'UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = $1',
-      [result.rows[0].id]
-    );
-    return res.redirect('/?verified=true');
-  } catch (err) {
-    console.error('Verify route error:', err);
-    return res.redirect('/?error=verify_failed');
   }
-});
 
-app.get('/reset-password', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+  document.getElementById('authModal').addEventListener('click', function(e) {
+    if (e.target === this) closeAuth();
+  });
 
-
-
-async function initDB() {
-  try {
-    await pool.query(`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`);
-    await pool.query(`CREATE TABLE IF NOT EXISTS users (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      email VARCHAR(255) UNIQUE NOT NULL,
-      password_hash VARCHAR(255) NOT NULL,
-      verified BOOLEAN DEFAULT FALSE,
-      verification_token VARCHAR(255),
-      verification_expires TIMESTAMPTZ,
-      reset_token VARCHAR(255),
-      reset_expires TIMESTAMPTZ,
-      plan VARCHAR(20) DEFAULT 'free',
-      stripe_customer_id VARCHAR(255),
-      stripe_subscription_id VARCHAR(255),
-      referral_code VARCHAR(20) UNIQUE,
-      referred_by VARCHAR(20),
-      free_months_earned INTEGER DEFAULT 0,
-      free_months_used INTEGER DEFAULT 0,
-      bullets_used_this_month INTEGER DEFAULT 0,
-      counseling_used_this_month INTEGER DEFAULT 0,
-      bullets_reset_date DATE DEFAULT CURRENT_DATE,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-    await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      token VARCHAR(255) UNIQUE NOT NULL,
-      expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
-
-    await pool.query(`CREATE TABLE IF NOT EXISTS saved_counselings (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      soldier_name VARCHAR(255),
-      rank VARCHAR(50),
-      unit VARCHAR(255),
-      counselor VARCHAR(255),
-      counselor_rank VARCHAR(50),
-      date VARCHAR(50),
-      counseling_type VARCHAR(100),
-      subject VARCHAR(255),
-      situation TEXT,
-      strengths TEXT,
-      improve TEXT,
-      poa TEXT,
-      leader TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-
-    await pool.query(`CREATE TABLE IF NOT EXISTS saved_bullets (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      soldier_name VARCHAR(255),
-      category VARCHAR(100),
-      bullets JSONB,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-
-    await pool.query(`CREATE TABLE IF NOT EXISTS saved_aft_scores (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      soldier_name VARCHAR(255),
-      age INTEGER,
-      sex VARCHAR(1),
-      standard VARCHAR(20),
-      test_date VARCHAR(50),
-      mdl_raw VARCHAR(20),
-      hrp_raw VARCHAR(20),
-      sdc_raw VARCHAR(20),
-      plk_raw VARCHAR(20),
-      tmr_raw VARCHAR(20),
-      mdl_pts INTEGER,
-      hrp_pts INTEGER,
-      sdc_pts INTEGER,
-      plk_pts INTEGER,
-      tmr_pts INTEGER,
-      total INTEGER,
-      pass_fail BOOLEAN,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-
-    await pool.query(`CREATE TABLE IF NOT EXISTS saved_soldiers (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      name VARCHAR(255),
-      rank VARCHAR(50),
-      mos VARCHAR(20),
-      last_counseling VARCHAR(50),
-      status VARCHAR(20),
-      notes TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_counselings_user ON saved_counselings(user_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_bullets_user ON saved_bullets(user_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_aft_user ON saved_aft_scores(user_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_soldiers_user ON saved_soldiers(user_id)`);
-
-    // Migrations — add columns if they don't exist
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS counseling_used_this_month INTEGER DEFAULT 0`);
-    await pool.query(`CREATE TABLE IF NOT EXISTS saved_awards (
-      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-      soldier_name VARCHAR(255),
-      rank VARCHAR(50),
-      unit VARCHAR(255),
-      award_level VARCHAR(20),
-      period VARCHAR(100),
-      citation TEXT,
-      score VARCHAR(20),
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_awards_user ON saved_awards(user_id)`);
-
-    console.log('Database initialized successfully');
-  } catch (err) {
-    console.error('Database init error:', err.message);
+  async function handlePlanClick() {
+    if (!currentUser) return;
+    if (currentUser.plan === 'premium') {
+      // Open billing portal to manage subscription
+      try {
+        const res = await fetch('/api/stripe/portal', { method: 'POST', headers: authHeader() });
+        const data = await res.json();
+        if (data.url) window.location.href = data.url;
+      } catch (e) { alert('Failed to open billing portal.'); }
+    } else {
+      // Show upgrade modal
+      showUpgradeModal();
+    }
   }
-}
 
-// Contact form
-app.post('/api/contact', async (req, res) => {
-  const { name, email, subject, message } = req.body;
-  if (!name || !email || !subject || !message) {
-    return res.status(400).json({ error: 'All fields are required.' });
+  function showUpgradeModal() {
+    document.getElementById('upgradeModal').style.display = 'flex';
   }
-  try {
-    const response = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
-      },
-      body: JSON.stringify({
-        from: 'NCO Kit Contact <noreply@ncokit.com>',
-        to: 'brighamwilsonjr@gmail.com',
-        reply_to: email,
-        subject: `[NCO Kit] ${subject} — from ${name}`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
-            <h1 style="color:#C8B48A;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;">NCO Kit</h1>
-            <h2 style="color:#F4F1EA;font-size:16px;margin-bottom:24px;border-bottom:1px solid #2B3A2E;padding-bottom:12px;">New Contact Form Submission</h2>
-            <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
-              <tr>
-                <td style="padding:8px 12px;color:#a08e65;font-size:12px;width:100px;vertical-align:top;">FROM</td>
-                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${name}</td>
-              </tr>
-              <tr style="background:#1a2419;">
-                <td style="padding:8px 12px;color:#a08e65;font-size:12px;vertical-align:top;">EMAIL</td>
-                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;"><a href="mailto:${email}" style="color:#C8B48A;">${email}</a></td>
-              </tr>
-              <tr>
-                <td style="padding:8px 12px;color:#a08e65;font-size:12px;vertical-align:top;">SUBJECT</td>
-                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${subject}</td>
-              </tr>
-            </table>
-            <div style="background:#1a2419;padding:20px;border-left:3px solid #C8B48A;margin-bottom:24px;">
-              <div style="color:#a08e65;font-size:11px;letter-spacing:2px;margin-bottom:10px;">MESSAGE</div>
-              <div style="color:#F4F1EA;font-size:14px;line-height:1.7;white-space:pre-wrap;">${message}</div>
-            </div>
-            <p style="color:#666;font-size:11px;">Reply directly to this email to respond to ${name}.</p>
+
+  function closeUpgradeModal() {
+    document.getElementById('upgradeModal').style.display = 'none';
+  }
+
+  async function startUpgrade() {
+    if (!currentUser) { showAuth('login'); return; }
+    const btn = document.getElementById('upgradeBtn');
+    btn.textContent = 'Redirecting...';
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: authHeader() });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else { alert(data.error || 'Failed to start checkout.'); btn.textContent = 'Upgrade to Premium'; btn.disabled = false; }
+    } catch (e) {
+      alert('Failed to start checkout. Please try again.');
+      btn.textContent = 'Upgrade to Premium';
+      btn.disabled = false;
+    }
+  }
+
+  // Handle post-payment URL params
+  async function handlePaymentReturn() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('upgraded') === 'true') {
+      // Refresh user data to get new plan
+      const token = localStorage.getItem('ncokit_token');
+      if (token) {
+        const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const user = await res.json();
+          setLoggedIn(user, token);
+        }
+      }
+      window.history.replaceState({}, '', '/');
+      // Show success message
+      setTimeout(() => alert('Welcome to Premium! Your account has been upgraded.'), 500);
+    }
+  }
+
+  function togglePassword(fieldId, icon) {
+    const field = document.getElementById(fieldId);
+    if (field.type === 'password') {
+      field.type = 'text';
+      icon.textContent = '🙈';
+    } else {
+      field.type = 'password';
+      icon.textContent = '👁';
+    }
+  }
+
+  let pendingResetToken = null;
+  function showResetPasswordModal(token) {
+    pendingResetToken = token;
+    document.getElementById('resetNewPassword').value = '';
+    document.getElementById('resetConfirmPassword').value = '';
+    document.getElementById('resetError').style.display = 'none';
+    document.getElementById('resetSuccess').style.display = 'none';
+    document.getElementById('resetModal').style.display = 'flex';
+  }
+
+  async function submitResetPassword() {
+    const password = document.getElementById('resetNewPassword').value;
+    const confirm = document.getElementById('resetConfirmPassword').value;
+    const btn = document.getElementById('resetSubmitBtn');
+    const errEl = document.getElementById('resetError');
+    const sucEl = document.getElementById('resetSuccess');
+
+    errEl.style.display = 'none';
+    sucEl.style.display = 'none';
+
+    if (!password || password.length < 8) {
+      errEl.textContent = 'Password must be at least 8 characters.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (password !== confirm) {
+      errEl.textContent = 'Passwords do not match.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: pendingResetToken, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Reset failed. Please request a new link.';
+        errEl.style.display = 'block';
+      } else {
+        sucEl.textContent = '✓ Password reset successfully. You can now log in.';
+        sucEl.style.display = 'block';
+        setTimeout(() => {
+          document.getElementById('resetModal').style.display = 'none';
+          showAuth('login');
+        }, 2000);
+      }
+    } catch (e) {
+      errEl.textContent = 'Connection error. Please try again.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.textContent = 'Set New Password';
+      btn.disabled = false;
+    }
+  }
+
+  // ── USAGE LIMITS ──────────────────────────────────────────────────────────────
+
+  const ANON_LIMIT = 3;
+  const FREE_LIMIT = 10;
+
+  function getAnonUsage() {
+    return parseInt(localStorage.getItem('ncokit_anon_usage') || '0');
+  }
+
+  function incrementAnonUsage() {
+    const count = getAnonUsage() + 1;
+    localStorage.setItem('ncokit_anon_usage', count);
+    return count;
+  }
+
+  function resetAnonUsage() {
+    localStorage.setItem('ncokit_anon_usage', '0');
+  }
+
+  function getUsageHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    const token = localStorage.getItem('ncokit_token');
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    else headers['x-anon-usage'] = String(getAnonUsage());
+    return headers;
+  }
+
+  function checkAnonLimit() {
+    if (!currentUser && getAnonUsage() >= ANON_LIMIT) {
+      showLimitModal('anonymous');
+      return true;
+    }
+    return false;
+  }
+
+  function handleUsageResponse(res, data) {
+    if (res.status === 403 && data.error === 'limit_reached') {
+      showLimitModal(data.limitType);
+      return true;
+    }
+    if (!currentUser) incrementAnonUsage();
+    return false;
+  }
+
+  function showLimitModal(type) {
+    const modal = document.getElementById('limitModal');
+    const title = document.getElementById('limitModalTitle');
+    const msg = document.getElementById('limitModalMsg');
+    const btn = document.getElementById('limitModalBtn');
+    if (type === 'anonymous') {
+      title.textContent = "You've Used Your 3 Free Generations";
+      msg.textContent = "Create a free account to get 10 AI generations per month — no credit card required.";
+      btn.textContent = "Create Free Account";
+    } else if (type === 'counseling') {
+      title.textContent = "Counseling Limit Reached";
+      msg.textContent = "You've used all 5 counseling enhancements this month. Upgrade to Premium for unlimited access.";
+      btn.textContent = "Upgrade to Premium — $8/month";
+    } else {
+      title.textContent = "Monthly Limit Reached";
+      msg.textContent = "You've used all 10 of your free AI generations this month. Upgrade to Premium for unlimited access.";
+      btn.textContent = "Upgrade to Premium — $8/month";
+    }
+    document.getElementById('limitModalType').dataset.type = type === 'counseling' ? 'free' : type;
+    modal.style.display = 'flex';
+  }
+
+  function closeLimitModal() {
+    document.getElementById('limitModal').style.display = 'none';
+  }
+
+  function limitModalAction() {
+    const type = document.getElementById('limitModalType').dataset.type;
+    closeLimitModal();
+    if (type === 'anonymous') showAuth('register');
+    else showUpgradeModal();
+  }
+
+  document.getElementById('limitModal').addEventListener('click', function(e) {
+    if (e.target === this) closeLimitModal();
+  });
+
+  // ── AWARDS ────────────────────────────────────────────────────────────────
+
+  let awardsLoadingInterval = null;
+  let lastAwardResult = null;
+
+  async function generateAward() {
+    const name = document.getElementById('aw_name').value.trim();
+    const unit = document.getElementById('aw_unit').value.trim();
+    const level = document.getElementById('aw_level').value;
+    const period = document.getElementById('aw_period').value.trim();
+    const accomplishments = document.getElementById('aw_accomplishments').value.trim();
+
+    if (!level) { alert('Please select an award level.'); return; }
+    if (!accomplishments) { alert('Please describe the soldier\'s accomplishments.'); return; }
+    if (checkAnonLimit()) return;
+
+    const btn = document.getElementById('awardsBtn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    document.getElementById('awardsLoading').style.display = 'block';
+    document.getElementById('awardsError').style.display = 'none';
+    document.getElementById('awardsOutput').style.display = 'none';
+
+    const dots = ['GENERATING CITATION', 'GENERATING CITATION.', 'GENERATING CITATION..', 'GENERATING CITATION...'];
+    let di = 0;
+    awardsLoadingInterval = setInterval(() => {
+      document.getElementById('awardsLoadingDots').textContent = dots[di++ % dots.length];
+    }, 400);
+
+    try {
+      const response = await fetch('/api/awards', {
+        method: 'POST',
+        headers: getUsageHeaders(),
+        body: JSON.stringify({ soldierName: name, rank: name, unit, awardLevel: level, period, accomplishments })
+      });
+
+      const data = await response.json();
+      clearInterval(awardsLoadingInterval);
+      document.getElementById('awardsLoading').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '🎖️ Generate Citation';
+
+      if (handleUsageResponse(response, data)) return;
+      if (data.error) throw new Error(data.error);
+
+      lastAwardResult = data;
+
+      // Render bullets
+      const bulletsList = document.getElementById('awardsBulletsList');
+      bulletsList.innerHTML = (data.bullets || []).map(b => `<div class="bullet-line">${b}</div>`).join('');
+
+      // Render citation
+      document.getElementById('awardsCitationTitle').textContent = `${data.awardName} — NARRATIVE CITATION`;
+      document.getElementById('awardsCitation').textContent = data.citation;
+
+      // Char count with color indicator
+      const charEl = document.getElementById('awardsCharCount');
+      const pct = Math.round((data.charCount / data.charLimit) * 100);
+      charEl.textContent = `${data.charCount} / ${data.charLimit} chars (${pct}%)`;
+      charEl.style.color = pct > 100 ? '#f44336' : pct > 90 ? '#FF9800' : '#4CAF50';
+
+      // Score
+      if (data.score) {
+        const scoreEl = document.getElementById('awardsScore');
+        scoreEl.innerHTML = `<span style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; display:block; margin-bottom:2px;">PACKAGE STRENGTH</span>⭐ ${data.score}`;
+      }
+
+      // Advisory
+      if (data.advisory) {
+        document.getElementById('awardsAdvisoryText').textContent = data.advisory;
+        document.getElementById('awardsAdvisory').style.display = 'block';
+      }
+
+      // Save button
+      if (currentUser) document.getElementById('saveAwardBtn').style.display = 'inline-block';
+
+      document.getElementById('awardsOutput').style.display = 'block';
+      if (!currentUser) incrementAnonUsage();
+
+    } catch (err) {
+      clearInterval(awardsLoadingInterval);
+      document.getElementById('awardsLoading').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '🎖️ Generate Citation';
+      document.getElementById('awardsError').style.display = 'block';
+      document.getElementById('awardsError').textContent = 'ERROR: ' + err.message;
+    }
+  }
+
+  function copyAwardBullets() {
+    const bullets = document.querySelectorAll('#awardsBulletsList .bullet-line');
+    const text = Array.from(bullets).map(b => '• ' + b.textContent.trim()).join('\n');
+    navigator.clipboard.writeText(text);
+    const btn = event.target;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = 'Copy All Bullets', 2000);
+  }
+
+  function copyAwardCitation() {
+    const text = document.getElementById('awardsCitation').textContent;
+    navigator.clipboard.writeText(text);
+    const btn = event.target;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = 'Copy Citation', 2000);
+  }
+
+  async function saveAward() {
+    if (!currentUser || !lastAwardResult) return;
+    const payload = {
+      soldierName: document.getElementById('aw_name').value,
+      rank: document.getElementById('aw_name').value,
+      unit: document.getElementById('aw_unit').value,
+      awardLevel: document.getElementById('aw_level').value,
+      period: document.getElementById('aw_period').value,
+      citation: lastAwardResult.citation,
+      score: lastAwardResult.score
+    };
+    try {
+      const res = await fetch('/api/save/award', { method: 'POST', headers: authHeader(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) {
+        const confirm = document.getElementById('saveAwardConfirm');
+        confirm.style.display = 'inline';
+        setTimeout(() => confirm.style.display = 'none', 2000);
+      }
+    } catch (e) { alert('Failed to save.'); }
+  }
+
+  function clearAwards() {
+    ['aw_name','aw_unit','aw_period','aw_accomplishments'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('aw_level').value = '';
+    document.getElementById('awardsOutput').style.display = 'none';
+    document.getElementById('awardsError').style.display = 'none';
+    lastAwardResult = null;
+  }
+
+  // ── SAVES ──────────────────────────────────────────────────────────────────
+
+  function authHeader() {
+    const token = localStorage.getItem('ncokit_token');
+    return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  }
+
+  function switchSavesTab(tab, el) {
+    ['counselings','bullets','awards','aft','soldiers'].forEach(t => {
+      document.getElementById('saves-' + t).style.display = t === tab ? 'block' : 'none';
+    });
+    document.querySelectorAll('#panel-saves .tab').forEach(t => t.classList.remove('active'));
+    if (el) el.classList.add('active');
+    loadSaves(tab);
+  }
+
+  async function loadSaves(tab) {
+    if (!currentUser) return;
+    try {
+      if (tab === 'counselings') {
+        const res = await fetch('/api/save/counselings', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedCounselings(data.counselings || []);
+      } else if (tab === 'bullets') {
+        const res = await fetch('/api/save/bullets', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedBullets(data.bullets || []);
+      } else if (tab === 'awards') {
+        const res = await fetch('/api/save/awards', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedAwards(data.awards || []);
+      } else if (tab === 'aft') {
+        const res = await fetch('/api/save/aft', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedAFT(data.scores || []);
+      } else if (tab === 'soldiers') {
+        const res = await fetch('/api/save/soldiers', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedSoldiers(data.soldiers || []);
+      }
+    } catch (e) { console.error('Load saves error:', e); }
+  }
+
+  function renderSavedAwards(items) {
+    const el = document.getElementById('savedAwardsList');
+    const empty = document.getElementById('savedAwardsEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(a => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${a.soldier_name || 'Unknown'} — ${a.award_level}</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${a.score ? `<span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);">⭐ ${a.score}</span>` : ''}
+            <button class="btn btn-danger" onclick="deleteSave('award','${a.id}')">Delete</button>
           </div>
-        `
-      })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(JSON.stringify(data));
-    res.json({ success: true });
-  } catch (err) {
-    console.error('Contact form error:', err.message);
-    res.status(500).json({ error: 'Failed to send message.' });
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:8px;">
+          ${a.unit || ''} | ${a.period || ''} | Saved ${new Date(a.created_at).toLocaleDateString()}
+        </div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8; background:var(--od-dark); padding:12px; border:1px solid var(--border);">${a.citation}</div>
+        <div class="btn-row" style="margin-top:8px;">
+          <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(this.closest('.card').querySelector('div[style*=Libre]').textContent); this.textContent='✓ Copied'; setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
+        </div>
+      </div>
+    `).join('');
   }
-});
 
-// Admin route to gift premium access
-app.post('/api/admin/gift-premium', async (req, res) => {
-  const { secret, email } = req.body;
-  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
-  try {
-    const result = await pool.query(
-      'UPDATE users SET plan = $1, updated_at = NOW() WHERE email = $2 RETURNING email',
-      ['premium', email.toLowerCase()]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json({ success: true, message: `${email} granted premium access` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  function renderSavedCounselings(items) {
+    const el = document.getElementById('savedCounselingsList');
+    const empty = document.getElementById('savedCounselingsEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(c => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${c.soldier_name || 'Unknown'} — ${c.counseling_type || 'Counseling'}</span>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary btn-sm" onclick="loadCounseling(${JSON.stringify(c).replace(/"/g, '&quot;')})">Load</button>
+            <button class="btn btn-danger" onclick="deleteSave('counseling','${c.id}')">Delete</button>
+          </div>
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">
+          ${c.unit || ''} | ${c.date || ''} | Saved ${new Date(c.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    `).join('');
   }
-});
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
+  function renderSavedBullets(items) {
+    const el = document.getElementById('savedBulletsList');
+    const empty = document.getElementById('savedBulletsEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(b => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${b.soldier_name || 'Unknown'} — ${b.category}</span>
+          <button class="btn btn-danger" onclick="deleteSave('bullets','${b.id}')">Delete</button>
+        </div>
+        <div class="bullet-output visible" style="margin-top:8px;">
+          ${(b.bullets || []).map(bullet => `<div class="bullet-line">${bullet}</div>`).join('')}
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-top:8px;">
+          Saved ${new Date(b.created_at).toLocaleDateString()}
+        </div>
+      </div>
+    `).join('');
+  }
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-  console.log(`NCO Kit running on port ${PORT}`);
-  await initDB();
-  // Clean up expired sessions on start, then every 6 hours
-  await cleanupSessions();
-  setInterval(cleanupSessions, 6 * 60 * 60 * 1000);
-});
+  function renderSavedAFT(items) {
+    const el = document.getElementById('savedAFTList');
+    const empty = document.getElementById('savedAFTEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = items.map(a => `
+      <div class="card" style="margin-bottom:12px;">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>${a.soldier_name || 'Unknown'} — ${a.test_date || ''}</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span style="font-family:'Oswald',sans-serif; font-size:18px; color:${a.pass_fail ? '#4CAF50' : '#f44336'};">${a.pass_fail ? 'GO' : 'NO-GO'}</span>
+            <button class="btn btn-danger" onclick="deleteSave('aft','${a.id}')">Delete</button>
+          </div>
+        </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); line-height:1.8;">
+          Total: ${a.total} | ${a.standard?.toUpperCase()} | Age: ${a.age} ${a.sex}<br>
+          MDL: ${a.mdl_raw} (${a.mdl_pts}pts) | HRP: ${a.hrp_raw} (${a.hrp_pts}pts) | SDC: ${a.sdc_raw} (${a.sdc_pts}pts) | PLK: ${a.plk_raw} (${a.plk_pts}pts) | 2MR: ${a.tmr_raw} (${a.tmr_pts}pts)
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function renderSavedSoldiers(items) {
+    const el = document.getElementById('savedSoldiersList');
+    const empty = document.getElementById('savedSoldiersEmpty');
+    if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    el.innerHTML = `
+      <table class="roster-table">
+        <thead><tr><th>Name</th><th>Rank</th><th>MOS</th><th>Last Counseling</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+          ${items.map(s => {
+            const badgeClass = s.status === 'current' ? 'badge-green' : s.status === 'due' ? 'badge-yellow' : 'badge-red';
+            return `<tr>
+              <td><strong>${s.name}</strong></td>
+              <td>${s.rank}</td>
+              <td>${s.mos || '—'}</td>
+              <td>${s.last_counseling || '—'}</td>
+              <td><span class="badge ${badgeClass}">${s.status}</span></td>
+              <td style="font-size:12px; color:var(--tan-dark)">${s.notes || '—'}</td>
+              <td><button class="btn btn-danger" onclick="deleteSave('soldier','${s.id}')">Delete</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+
+  function loadCounseling(c) {
+    document.getElementById('c_soldierName').value = c.soldier_name || '';
+    document.getElementById('c_rank').value = c.rank || '';
+    document.getElementById('c_date').value = c.date || today;
+    document.getElementById('c_unit').value = c.unit || '';
+    document.getElementById('c_counselor').value = c.counselor || '';
+    document.getElementById('c_counselorRank').value = c.counselor_rank || '';
+    document.getElementById('c_type').value = c.counseling_type || '';
+    document.getElementById('c_subject').value = c.subject || '';
+    document.getElementById('c_situation').value = c.situation || '';
+    document.getElementById('c_strengths').value = c.strengths || '';
+    document.getElementById('c_improve').value = c.improve || '';
+    document.getElementById('c_poa').value = c.poa || '';
+    document.getElementById('c_leader').value = c.leader || '';
+    switchTab('counseling', document.querySelector('.tab'));
+    document.querySelectorAll('.tab')[0].click();
+  }
+
+  async function saveCounseling() {
+    if (!currentUser) { showAuth('login'); return; }
+    const payload = {
+      soldierName: document.getElementById('c_soldierName').value,
+      rank: document.getElementById('c_rank').value,
+      unit: document.getElementById('c_unit').value,
+      counselor: document.getElementById('c_counselor').value,
+      counselorRank: document.getElementById('c_counselorRank').value,
+      date: document.getElementById('c_date').value,
+      counselingType: document.getElementById('c_type').value,
+      subject: document.getElementById('c_subject').value,
+      situation: document.getElementById('c_situation').value,
+      strengths: document.getElementById('c_strengths').value,
+      improve: document.getElementById('c_improve').value,
+      poa: document.getElementById('c_poa').value,
+      leader: document.getElementById('c_leader').value,
+    };
+    try {
+      const res = await fetch('/api/save/counseling', { method: 'POST', headers: authHeader(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) {
+        const confirm = document.getElementById('saveCounselingConfirm');
+        confirm.style.display = 'inline';
+        setTimeout(() => confirm.style.display = 'none', 2000);
+      }
+    } catch (e) { alert('Failed to save. Please try again.'); }
+  }
+
+  async function deleteSave(type, id) {
+    if (!confirm('Delete this saved record?')) return;
+    const endpoints = { counseling: 'counseling', bullets: 'bullets', award: 'award', aft: 'aft', soldier: 'soldier' };
+    try {
+      await fetch(`/api/save/${endpoints[type]}/${id}`, { method: 'DELETE', headers: authHeader() });
+      const currentTab = document.querySelector('#panel-saves .tab.active');
+      if (currentTab) currentTab.click();
+    } catch (e) { alert('Failed to delete.'); }
+  }
+
+  async function saveBullets(btn, soldierName, category) {
+    if (!currentUser) { showAuth('login'); return; }
+    const bulletEls = btn.closest('.card').querySelectorAll('.bullet-line');
+    const bullets = Array.from(bulletEls).map(b => b.textContent.trim());
+    try {
+      const res = await fetch('/api/save/bullets', {
+        method: 'POST', headers: authHeader(),
+        body: JSON.stringify({ soldierName, category, bullets })
+      });
+      const data = await res.json();
+      if (data.success) { btn.textContent = '✓ Saved'; setTimeout(() => btn.textContent = '💾 Save Bullets', 2000); }
+    } catch (e) { alert('Failed to save.'); }
+  }
+
+  async function saveAFTScore() {
+    if (!currentUser) { showAuth('login'); return; }
+    if (!lastAFTResult) { alert('Calculate a score first.'); return; }
+    const payload = {
+      soldierName: document.getElementById('aft_name').value,
+      age: document.getElementById('aft_age').value,
+      sex: document.getElementById('aft_sex').value,
+      standard: document.getElementById('aft_standard').value,
+      testDate: document.getElementById('aft_date').value,
+      mdl: document.getElementById('aft_mdl').value,
+      hrp: document.getElementById('aft_hrp').value,
+      sdc: document.getElementById('aft_sdc').value,
+      plk: document.getElementById('aft_plk').value,
+      tmr: document.getElementById('aft_tmr').value,
+      scores: lastAFTResult.scores,
+      total: lastAFTResult.total,
+      overallPass: lastAFTResult.overallPass
+    };
+    try {
+      const res = await fetch('/api/save/aft', { method: 'POST', headers: authHeader(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.success) alert('AFT score saved!');
+    } catch (e) { alert('Failed to save.'); }
+  }
+
+  updateStats();
+
+  // Initialize after all functions defined
+  initAuth();
+  handleVerifyToken();
+  handlePaymentReturn();
+</script>
+</body>
+</html>
