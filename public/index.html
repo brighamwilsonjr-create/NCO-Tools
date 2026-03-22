@@ -2185,7 +2185,8 @@
     const params = new URLSearchParams(window.location.search);
     const verified = params.get('verified');
     const error = params.get('error');
-    const resetToken = params.get('token');
+    const token = params.get('token');
+    const isResetPath = window.location.pathname === '/reset-password';
 
     if (verified === 'true') {
       showAuth('login');
@@ -2197,9 +2198,8 @@
       document.getElementById('loginError').textContent = 'Verification link is invalid or expired. Request a new one below.';
       document.getElementById('loginError').style.display = 'block';
       window.history.replaceState({}, '', '/');
-    } else if (resetToken) {
-      // Show password reset modal
-      showResetPasswordModal(resetToken);
+    } else if (isResetPath && token) {
+      showResetPasswordModal(token);
       window.history.replaceState({}, '', '/');
     }
   }
