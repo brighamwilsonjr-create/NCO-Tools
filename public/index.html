@@ -1361,15 +1361,25 @@
     <!-- Output -->
     <div id="awardsOutput" style="display:none; margin-top:16px;">
 
+      <!-- Bullets -->
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">Accomplishment Bullets — Ranked Strongest First</div>
+        <div id="awardsBulletsList" class="bullet-output visible"></div>
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="btn btn-secondary btn-sm" onclick="copyAwardBullets()">Copy All Bullets</button>
+        </div>
+      </div>
+
       <!-- Citation -->
       <div class="card" style="margin-bottom:16px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span id="awardsCitationTitle">CITATION</span>
+          <span id="awardsCitationTitle">NARRATIVE CITATION</span>
           <div style="display:flex; gap:12px; align-items:center;">
             <span id="awardsCharCount" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
             <span id="awardsScore" style="font-family:'Oswald',sans-serif; font-size:18px; color:var(--tan);"></span>
           </div>
         </div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:8px;">Ready to paste into IPPSA</div>
         <div id="awardsCitation" style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; padding:16px; background:var(--od-dark); border:1px solid var(--border); white-space:pre-wrap;"></div>
         <div class="btn-row" style="margin-top:12px;">
           <button class="btn btn-secondary btn-sm" onclick="copyAwardCitation()">Copy Citation</button>
@@ -2615,8 +2625,12 @@
 
       lastAwardResult = data;
 
+      // Render bullets
+      const bulletsList = document.getElementById('awardsBulletsList');
+      bulletsList.innerHTML = (data.bullets || []).map(b => `<div class="bullet-line">${b}</div>`).join('');
+
       // Render citation
-      document.getElementById('awardsCitationTitle').textContent = `${data.awardName} — CITATION`;
+      document.getElementById('awardsCitationTitle').textContent = `${data.awardName} — NARRATIVE CITATION`;
       document.getElementById('awardsCitation').textContent = data.citation;
 
       // Char count with color indicator
@@ -2650,6 +2664,15 @@
       document.getElementById('awardsError').style.display = 'block';
       document.getElementById('awardsError').textContent = 'ERROR: ' + err.message;
     }
+  }
+
+  function copyAwardBullets() {
+    const bullets = document.querySelectorAll('#awardsBulletsList .bullet-line');
+    const text = Array.from(bullets).map(b => '• ' + b.textContent.trim()).join('\n');
+    navigator.clipboard.writeText(text);
+    const btn = event.target;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => btn.textContent = 'Copy All Bullets', 2000);
   }
 
   function copyAwardCitation() {
