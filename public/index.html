@@ -521,6 +521,29 @@
   </div>
 </header>
 
+<!-- RESET PASSWORD MODAL -->
+<div id="resetModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border);">
+      <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;">Reset Password</div>
+      <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;">Enter your new password below</div>
+    </div>
+    <div style="padding:24px;">
+      <div class="field" style="margin-bottom:16px;">
+        <label>New Password (min 8 characters)</label>
+        <input type="password" id="resetNewPassword" placeholder="••••••••">
+      </div>
+      <div class="field" style="margin-bottom:20px;">
+        <label>Confirm New Password</label>
+        <input type="password" id="resetConfirmPassword" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" style="width:100%;" id="resetSubmitBtn" onclick="submitResetPassword()">Set New Password</button>
+      <div id="resetError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+      <div id="resetSuccess" style="display:none; margin-top:12px; padding:10px 14px; background:#1a3d1a; border:1px solid #4CAF50; color:#4CAF50; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- LIMIT MODAL -->
 <div id="limitModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
   <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:420px; margin:20px;">
@@ -2175,10 +2198,8 @@
       document.getElementById('loginError').style.display = 'block';
       window.history.replaceState({}, '', '/');
     } else if (resetToken) {
-      // Password reset flow
-      showAuth('login');
-      document.getElementById('loginError').textContent = 'Use the form below to reset your password. Token: ' + resetToken;
-      document.getElementById('loginError').style.display = 'block';
+      // Show password reset modal
+      showResetPasswordModal(resetToken);
       window.history.replaceState({}, '', '/');
     }
   }
@@ -2249,6 +2270,68 @@
   initAuth();
   handleVerifyToken();
   handlePaymentReturn();
+
+  let pendingResetToken = null;
+
+  function showResetPasswordModal(token) {
+    pendingResetToken = token;
+    document.getElementById('resetNewPassword').value = '';
+    document.getElementById('resetConfirmPassword').value = '';
+    document.getElementById('resetError').style.display = 'none';
+    document.getElementById('resetSuccess').style.display = 'none';
+    document.getElementById('resetModal').style.display = 'flex';
+  }
+
+  async function submitResetPassword() {
+    const password = document.getElementById('resetNewPassword').value;
+    const confirm = document.getElementById('resetConfirmPassword').value;
+    const btn = document.getElementById('resetSubmitBtn');
+    const errEl = document.getElementById('resetError');
+    const sucEl = document.getElementById('resetSuccess');
+
+    errEl.style.display = 'none';
+    sucEl.style.display = 'none';
+
+    if (!password || password.length < 8) {
+      errEl.textContent = 'Password must be at least 8 characters.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if (password !== confirm) {
+      errEl.textContent = 'Passwords do not match.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+
+    try {
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: pendingResetToken, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Reset failed. Please request a new link.';
+        errEl.style.display = 'block';
+      } else {
+        sucEl.textContent = '✓ Password reset successfully. You can now log in.';
+        sucEl.style.display = 'block';
+        setTimeout(() => {
+          document.getElementById('resetModal').style.display = 'none';
+          showAuth('login');
+        }, 2000);
+      }
+    } catch (e) {
+      errEl.textContent = 'Connection error. Please try again.';
+      errEl.style.display = 'block';
+    } finally {
+      btn.textContent = 'Set New Password';
+      btn.disabled = false;
+    }
+  }
 
   // ── USAGE LIMITS ──────────────────────────────────────────────────────────────
 
