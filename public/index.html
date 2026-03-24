@@ -599,10 +599,36 @@
       <button class="btn btn-secondary btn-sm" onclick="showAuth('login')">Login</button>
       <button class="btn btn-primary btn-sm" onclick="showAuth('register')">Sign Up — Free</button>
     </div>
-    <div id="userMenu" style="display:none; align-items:center; gap:12px;">
-      <span id="userEmail" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);"></span>
+    <div id="userMenu" style="display:none; align-items:center; gap:12px; position:relative;">
+      <span id="userEmail" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); cursor:pointer;" onclick="toggleAccountMenu()"></span>
       <span id="userPlan" style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px; padding:2px 8px; border:1px solid var(--tan); color:var(--tan); cursor:pointer;" onclick="handlePlanClick()"></span>
       <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+
+      <!-- Account dropdown -->
+      <div id="accountMenu" style="display:none; position:absolute; top:32px; right:0; background:var(--card); border:1px solid var(--tan); min-width:280px; z-index:500; box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+        <div style="background:var(--od-dark); padding:12px 16px; border-bottom:1px solid var(--border);">
+          <div style="font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:2px; color:var(--tan);">MY ACCOUNT</div>
+        </div>
+        <div style="padding:16px;">
+          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; margin-bottom:6px;">EMAIL</div>
+          <div id="accountMenuEmail" style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); margin-bottom:16px;"></div>
+
+          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; margin-bottom:6px;">PLAN</div>
+          <div id="accountMenuPlan" style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); margin-bottom:16px;"></div>
+
+          <div style="border-top:1px solid var(--border); padding-top:14px; margin-bottom:14px;">
+            <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; margin-bottom:6px;">YOUR REFERRAL CODE</div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <div id="accountMenuCode" style="font-family:'Oswald',sans-serif; font-size:24px; letter-spacing:6px; color:var(--tan);"></div>
+              <button onclick="copyReferralCode()" id="copyReferralBtn" style="background:none; border:1px solid var(--border); color:var(--tan-dark); font-family:'Source Code Pro',monospace; font-size:9px; padding:4px 10px; cursor:pointer; letter-spacing:1px; white-space:nowrap;">COPY</button>
+            </div>
+            <div style="font-family:'Libre Franklin',sans-serif; font-size:11px; color:var(--tan-dark); margin-top:6px; line-height:1.5;">Share your code — referred users get 50% off their first month. You earn 1 free month of Premium when they subscribe.</div>
+          </div>
+
+          <button onclick="copyShareMessage()" id="copyShareBtn" style="width:100%; background:var(--od-dark); border:1px solid var(--border); color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; padding:8px; cursor:pointer; letter-spacing:1px; margin-bottom:8px;">📋 COPY SHARE MESSAGE</button>
+          <button onclick="toggleAccountMenu(); showReferralModal();" style="width:100%; background:none; border:1px solid var(--border); color:var(--tan-dark); font-family:'Source Code Pro',monospace; font-size:10px; padding:8px; cursor:pointer; letter-spacing:1px;">VIEW FULL REFERRAL INFO</button>
+        </div>
+      </div>
     </div>
     <div style="display:flex; align-items:center; gap:8px;">
       <div class="status-dot"></div>
@@ -667,6 +693,55 @@
       <div id="limitModalType" data-type="anonymous"></div>
       <button class="btn btn-primary" style="width:100%; margin-bottom:10px;" onclick="limitModalAction()" id="limitModalBtn">Create Free Account</button>
       <button class="btn btn-secondary" style="width:100%;" onclick="closeLimitModal()">Maybe Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- REFERRAL MODAL -->
+<div id="referralModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:460px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;">Refer a Fellow NCO</div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;">Share your code — earn a free month of Premium</div>
+      </div>
+      <button onclick="closeReferralModal()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:24px;">
+
+      <!-- Referral code display -->
+      <div style="background:var(--od-dark); border:1px solid var(--tan); padding:20px; text-align:center; margin-bottom:20px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); letter-spacing:2px; margin-bottom:8px;">YOUR REFERRAL CODE</div>
+        <div id="referralCodeDisplay" style="font-family:'Oswald',sans-serif; font-size:36px; letter-spacing:8px; color:var(--tan);"></div>
+        <button onclick="copyReferralCode()" id="copyReferralBtn" style="margin-top:12px; background:none; border:1px solid var(--border); color:var(--tan-dark); font-family:'Source Code Pro',monospace; font-size:10px; padding:6px 16px; cursor:pointer; letter-spacing:1px;">COPY CODE</button>
+      </div>
+
+      <!-- How it works -->
+      <div style="margin-bottom:20px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); letter-spacing:2px; margin-bottom:12px;">HOW IT WORKS</div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="font-family:'Oswald',sans-serif; font-size:18px; color:var(--tan); min-width:28px;">1</div>
+            <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.5;">Share your code with another NCO</div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="font-family:'Oswald',sans-serif; font-size:18px; color:var(--tan); min-width:28px;">2</div>
+            <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.5;">They enter your code when signing up — they get <strong style="color:var(--tan);">50% off their first month</strong></div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:flex-start;">
+            <div style="font-family:'Oswald',sans-serif; font-size:18px; color:var(--tan); min-width:28px;">3</div>
+            <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.5;">When they subscribe, you get <strong style="color:var(--tan);">one free month of Premium</strong> added to your account</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Share message -->
+      <div style="margin-bottom:20px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); letter-spacing:2px; margin-bottom:8px;">SHARE THIS MESSAGE</div>
+        <div id="referralShareText" style="background:var(--od-dark); border:1px solid var(--border); padding:12px; font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.6;"></div>
+        <button onclick="copyShareMessage()" id="copyShareBtn" style="margin-top:8px; background:none; border:1px solid var(--border); color:var(--tan-dark); font-family:'Source Code Pro',monospace; font-size:10px; padding:6px 16px; cursor:pointer; letter-spacing:1px; width:100%;">COPY SHARE MESSAGE</button>
+      </div>
+
     </div>
   </div>
 </div>
@@ -2449,7 +2524,7 @@
   function setLoggedIn(user, token) {
     currentUser = user;
     localStorage.setItem('ncokit_token', token);
-    resetAnonUsage(); // Clear anonymous usage counter on login
+    resetAnonUsage();
     document.getElementById('authButtons').style.display = 'none';
     document.getElementById('userMenu').style.display = 'flex';
     document.getElementById('userEmail').textContent = user.email;
@@ -2458,8 +2533,30 @@
     document.getElementById('saveCounselingBtn').style.display = 'inline-block';
     const saveAFTBtn = document.getElementById('saveAFTBtn');
     if (saveAFTBtn) saveAFTBtn.style.display = 'inline-block';
+    // Populate account menu
+    const code = user.referralCode || user.referral_code;
+    document.getElementById('accountMenuEmail').textContent = user.email;
+    document.getElementById('accountMenuPlan').textContent = user.plan === 'premium' ? '⭐ Premium — Unlimited Access' : 'Free — 10 AI generations/month';
+    document.getElementById('accountMenuCode').textContent = code || '...';
+    if (document.getElementById('referralCodeDisplay')) {
+      document.getElementById('referralCodeDisplay').textContent = code || '...';
+    }
     closeAuth();
   }
+
+  function toggleAccountMenu() {
+    const menu = document.getElementById('accountMenu');
+    menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+  }
+
+  // Close account menu when clicking outside
+  document.addEventListener('click', function(e) {
+    const menu = document.getElementById('accountMenu');
+    const userMenu = document.getElementById('userMenu');
+    if (menu && userMenu && !userMenu.contains(e.target)) {
+      menu.style.display = 'none';
+    }
+  });
 
   function showAuth(tab) {
     document.getElementById('authModal').style.display = 'flex';
@@ -2745,6 +2842,40 @@
       btn.disabled = false;
     }
   }
+
+  function showReferralModal() {
+    if (!currentUser) return;
+    const code = currentUser.referralCode || currentUser.referral_code;
+    document.getElementById('referralCodeDisplay').textContent = code || '...';
+    document.getElementById('referralShareText').textContent =
+      `Hey — check out NCO Kit (ncokit.com). It's an AI-powered toolkit for Army NCOs — generates DA 4856 counseling forms, NCOER bullets by MOS, award citations, and AFT scores. Use my referral code ${code} when signing up and you'll get 50% off your first month of Premium.`;
+    document.getElementById('referralModal').style.display = 'flex';
+  }
+
+  function closeReferralModal() {
+    document.getElementById('referralModal').style.display = 'none';
+  }
+
+  function copyReferralCode() {
+    const code = currentUser.referralCode || currentUser.referral_code;
+    navigator.clipboard.writeText(code);
+    const btn = document.getElementById('copyReferralBtn');
+    btn.textContent = '✓ COPIED';
+    setTimeout(() => btn.textContent = 'COPY', 2000);
+  }
+
+  function copyShareMessage() {
+    const code = currentUser.referralCode || currentUser.referral_code;
+    const text = `Hey — check out NCO Kit (ncokit.com). It's an AI-powered toolkit for Army NCOs — generates DA 4856 counseling forms, NCOER bullets by MOS, award citations, and AFT scores. Use my referral code ${code} when signing up and you'll get 50% off your first month of Premium.`;
+    navigator.clipboard.writeText(text);
+    const btn = document.getElementById('copyShareBtn');
+    btn.textContent = '✓ COPIED';
+    setTimeout(() => btn.textContent = '📋 COPY SHARE MESSAGE', 2000);
+  }
+
+  document.getElementById('referralModal').addEventListener('click', function(e) {
+    if (e.target === this) closeReferralModal();
+  });
 
   // ── USAGE LIMITS ──────────────────────────────────────────────────────────────
 
