@@ -893,6 +893,7 @@
     <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
     <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
     <button class="tab" onclick="switchTab('awards', this)">🎖️ Awards Writer</button>
+    <button class="tab" onclick="switchTab('memo', this)">📄 Memo Generator</button>
     <button class="tab" id="savesTab" onclick="switchTab('saves', this)" style="display:none">💾 My Saves</button>
     <button class="tab" onclick="switchTab('info', this)">ℹ️ About</button>
   </div>
@@ -1530,6 +1531,107 @@
         <div id="awardsAdvisoryText" style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;"></div>
       </div>
 
+    </div>
+
+  </div>
+
+  <!-- ===== MEMO PANEL ===== -->
+  <div class="panel" id="panel-memo">
+
+    <div class="section-header">
+      <div>
+        <div class="section-title">Memorandum Generator</div>
+        <div class="section-sub">Army-standard memorandums formatted per AR 25-50 — export to PDF and sign from your phone</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Memorandum Information</div>
+
+      <div class="form-grid three" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Memo Type</label>
+          <select id="memo_type" onchange="updateMemoType()">
+            <option value="MFR">Memorandum For Record</option>
+            <option value="MEMO_FOR">Memorandum For</option>
+            <option value="MEMO_THRU">Memorandum For (Thru)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" id="memo_date">
+        </div>
+        <div class="field">
+          <label>Office Symbol</label>
+          <input type="text" id="memo_office" placeholder="e.g. AFRC-HRO">
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:16px;" id="memo_for_row">
+        <div class="field">
+          <label id="memo_for_label">MEMORANDUM FOR</label>
+          <input type="text" id="memo_for" placeholder="e.g. All Assigned Personnel, Commander 1-12 IN">
+        </div>
+      </div>
+
+      <div class="form-grid" style="display:none; margin-bottom:16px;" id="memo_thru_row">
+        <div class="field">
+          <label>THRU</label>
+          <input type="text" id="memo_thru" placeholder="e.g. Commander, HHC, 1-12 IN">
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>SUBJECT</label>
+          <input type="text" id="memo_subject" placeholder="e.g. Appointment of Unit Prevention Leader">
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:16px;">
+        <label>Body — Describe the purpose and key points in plain language. AI will format into proper Army memo language.</label>
+        <textarea id="memo_body" rows="8" placeholder="Example:&#10;This memo documents that SGT Smith was counseled on 15 March 2026 regarding a positive urinalysis result. SGT Smith was informed of the results and their rights. SGT Smith acknowledged the counseling and will be referred to the unit prevention leader for follow-up. All required notifications have been made.&#10;&#10;Or just list your key points and let the AI write it."></textarea>
+      </div>
+
+      <div class="card-title" style="margin-bottom:12px;">Signature Block</div>
+      <div class="form-grid three" style="margin-bottom:20px;">
+        <div class="field">
+          <label>Your Name (Last, First MI)</label>
+          <input type="text" id="memo_sig_name" placeholder="WILSON, Brigham J.">
+        </div>
+        <div class="field">
+          <label>Rank / Grade</label>
+          <input type="text" id="memo_sig_rank" placeholder="SSG, USA">
+        </div>
+        <div class="field">
+          <label>Title / Position</label>
+          <input type="text" id="memo_sig_title" placeholder="Squad Leader">
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:20px;">
+        <label>Unit / Organization</label>
+        <input type="text" id="memo_sig_unit" placeholder="HHC, 1-12 Infantry, 4th Infantry Division">
+      </div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="memoBtn" onclick="generateMemo()">⚡ AI Enhance & Generate PDF</button>
+        <button class="btn btn-secondary" onclick="generateMemoPDF(false)">Generate PDF As-Is</button>
+        <button class="btn btn-secondary" onclick="clearMemo()">Clear</button>
+      </div>
+      <div id="memoLoading" style="display:none; margin-top:16px; font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan); letter-spacing:2px;">GENERATING MEMORANDUM...</div>
+      <div id="memoError" style="display:none; margin-top:12px; padding:10px 14px; background:#3d1010; border:1px solid var(--red); color:#f44336; font-family:'Source Code Pro',monospace; font-size:11px;"></div>
+    </div>
+
+    <!-- Preview -->
+    <div id="memoPreview" style="display:none; margin-top:16px;">
+      <div class="card">
+        <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
+          <span>MEMORANDUM PREVIEW</span>
+          <button class="btn btn-secondary btn-sm" onclick="generateMemoPDF(true)">⬇ Download PDF</button>
+        </div>
+        <div id="memoPreviewText" style="font-family:'Courier New',monospace; font-size:12px; color:var(--white); line-height:1.8; padding:20px; background:var(--od-dark); border:1px solid var(--border); white-space:pre-wrap; margin-top:12px;"></div>
+      </div>
     </div>
 
   </div>
@@ -2957,6 +3059,175 @@
   document.getElementById('limitModal').addEventListener('click', function(e) {
     if (e.target === this) closeLimitModal();
   });
+
+  // ── MEMO GENERATOR ────────────────────────────────────────────────────────────
+
+  let lastMemoData = null;
+
+  // Set today's date on load
+  document.getElementById('memo_date').value = new Date().toISOString().split('T')[0];
+
+  function updateMemoType() {
+    const type = document.getElementById('memo_type').value;
+    const thruRow = document.getElementById('memo_thru_row');
+    const forLabel = document.getElementById('memo_for_label');
+    if (type === 'MFR') {
+      forLabel.textContent = 'MEMORANDUM FOR';
+      thruRow.style.display = 'none';
+      document.getElementById('memo_for').placeholder = 'e.g. Record, All Assigned Personnel';
+    } else if (type === 'MEMO_FOR') {
+      forLabel.textContent = 'MEMORANDUM FOR';
+      thruRow.style.display = 'none';
+      document.getElementById('memo_for').placeholder = 'e.g. Commander, 1-12 Infantry';
+    } else if (type === 'MEMO_THRU') {
+      forLabel.textContent = 'MEMORANDUM FOR';
+      thruRow.style.display = 'block';
+      document.getElementById('memo_for').placeholder = 'e.g. Commander, 4th Infantry Division';
+    }
+  }
+
+  async function generateMemo() {
+    const body = document.getElementById('memo_body').value.trim();
+    const subject = document.getElementById('memo_subject').value.trim();
+    if (!body) { alert('Please enter the memo body content.'); return; }
+    if (!subject) { alert('Please enter a subject.'); return; }
+    if (checkAnonLimit()) return;
+
+    const btn = document.getElementById('memoBtn');
+    btn.disabled = true;
+    btn.textContent = 'Generating...';
+    document.getElementById('memoLoading').style.display = 'block';
+    document.getElementById('memoError').style.display = 'none';
+    document.getElementById('memoPreview').style.display = 'none';
+
+    try {
+      const res = await fetch('/api/memo-enhance', {
+        method: 'POST',
+        headers: getUsageHeaders(),
+        body: JSON.stringify({ body, subject, type: document.getElementById('memo_type').value })
+      });
+      const data = await res.json();
+      document.getElementById('memoLoading').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '⚡ AI Enhance & Generate PDF';
+
+      if (handleUsageResponse(res, data)) return;
+      if (data.error) throw new Error(data.error);
+
+      document.getElementById('memo_body').value = data.enhanced;
+      buildMemoPreview();
+      if (!currentUser) incrementAnonUsage();
+
+    } catch (err) {
+      document.getElementById('memoLoading').style.display = 'none';
+      btn.disabled = false;
+      btn.textContent = '⚡ AI Enhance & Generate PDF';
+      document.getElementById('memoError').style.display = 'block';
+      document.getElementById('memoError').textContent = 'ERROR: ' + err.message;
+    }
+  }
+
+  function buildMemoPreview() {
+    const type = document.getElementById('memo_type').value;
+    const date = document.getElementById('memo_date').value;
+    const office = document.getElementById('memo_office').value.trim();
+    const memoFor = document.getElementById('memo_for').value.trim();
+    const memoThru = document.getElementById('memo_thru').value.trim();
+    const subject = document.getElementById('memo_subject').value.trim();
+    const body = document.getElementById('memo_body').value.trim();
+    const sigName = document.getElementById('memo_sig_name').value.trim();
+    const sigRank = document.getElementById('memo_sig_rank').value.trim();
+    const sigTitle = document.getElementById('memo_sig_title').value.trim();
+    const sigUnit = document.getElementById('memo_sig_unit').value.trim();
+
+    // Format date as DD Month YYYY
+    const dateObj = date ? new Date(date + 'T12:00:00') : new Date();
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const formattedDate = `${String(dateObj.getDate()).padStart(2,'0')} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+
+    // Format body into numbered paragraphs
+    const lines = body.split('\n').filter(l => l.trim());
+    let formattedBody = '';
+    let paraNum = 1;
+    for (const line of lines) {
+      if (line.trim()) {
+        formattedBody += `${paraNum}. ${line.trim()}\n\n`;
+        paraNum++;
+      }
+    }
+
+    let preview = `DEPARTMENT OF THE ARMY\n`;
+    if (office) preview += `${office}\n`;
+    preview += `\n`;
+    preview += `${' '.repeat(60)}${formattedDate}\n\n`;
+    if (type === 'MEMO_THRU' && memoThru) {
+      preview += `MEMORANDUM THRU ${memoThru}\n\n`;
+    }
+    preview += `MEMORANDUM FOR${type === 'MFR' ? ' RECORD' : (memoFor ? ' ' + memoFor : '')}\n\n`;
+    preview += `SUBJECT: ${subject}\n\n`;
+    preview += formattedBody;
+    preview += `\n\n\n`;
+    preview += `${' '.repeat(40)}____________________________\n`;
+    preview += `${' '.repeat(40)}${sigName}\n`;
+    preview += `${' '.repeat(40)}${sigRank}\n`;
+    if (sigTitle) preview += `${' '.repeat(40)}${sigTitle}\n`;
+    if (sigUnit) preview += `${' '.repeat(40)}${sigUnit}\n`;
+
+    lastMemoData = { type, formattedDate, office, memoFor, memoThru, subject, body, formattedBody, sigName, sigRank, sigTitle, sigUnit };
+
+    document.getElementById('memoPreviewText').textContent = preview;
+    document.getElementById('memoPreview').style.display = 'block';
+  }
+
+  function generateMemoPDF(useEnhanced) {
+    if (useEnhanced && lastMemoData) {
+      // Use server to generate proper PDF
+      const payload = { ...lastMemoData };
+      fetch('/api/generate-memo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(res => res.blob()).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Memorandum_${(lastMemoData.subject || 'memo').replace(/[^a-z0-9]/gi,'_').substring(0,30)}.pdf`;
+        a.click();
+      }).catch(() => {
+        document.getElementById('memoError').textContent = 'PDF generation failed. Please try again.';
+        document.getElementById('memoError').style.display = 'block';
+      });
+    } else {
+      buildMemoPreview();
+      const payload = { ...lastMemoData };
+      fetch('/api/generate-memo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).then(res => res.blob()).then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Memorandum_${(document.getElementById('memo_subject').value || 'memo').replace(/[^a-z0-9]/gi,'_').substring(0,30)}.pdf`;
+        a.click();
+      }).catch(() => {
+        document.getElementById('memoError').textContent = 'PDF generation failed. Please try again.';
+        document.getElementById('memoError').style.display = 'block';
+      });
+    }
+  }
+
+  function clearMemo() {
+    ['memo_office','memo_for','memo_thru','memo_subject','memo_body','memo_sig_name','memo_sig_rank','memo_sig_title','memo_sig_unit'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('memo_date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('memo_type').value = 'MFR';
+    updateMemoType();
+    document.getElementById('memoPreview').style.display = 'none';
+    document.getElementById('memoError').style.display = 'none';
+    lastMemoData = null;
+  }
 
   // ── AWARDS ────────────────────────────────────────────────────────────────
 
