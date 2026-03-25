@@ -836,9 +836,8 @@ Rules for Army memo body:
 
 // Memo PDF Generation — AR 25-50 compliant formatting
 app.post('/api/generate-memo', (req, res) => {
-  const { type, formattedDate, office, memoFor, memoThru, subject, formattedBody, sigName, sigRank, sigTitle, sigUnit } = req.body;
+  const { type, formattedDate, office, unit, addr1, addr2, memoFor, memoThru, subject, formattedBody, sigName, sigRank, sigTitle, sigUnit } = req.body;
 
-  // AR 25-50: 1 inch margins all around on letter size paper
   const doc = new PDFDocument({ margin: 72, size: 'letter' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Memorandum.pdf"`);
@@ -846,129 +845,103 @@ app.post('/api/generate-memo', (req, res) => {
 
   const pageW = 612;
   const pageH = 792;
-  const marginL = 72;  // 1 inch
-  const marginR = 72;  // 1 inch
-  const contentW = pageW - marginL - marginR; // 468 pts = 6.5 inches
+  const marginL = 72;
+  const marginR = 72;
+  const contentW = pageW - marginL - marginR;
   const marginT = 72;
 
-  // ── LETTERHEAD ─────────────────────────────────────────────────────────────
-  // AR 25-50: "DEPARTMENT OF THE ARMY" centered at top in bold caps
-  doc.fontSize(14).font('Helvetica-Bold')
+  // ── LETTERHEAD HEADER ──────────────────────────────────────────────────────
+  // Line 1: DEPARTMENT OF THE ARMY — bold centered
+  doc.fontSize(12).font('Helvetica-Bold')
     .text('DEPARTMENT OF THE ARMY', marginL, marginT, { width: contentW, align: 'center' });
+  let y = doc.y + 2;
 
-  let y = doc.y + 4;
-
-  // Unit/Organization line centered
-  if (office) {
+  // Line 2: Unit name — centered
+  if (unit) {
     doc.fontSize(10).font('Helvetica')
-      .text(office, marginL, y, { width: contentW, align: 'center' });
-    y = doc.y + 4;
+      .text(unit, marginL, y, { width: contentW, align: 'center' });
+    y = doc.y + 2;
   }
 
-  // Horizontal rule under header
-  y += 4;
+  // Line 3: Address line 1 — centered
+  if (addr1) {
+    doc.fontSize(10).font('Helvetica')
+      .text(addr1, marginL, y, { width: contentW, align: 'center' });
+    y = doc.y + 2;
+  }
+
+  // Line 4: City, State ZIP — centered
+  if (addr2) {
+    doc.fontSize(10).font('Helvetica')
+      .text(addr2, marginL, y, { width: contentW, align: 'center' });
+    y = doc.y + 2;
+  }
+
+  // Horizontal rule under letterhead
+  y += 6;
   doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(1).stroke();
-  y += 16;
+  y += 14;
 
-  // ── OFFICE SYMBOL AND DATE LINE ────────────────────────────────────────────
-  // AR 25-50: Office symbol flush left, date flush right on same line
+  // ── OFFICE SYMBOL (left) and DATE (right) on same line ────────────────────
   const dateStr = formattedDate || '';
-  const dateWidth = doc.fontSize(10).font('Helvetica').widthOfString(dateStr);
-
   if (office) {
-    doc.fontSize(10).font('Helvetica').text(office, marginL, y);
+    doc.fontSize(10).font('Helvetica').fillColor('#000000').text(office, marginL, y);
   }
-  doc.fontSize(10).font('Helvetica').text(dateStr, pageW - marginR - dateWidth - 10, y);
+  const dateTextWidth = doc.fontSize(10).font('Helvetica').widthOfString(dateStr);
+  doc.fontSize(10).font('Helvetica').text(dateStr, pageW - marginR - dateTextWidth, y);
   y += 20;
 
   // ── THRU LINE ──────────────────────────────────────────────────────────────
   if (type === 'MEMO_THRU' && memoThru) {
-    doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM THRU', marginL, y, { continued: false });
-    y = doc.y;
-    doc.fontSize(10).font('Helvetica').text(memoThru, marginL + 20, y, { width: contentW - 20 });
-    y = doc.y + 6;
+    doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM THRU', marginL, y);
+    y = doc.y + 2;
+    doc.fontSize(10).font('Helvetica').text(memoThru, marginL + 18, y, { width: contentW - 18 });
+    y = doc.y + 8;
   }
 
   // ── MEMORANDUM FOR LINE ────────────────────────────────────────────────────
-  // AR 25-50: "MEMORANDUM FOR" in caps bold, recipient on same line
   if (type === 'MFR') {
     doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM FOR RECORD', marginL, y);
   } else {
     doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM FOR', marginL, y, { continued: true });
     doc.font('Helvetica').text(`  ${memoFor || ''}`, { width: contentW });
   }
-  y = doc.y + 6;
+  y = doc.y + 8;
 
   // ── SUBJECT LINE ───────────────────────────────────────────────────────────
-  // AR 25-50: "SUBJECT:" in caps bold, subject text on same line
   doc.fontSize(10).font('Helvetica-Bold').text('SUBJECT:', marginL, y, { continued: true });
   doc.font('Helvetica').text(`  ${subject || ''}`, { width: contentW });
   y = doc.y + 16;
 
   // ── BODY ───────────────────────────────────────────────────────────────────
-  // AR 25-50: Body uses numbered paragraphs, 1 inch left margin, double space between paragraphs
   if (formattedBody) {
     const paragraphs = formattedBody.split('\n\n').filter(p => p.trim());
     for (const para of paragraphs) {
       const text = para.trim();
       if (!text) continue;
-
-      // Check if we need a new page
-      if (y > pageH - 200) {
-        doc.addPage();
-        y = marginT;
-      }
-
-      doc.fontSize(10).font('Helvetica').text(text, marginL, y, {
-        width: contentW,
-        align: 'left',
-        lineGap: 2
-      });
+      if (y > pageH - 200) { doc.addPage(); y = marginT; }
+      doc.fontSize(10).font('Helvetica').fillColor('#000000')
+        .text(text, marginL, y, { width: contentW, align: 'left', lineGap: 2 });
       y = doc.y + 12;
     }
   }
 
   // ── SIGNATURE BLOCK ────────────────────────────────────────────────────────
-  // AR 25-50: Signature block starts at center of page horizontally
-  // If near bottom, add space; otherwise push to reasonable position
-  y = Math.max(y + 20, pageH - 180);
-
-  // Check if we need new page for sig block
-  if (y > pageH - 130) {
-    doc.addPage();
-    y = marginT + 200;
-  }
+  y = Math.max(y + 20, pageH - 160);
+  if (y > pageH - 120) { doc.addPage(); y = marginT + 200; }
 
   const sigX = marginL + (contentW * 0.5);
-
-  // Signature line
   doc.fontSize(10).font('Helvetica').fillColor('#000000')
-    .text('_'.repeat(32), sigX, y, { characterSpacing: 1 });
+    .text('_'.repeat(30), sigX, y, { characterSpacing: 1 });
   y = doc.y + 4;
 
-  // Name in all caps bold
   if (sigName) {
-    doc.fontSize(10).font('Helvetica-Bold')
-      .text(sigName.toUpperCase(), sigX, y);
+    doc.fontSize(10).font('Helvetica-Bold').text(sigName.toUpperCase(), sigX, y);
     y = doc.y + 2;
   }
-
-  // Rank
-  if (sigRank) {
-    doc.fontSize(10).font('Helvetica').text(sigRank, sigX, y);
-    y = doc.y + 2;
-  }
-
-  // Title
-  if (sigTitle) {
-    doc.fontSize(10).font('Helvetica').text(sigTitle, sigX, y);
-    y = doc.y + 2;
-  }
-
-  // Unit
-  if (sigUnit) {
-    doc.fontSize(10).font('Helvetica').text(sigUnit, sigX, y);
-  }
+  if (sigRank) { doc.fontSize(10).font('Helvetica').text(sigRank, sigX, y); y = doc.y + 2; }
+  if (sigTitle) { doc.fontSize(10).font('Helvetica').text(sigTitle, sigX, y); y = doc.y + 2; }
+  if (sigUnit) { doc.fontSize(10).font('Helvetica').text(sigUnit, sigX, y); }
 
   // ── FOOTER ─────────────────────────────────────────────────────────────────
   doc.fontSize(7).font('Helvetica').fillColor('#888888')
@@ -977,6 +950,7 @@ app.post('/api/generate-memo', (req, res) => {
 
   doc.end();
 });
+
 
 // Category fit validation
 app.post('/api/validate-category', aiLimiter, async (req, res) => {
