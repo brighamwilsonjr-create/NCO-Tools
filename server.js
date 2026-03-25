@@ -50,6 +50,19 @@ const generalLimiter = rateLimit({
 // Apply general limiter to all routes
 app.use(generalLimiter);
 
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
+  next();
+});
+
 // Stripe webhook needs raw body BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -141,6 +154,16 @@ function generateToken(length = 32) {
 
 function generateReferralCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
+}
+
+// Sanitize user input before sending to AI — strip potential prompt injection attempts
+function sanitizeInput(str, maxLen = 2000) {
+  if (!str) return '';
+  return String(str)
+    .replace(/<[^>]*>/g, '') // strip HTML
+    .replace(/\[INST\]|\[\/INST\]|<\|im_start\|>|<\|im_end\|>|###\s*(System|User|Assistant):/gi, '') // strip common prompt injection markers
+    .trim()
+    .substring(0, maxLen);
 }
 
 async function getUserFromSession(req) {
@@ -434,6 +457,10 @@ async function checkCounselingLimit(req, res, next) {
 app.post('/api/enhance-counseling', aiLimiter, checkCounselingLimit, async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
+  const safeText = sanitizeInput(rawText, 1000);
+  const safeName = sanitizeInput(soldierName, 100);
+  const safeRank = sanitizeInput(rank, 50);
+  const safeCounselingType = sanitizeInput(counselingType, 50);
   const sectionContext = {
     situation: 'the Background Information / Purpose of Counseling section',
     strengths: 'the Strengths and Commendable Performance section',
@@ -441,7 +468,7 @@ app.post('/api/enhance-counseling', aiLimiter, checkCounselingLimit, async (req,
     plan_of_action: 'the Plan of Action section',
     leader_responsibilities: 'the Leader Responsibilities section'
   };
-  const prompt = `You are an expert Army NCO writer specializing in DA Form 4856. Rewrite the following rough notes into professional Army regulatory language for ${sectionContext[section] || 'a DA 4856'}.\n\nSoldier: ${rank} ${soldierName}\nCounseling Type: ${counselingType}\nRaw Notes: ${rawText}\n\nRules: Write in third person. Professional Army language. No bullet points. No headers. Output ONLY the rewritten text.`;
+  const prompt = `You are an expert Army NCO writer specializing in DA Form 4856. Rewrite the following rough notes into professional Army regulatory language for ${sectionContext[section] || 'a DA 4856'}.\n\nSoldier: ${safeRank} ${safeName}\nCounseling Type: ${safeCounselingType}\nRaw Notes: ${safeText}\n\nRules: Write in third person. Professional Army language. No bullet points. No headers. Output ONLY the rewritten text.`;
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -499,6 +526,9 @@ app.post('/api/generate-4856', (req, res) => {
 app.post('/api/bullets', aiLimiter, checkUsageLimit, async (req, res) => {
   const { name, category, action, impact, count, mos } = req.body;
   if (!action) return res.status(400).json({ error: 'Action field is required.' });
+  const safeName = sanitizeInput(name, 100);
+  const safeAction = sanitizeInput(action, 1000);
+  const safeImpact = sanitizeInput(impact, 500);
 
   const mosContext = {
     '11B': 'Infantryman. Focuses on direct combat operations, small unit tactics, physical readiness, weapons proficiency, and leading soldiers in austere environments.',
@@ -539,9 +569,9 @@ app.post('/api/bullets', aiLimiter, checkUsageLimit, async (req, res) => {
 
 Generate exactly ${count||3} NCOER bullet(s) for the "${category}" section of an NCOER.
 
-Soldier: ${name||'Soldier'}${mosLabel}
-What they did: ${action}
-${impact?`Metrics/Impact: ${impact}`:''}
+Soldier: ${safeName||'Soldier'}${mosLabel}
+What they did: ${safeAction}
+${safeImpact?`Metrics/Impact: ${safeImpact}`:''}
 
 Rules:
 - Start with a strong action verb appropriate to the soldier's role
@@ -633,6 +663,11 @@ app.post('/api/stripe/portal', async (req, res) => {
 app.post('/api/awards', aiLimiter, checkUsageLimit, async (req, res) => {
   const { soldierName, rank, unit, awardLevel, period, accomplishments } = req.body;
   if (!accomplishments || !awardLevel) return res.status(400).json({ error: 'Award level and accomplishments are required.' });
+  const safeSoldierName = sanitizeInput(soldierName, 100);
+  const safeRank = sanitizeInput(rank, 50);
+  const safeUnit = sanitizeInput(unit, 100);
+  const safePeriod = sanitizeInput(period, 100);
+  const safeAccomplishments = sanitizeInput(accomplishments, 3000);
 
   const awardGuidance = {
     'AAM': {
@@ -672,14 +707,14 @@ app.post('/api/awards', aiLimiter, checkUsageLimit, async (req, res) => {
   const prompt = `You are an expert Army awards writer with deep knowledge of AR 600-8-22 (Military Awards) and Army writing standards. You write award packages that get approved.
 
 Award: ${award.name} (${awardLevel})
-Soldier: ${rank} ${soldierName}
-Unit: ${unit || 'Not specified'}
-Period of Service: ${period || 'Not specified'}
+Soldier: ${safeRank} ${safeSoldierName}
+Unit: ${safeUnit || 'Not specified'}
+Period of Service: ${safePeriod || 'Not specified'}
 Award Standard: ${award.standard}
 Citation Character Limit: ${award.charLimit} characters
 
 Accomplishments provided by the nominating NCO:
-${accomplishments}
+${safeAccomplishments}
 
 YOUR TASKS:
 
@@ -1177,11 +1212,19 @@ async function initDB() {
 }
 
 // Contact form
-app.post('/api/contact', async (req, res) => {
+app.post('/api/contact', authLimiter, async (req, res) => {
   const { name, email, subject, message } = req.body;
   if (!name || !email || !subject || !message) {
     return res.status(400).json({ error: 'All fields are required.' });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address.' });
+  }
+  // Basic sanitization — strip HTML tags from inputs
+  const sanitize = str => String(str).replace(/<[^>]*>/g, '').substring(0, 2000);
+  const safeName = sanitize(name);
+  const safeSubject = sanitize(subject);
+  const safeMessage = sanitize(message);
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -1193,7 +1236,7 @@ app.post('/api/contact', async (req, res) => {
         from: 'NCO Kit Contact <noreply@ncokit.com>',
         to: 'brighamwilsonjr@gmail.com',
         reply_to: email,
-        subject: `[NCO Kit] ${subject} — from ${name}`,
+        subject: `[NCO Kit] ${safeSubject} — from ${safeName}`,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
             <h1 style="color:#C8B48A;font-size:20px;letter-spacing:3px;text-transform:uppercase;margin-bottom:4px;">NCO Kit</h1>
@@ -1201,7 +1244,7 @@ app.post('/api/contact', async (req, res) => {
             <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
               <tr>
                 <td style="padding:8px 12px;color:#a08e65;font-size:12px;width:100px;vertical-align:top;">FROM</td>
-                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${name}</td>
+                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${safeName}</td>
               </tr>
               <tr style="background:#1a2419;">
                 <td style="padding:8px 12px;color:#a08e65;font-size:12px;vertical-align:top;">EMAIL</td>
@@ -1209,14 +1252,14 @@ app.post('/api/contact', async (req, res) => {
               </tr>
               <tr>
                 <td style="padding:8px 12px;color:#a08e65;font-size:12px;vertical-align:top;">SUBJECT</td>
-                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${subject}</td>
+                <td style="padding:8px 12px;color:#F4F1EA;font-size:14px;">${safeSubject}</td>
               </tr>
             </table>
             <div style="background:#1a2419;padding:20px;border-left:3px solid #C8B48A;margin-bottom:24px;">
               <div style="color:#a08e65;font-size:11px;letter-spacing:2px;margin-bottom:10px;">MESSAGE</div>
-              <div style="color:#F4F1EA;font-size:14px;line-height:1.7;white-space:pre-wrap;">${message}</div>
+              <div style="color:#F4F1EA;font-size:14px;line-height:1.7;white-space:pre-wrap;">${safeMessage}</div>
             </div>
-            <p style="color:#666;font-size:11px;">Reply directly to this email to respond to ${name}.</p>
+            <p style="color:#666;font-size:11px;">Reply directly to this email to respond to ${safeName}.</p>
           </div>
         `
       })
