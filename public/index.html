@@ -1546,7 +1546,27 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Memorandum Information</div>
+      <div class="card-title">Memorandum Header</div>
+
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Unit / Organization Name</label>
+          <input type="text" id="memo_unit" placeholder="e.g. Headquarters, 1st Battalion, 12th Infantry Regiment">
+        </div>
+      </div>
+
+      <div class="form-grid" style="margin-bottom:16px;">
+        <div class="field">
+          <label>Unit Address Line 1</label>
+          <input type="text" id="memo_addr1" placeholder="e.g. 1234 Strike Drive">
+        </div>
+        <div class="field">
+          <label>Unit Address Line 2 (City, State, ZIP)</label>
+          <input type="text" id="memo_addr2" placeholder="e.g. Fort Carson, CO 80913">
+        </div>
+      </div>
+
+      <div class="card-title" style="margin-bottom:12px; margin-top:8px;">Memorandum Information</div>
 
       <div class="form-grid three" style="margin-bottom:16px;">
         <div class="field">
@@ -3131,6 +3151,9 @@
     const type = document.getElementById('memo_type').value;
     const date = document.getElementById('memo_date').value;
     const office = document.getElementById('memo_office').value.trim();
+    const unit = document.getElementById('memo_unit').value.trim();
+    const addr1 = document.getElementById('memo_addr1').value.trim();
+    const addr2 = document.getElementById('memo_addr2').value.trim();
     const memoFor = document.getElementById('memo_for').value.trim();
     const memoThru = document.getElementById('memo_thru').value.trim();
     const subject = document.getElementById('memo_subject').value.trim();
@@ -3140,12 +3163,10 @@
     const sigTitle = document.getElementById('memo_sig_title').value.trim();
     const sigUnit = document.getElementById('memo_sig_unit').value.trim();
 
-    // Format date as DD Month YYYY
     const dateObj = date ? new Date(date + 'T12:00:00') : new Date();
     const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const formattedDate = `${String(dateObj.getDate()).padStart(2,'0')} ${months[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
 
-    // Format body into numbered paragraphs
     const lines = body.split('\n').filter(l => l.trim());
     let formattedBody = '';
     let paraNum = 1;
@@ -3157,9 +3178,12 @@
     }
 
     let preview = `DEPARTMENT OF THE ARMY\n`;
-    if (office) preview += `${office}\n`;
+    if (unit) preview += `${unit}\n`;
+    if (addr1) preview += `${addr1}\n`;
+    if (addr2) preview += `${addr2}\n`;
     preview += `\n`;
-    preview += `${' '.repeat(60)}${formattedDate}\n\n`;
+    if (office) preview += `${office}`;
+    preview += `${' '.repeat(Math.max(1, 60 - (office ? office.length : 0)))}${formattedDate}\n\n`;
     if (type === 'MEMO_THRU' && memoThru) {
       preview += `MEMORANDUM THRU ${memoThru}\n\n`;
     }
@@ -3173,7 +3197,7 @@
     if (sigTitle) preview += `${' '.repeat(40)}${sigTitle}\n`;
     if (sigUnit) preview += `${' '.repeat(40)}${sigUnit}\n`;
 
-    lastMemoData = { type, formattedDate, office, memoFor, memoThru, subject, body, formattedBody, sigName, sigRank, sigTitle, sigUnit };
+    lastMemoData = { type, formattedDate, office, unit, addr1, addr2, memoFor, memoThru, subject, body, formattedBody, sigName, sigRank, sigTitle, sigUnit };
 
     document.getElementById('memoPreviewText').textContent = preview;
     document.getElementById('memoPreview').style.display = 'block';
@@ -3218,7 +3242,7 @@
   }
 
   function clearMemo() {
-    ['memo_office','memo_for','memo_thru','memo_subject','memo_body','memo_sig_name','memo_sig_rank','memo_sig_title','memo_sig_unit'].forEach(id => {
+    ['memo_unit','memo_addr1','memo_addr2','memo_office','memo_for','memo_thru','memo_subject','memo_body','memo_sig_name','memo_sig_rank','memo_sig_title','memo_sig_unit'].forEach(id => {
       document.getElementById(id).value = '';
     });
     document.getElementById('memo_date').value = new Date().toISOString().split('T')[0];
