@@ -834,79 +834,146 @@ Rules for Army memo body:
   }
 });
 
-// Memo PDF Generation
+// Memo PDF Generation — AR 25-50 compliant formatting
 app.post('/api/generate-memo', (req, res) => {
   const { type, formattedDate, office, memoFor, memoThru, subject, formattedBody, sigName, sigRank, sigTitle, sigUnit } = req.body;
 
+  // AR 25-50: 1 inch margins all around on letter size paper
   const doc = new PDFDocument({ margin: 72, size: 'letter' });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="Memorandum.pdf"`);
   doc.pipe(res);
 
-  const L = 72;
-  const W = 612 - 144;
-  let y = 72;
+  const pageW = 612;
+  const pageH = 792;
+  const marginL = 72;  // 1 inch
+  const marginR = 72;  // 1 inch
+  const contentW = pageW - marginL - marginR; // 468 pts = 6.5 inches
+  const marginT = 72;
 
-  // Header
-  doc.fontSize(12).font('Helvetica-Bold').text('DEPARTMENT OF THE ARMY', L, y, { width: W, align: 'center' });
-  y += 16;
+  // ── LETTERHEAD ─────────────────────────────────────────────────────────────
+  // AR 25-50: "DEPARTMENT OF THE ARMY" centered at top in bold caps
+  doc.fontSize(14).font('Helvetica-Bold')
+    .text('DEPARTMENT OF THE ARMY', marginL, marginT, { width: contentW, align: 'center' });
+
+  let y = doc.y + 4;
+
+  // Unit/Organization line centered
   if (office) {
-    doc.fontSize(10).font('Helvetica').text(office, L, y, { width: W, align: 'center' });
-    y += 14;
+    doc.fontSize(10).font('Helvetica')
+      .text(office, marginL, y, { width: contentW, align: 'center' });
+    y = doc.y + 4;
   }
-  y += 10;
 
-  // Date — right aligned
-  doc.fontSize(10).font('Helvetica').text(formattedDate || '', L, y, { width: W, align: 'right' });
+  // Horizontal rule under header
+  y += 4;
+  doc.moveTo(marginL, y).lineTo(pageW - marginR, y).lineWidth(1).stroke();
+  y += 16;
+
+  // ── OFFICE SYMBOL AND DATE LINE ────────────────────────────────────────────
+  // AR 25-50: Office symbol flush left, date flush right on same line
+  const dateStr = formattedDate || '';
+  const dateWidth = doc.fontSize(10).font('Helvetica').widthOfString(dateStr);
+
+  if (office) {
+    doc.fontSize(10).font('Helvetica').text(office, marginL, y);
+  }
+  doc.fontSize(10).font('Helvetica').text(dateStr, pageW - marginR - dateWidth - 10, y);
   y += 20;
 
-  // THRU line
+  // ── THRU LINE ──────────────────────────────────────────────────────────────
   if (type === 'MEMO_THRU' && memoThru) {
-    doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM THRU ', L, y, { continued: true });
-    doc.font('Helvetica').text(memoThru);
-    y = doc.y + 10;
+    doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM THRU', marginL, y, { continued: false });
+    y = doc.y;
+    doc.fontSize(10).font('Helvetica').text(memoThru, marginL + 20, y, { width: contentW - 20 });
+    y = doc.y + 6;
   }
 
-  // FOR line
-  const forText = type === 'MFR' ? 'MEMORANDUM FOR RECORD' : `MEMORANDUM FOR ${memoFor || ''}`;
-  doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM FOR', L, y, { continued: type !== 'MFR' });
-  if (type !== 'MFR') {
-    doc.font('Helvetica').text(` ${memoFor || ''}`);
+  // ── MEMORANDUM FOR LINE ────────────────────────────────────────────────────
+  // AR 25-50: "MEMORANDUM FOR" in caps bold, recipient on same line
+  if (type === 'MFR') {
+    doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM FOR RECORD', marginL, y);
   } else {
-    doc.font('Helvetica-Bold').text('');
+    doc.fontSize(10).font('Helvetica-Bold').text('MEMORANDUM FOR', marginL, y, { continued: true });
+    doc.font('Helvetica').text(`  ${memoFor || ''}`, { width: contentW });
   }
-  y = doc.y + 10;
+  y = doc.y + 6;
 
-  // SUBJECT line
-  doc.fontSize(10).font('Helvetica-Bold').text('SUBJECT: ', L, y, { continued: true });
-  doc.font('Helvetica').text(subject || '');
-  y = doc.y + 20;
+  // ── SUBJECT LINE ───────────────────────────────────────────────────────────
+  // AR 25-50: "SUBJECT:" in caps bold, subject text on same line
+  doc.fontSize(10).font('Helvetica-Bold').text('SUBJECT:', marginL, y, { continued: true });
+  doc.font('Helvetica').text(`  ${subject || ''}`, { width: contentW });
+  y = doc.y + 16;
 
-  // Body
+  // ── BODY ───────────────────────────────────────────────────────────────────
+  // AR 25-50: Body uses numbered paragraphs, 1 inch left margin, double space between paragraphs
   if (formattedBody) {
     const paragraphs = formattedBody.split('\n\n').filter(p => p.trim());
     for (const para of paragraphs) {
-      if (para.trim()) {
-        doc.fontSize(10).font('Helvetica').text(para.trim(), L, y, { width: W, align: 'left' });
-        y = doc.y + 10;
+      const text = para.trim();
+      if (!text) continue;
+
+      // Check if we need a new page
+      if (y > pageH - 200) {
+        doc.addPage();
+        y = marginT;
       }
+
+      doc.fontSize(10).font('Helvetica').text(text, marginL, y, {
+        width: contentW,
+        align: 'left',
+        lineGap: 2
+      });
+      y = doc.y + 12;
     }
   }
 
-  // Signature block
-  y = Math.max(y + 30, doc.page.height - 200);
-  const sigX = L + W * 0.5;
+  // ── SIGNATURE BLOCK ────────────────────────────────────────────────────────
+  // AR 25-50: Signature block starts at center of page horizontally
+  // If near bottom, add space; otherwise push to reasonable position
+  y = Math.max(y + 20, pageH - 180);
 
-  doc.fontSize(10).font('Helvetica').text('_'.repeat(35), sigX, y);
-  y = doc.y + 2;
-  if (sigName) { doc.fontSize(10).font('Helvetica-Bold').text(sigName, sigX, y); y = doc.y + 2; }
-  if (sigRank) { doc.fontSize(10).font('Helvetica').text(sigRank, sigX, y); y = doc.y + 2; }
-  if (sigTitle) { doc.fontSize(10).font('Helvetica').text(sigTitle, sigX, y); y = doc.y + 2; }
-  if (sigUnit) { doc.fontSize(10).font('Helvetica').text(sigUnit, sigX, y); }
+  // Check if we need new page for sig block
+  if (y > pageH - 130) {
+    doc.addPage();
+    y = marginT + 200;
+  }
 
-  // Footer
-  doc.fontSize(7).font('Helvetica').fillColor('#666')
-    .text('Generated by NCO Kit — ncokit.com | Review before official use', L, doc.page.height - 30, { width: W, align: 'center' });
+  const sigX = marginL + (contentW * 0.5);
+
+  // Signature line
+  doc.fontSize(10).font('Helvetica').fillColor('#000000')
+    .text('_'.repeat(32), sigX, y, { characterSpacing: 1 });
+  y = doc.y + 4;
+
+  // Name in all caps bold
+  if (sigName) {
+    doc.fontSize(10).font('Helvetica-Bold')
+      .text(sigName.toUpperCase(), sigX, y);
+    y = doc.y + 2;
+  }
+
+  // Rank
+  if (sigRank) {
+    doc.fontSize(10).font('Helvetica').text(sigRank, sigX, y);
+    y = doc.y + 2;
+  }
+
+  // Title
+  if (sigTitle) {
+    doc.fontSize(10).font('Helvetica').text(sigTitle, sigX, y);
+    y = doc.y + 2;
+  }
+
+  // Unit
+  if (sigUnit) {
+    doc.fontSize(10).font('Helvetica').text(sigUnit, sigX, y);
+  }
+
+  // ── FOOTER ─────────────────────────────────────────────────────────────────
+  doc.fontSize(7).font('Helvetica').fillColor('#888888')
+    .text('Generated by NCO Kit — ncokit.com | Review before official use | Not an official Army document',
+      marginL, pageH - 30, { width: contentW, align: 'center' });
 
   doc.end();
 });
