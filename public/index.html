@@ -573,6 +573,10 @@
     .form-grid.three { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
     .tabs { flex-wrap: wrap; }
+    #userEmail { display: none !important; }
+    .logo-sub { display: none; }
+    header { padding: 0 12px; height: auto; min-height: 56px; flex-wrap: wrap; gap: 8px; padding-top: 8px; padding-bottom: 8px; }
+    .header-right { flex-wrap: wrap; gap: 6px; }
   }
 </style>
 <!-- Google tag (gtag.js) -->
@@ -763,7 +767,7 @@
         <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); margin-bottom:10px; letter-spacing:2px;">PREMIUM INCLUDES:</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Unlimited saves across all tools</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ NCOER Support Form Builder (coming soon)</div>
-        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Awards Recommendation Writer (coming soon)</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Awards Recommendation Writer</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Promotion Board Prep Tool (coming soon)</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Priority AI response speed</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0;">✓ Early access to new features</div>
@@ -1350,8 +1354,8 @@
       </div>
       <div class="form-grid" style="margin-top:14px">
         <div class="field">
-          <label>Test Date (YYYYMMDD)</label>
-          <input type="text" id="aft_date" placeholder="20260318">
+          <label>Test Date</label>
+          <input type="date" id="aft_date">
         </div>
         <div class="field">
           <label>Standard</label>
@@ -1864,25 +1868,25 @@
 
     <!-- Saved Counselings -->
     <div id="saves-counselings">
-      <div class="empty-state" id="savedCounselingsEmpty" style="display:none">NO SAVED COUNSELINGS YET</div>
+      <div class="empty-state" id="savedCounselingsEmpty" style="display:none">NO SAVED COUNSELINGS YET — Generate a DA 4856 and click "Save Counseling" to get started</div>
       <div id="savedCounselingsList"></div>
     </div>
 
     <!-- Saved Bullets -->
     <div id="saves-bullets" style="display:none">
-      <div class="empty-state" id="savedBulletsEmpty" style="display:none">NO SAVED BULLETS YET</div>
+      <div class="empty-state" id="savedBulletsEmpty" style="display:none">NO SAVED BULLETS YET — Head to the NCOER Bullet Builder and click "Save Bullets" to get started</div>
       <div id="savedBulletsList"></div>
     </div>
 
     <!-- Saved Awards -->
     <div id="saves-awards" style="display:none">
-      <div class="empty-state" id="savedAwardsEmpty" style="display:none">NO SAVED AWARD CITATIONS YET</div>
+      <div class="empty-state" id="savedAwardsEmpty" style="display:none">NO SAVED AWARD CITATIONS YET — Use the Awards Writer to generate and save a citation</div>
       <div id="savedAwardsList"></div>
     </div>
 
     <!-- Saved AFT Scores -->
     <div id="saves-aft" style="display:none">
-      <div class="empty-state" id="savedAFTEmpty" style="display:none">NO SAVED AFT SCORES YET</div>
+      <div class="empty-state" id="savedAFTEmpty" style="display:none">NO SAVED AFT SCORES YET — Score a test in the AFT Scorer and click "Save Score" to track it here</div>
       <div id="savedAFTList"></div>
     </div>
 
@@ -3458,6 +3462,15 @@
   }
 
   function renderSavedCounselings(items) {
+    const typeLabels = {
+      initial: 'Initial Counseling',
+      performance: 'Performance Counseling',
+      event_positive: 'Event-Oriented (Commendable)',
+      event_negative: 'Event-Oriented (Substandard)',
+      ncoer_support: 'NCOER Support Form',
+      profile: 'Profile / Physical Limitations',
+      custom: 'Custom'
+    };
     const el = document.getElementById('savedCounselingsList');
     const empty = document.getElementById('savedCounselingsEmpty');
     if (!items.length) { empty.style.display = 'block'; el.innerHTML = ''; return; }
@@ -3465,7 +3478,7 @@
     el.innerHTML = items.map(c => `
       <div class="card" style="margin-bottom:12px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>${c.soldier_name || 'Unknown'} — ${c.counseling_type || 'Counseling'}</span>
+          <span>${c.soldier_name || 'Unknown'} — ${typeLabels[c.counseling_type] || c.counseling_type || 'Counseling'}</span>
           <div style="display:flex; gap:8px;">
             <button class="btn btn-secondary btn-sm" onclick="loadCounseling(${JSON.stringify(c).replace(/"/g, '&quot;')})">Load</button>
             <button class="btn btn-danger" onclick="deleteSave('counseling','${c.id}')">Delete</button>
