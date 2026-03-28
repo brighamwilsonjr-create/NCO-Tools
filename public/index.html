@@ -890,6 +890,19 @@
     </div>
   </div>
 
+  <!-- ONBOARDING PROMPT -->
+  <div id="onboardingBanner" style="display:none; background:var(--card); border:1px solid var(--tan); padding:16px 20px; margin-bottom:20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+    <div style="font-size:22px;">👋</div>
+    <div style="flex:1; min-width:200px;">
+      <div style="font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">WELCOME TO NCO KIT</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white);">Start by adding your first soldier to the roster, then generate a counseling or NCOER bullets.</div>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" onclick="switchTab('roster', document.querySelector('.tab:nth-child(2)'))">+ Add Soldier</button>
+      <button class="btn btn-secondary btn-sm" onclick="switchTab('counseling', document.querySelector('.tab:nth-child(1)'))">DA 4856 Generator</button>
+    </div>
+  </div>
+
   <!-- TABS -->
   <div class="tabs">
     <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
@@ -1789,6 +1802,18 @@
       </div>
     </div>
 
+    <!-- FAQ -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Frequently Asked Questions</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
+        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit free?</strong><br>Yes. The core tools — DA 4856 generator, NCOER bullet builder, AFT scorer, and soldier roster — are free with up to 10 AI generations per month. Premium ($8/month) unlocks unlimited AI, the NCOER Support Form, Awards Writer, and Promotion Board Prep Tool.</p>
+        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is my data secure? Will the Army see it?</strong><br>NCO Kit is not connected to Army systems, IPPS-A, EES, or any official Army network. Your data is stored securely and is only accessible by your account. Do not enter classified or CUI information.</p>
+        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Can I use this on my phone?</strong><br>Yes — NCO Kit works on any device with a browser. You can also install it to your home screen like a native app using the "Install NCO Kit" prompt at the bottom of the page.</p>
+        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit endorsed by the Army?</strong><br>No. NCO Kit is an independent tool built by an NCO for NCOs. It is not affiliated with, endorsed by, or connected to the Department of the Army. All generated documents should be reviewed by the responsible leader before official use.</p>
+        <p style="margin:0;"><strong style="color:var(--tan);">How do I share NCO Kit with my squad?</strong><br>Just send them to <strong>ncokit.com</strong> — no installation required. Works on any phone, tablet, or computer.</p>
+      </div>
+    </div>
+
     <!-- Security -->
     <div class="card" style="margin-bottom:16px;">
       <div class="card-title">Privacy & Security</div>
@@ -1801,6 +1826,15 @@
       </div>
     </div>
 
+    <!-- Share -->
+    <div class="card" style="margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">SHARE NCO KIT WITH YOUR FORMATION</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white);">Know another NCO who'd save hours every week? Send them the link.</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="copyShareLink()" id="shareLinkBtn">🔗 Copy Link</button>
+    </div>
+
     <!-- Coming soon -->
     <div class="card">
       <div class="card-title">Coming Soon</div>
@@ -1808,6 +1842,14 @@
         <p style="margin:0 0 8px 0;">⚙️ NCOER Support Form Builder — AI-assisted, all six Army leadership attributes</p>
         <p style="margin:0 0 8px 0;">⚙️ Promotion Board Prep Tool — question banks, self-quiz mode, weak area tracking</p>
         <p style="margin:0;">⚙️ PWA — install NCO Kit on your phone home screen like a native app</p>
+      </div>
+      <div style="margin-top:16px; border-top:1px solid var(--border); padding-top:14px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:2px; color:var(--tan); margin-bottom:10px;">GET NOTIFIED WHEN THESE LAUNCH</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <input type="email" id="notifyEmail" placeholder="your.email@army.mil" style="flex:1; min-width:180px;">
+          <button class="btn btn-primary btn-sm" onclick="submitNotify()">Notify Me</button>
+        </div>
+        <div id="notifyMsg" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); margin-top:8px; display:none;">✓ You're on the list — we'll reach out when these launch.</div>
       </div>
     </div>
 
@@ -1955,6 +1997,30 @@
     }
   }
 
+  // NOTIFY ME
+  async function submitNotify() {
+    const emailVal = document.getElementById('notifyEmail').value.trim();
+    if (!emailVal) return;
+    try {
+      await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'Notify Request', email: emailVal, subject: 'Feature Notification Request', message: 'Please notify me when upcoming features launch: NCOER Support Form Builder, Promotion Board Prep Tool, PWA.' })
+      });
+    } catch(e) {}
+    document.getElementById('notifyMsg').style.display = 'block';
+    document.getElementById('notifyEmail').value = '';
+  }
+
+  // SHARE LINK
+  function copyShareLink() {
+    navigator.clipboard.writeText('https://ncokit.com').then(() => {
+      const btn = document.getElementById('shareLinkBtn');
+      btn.textContent = '✓ Copied!';
+      setTimeout(() => { btn.textContent = '🔗 Copy Link'; }, 2500);
+    });
+  }
+
   // UPDATE STATS
   function updateStats() {
     document.getElementById('statSoldiers').textContent = soldiers.length;
@@ -1962,6 +2028,11 @@
     document.getElementById('statBullets').textContent = bulletCount;
     const overdue = soldiers.filter(s => s.status === 'overdue').length;
     document.getElementById('statOverdue').textContent = overdue;
+    const banner = document.getElementById('onboardingBanner');
+    if (banner) {
+      const allZero = soldiers.length === 0 && counselingCount === 0 && bulletCount === 0;
+      banner.style.display = (allZero && currentUser) ? 'flex' : 'none';
+    }
   }
 
   // SET TODAY'S DATE
