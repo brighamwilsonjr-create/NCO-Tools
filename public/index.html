@@ -3260,16 +3260,12 @@
       title.textContent = "You've Used Your 3 Free Generations";
       msg.textContent = "Create a free account to get 10 AI generations per month — no credit card required.";
       btn.textContent = "Create Free Account";
-    } else if (type === 'counseling') {
-      title.textContent = "Counseling Limit Reached";
-      msg.textContent = "You've used all 5 counseling enhancements this month. Upgrade to Premium for unlimited access.";
-      btn.textContent = "Upgrade to Premium — $8/month";
     } else {
       title.textContent = "Monthly Limit Reached";
       msg.textContent = "You've used all 10 of your free AI generations this month. Upgrade to Premium for unlimited access.";
       btn.textContent = "Upgrade to Premium — $8/month";
     }
-    document.getElementById('limitModalType').dataset.type = type === 'counseling' ? 'free' : type;
+    document.getElementById('limitModalType').dataset.type = type;
     modal.style.display = 'flex';
   }
 
