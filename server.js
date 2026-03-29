@@ -793,54 +793,61 @@ ADVISORY:
 // Senior Rater Narrative
 app.post('/api/senior-rater', aiLimiter, checkUsageLimit, async (req, res) => {
   const { evalType, name, rank, promotion, schooling, enumeration, nextLevel } = req.body;
-  if (!enumeration) return res.status(400).json({ error: 'Enumeration of achievements is required.' });
+  if (!enumeration) return res.status(400).json({ error: 'Peer ranking (Enumeration) is required.' });
 
-  const safeName     = sanitizeInput(name, 100);
-  const safeRank     = sanitizeInput(rank, 50);
-  const safePromo    = sanitizeInput(promotion, 100);
-  const safeSchool   = sanitizeInput(schooling, 100);
-  const safeEnum     = sanitizeInput(enumeration, 3000);
-  const safeNext     = sanitizeInput(nextLevel, 1000);
+  const safeName   = sanitizeInput(name, 100);
+  const safeRank   = sanitizeInput(rank, 50);
+  const safePromo  = sanitizeInput(promotion, 100);
+  const safeSchool = sanitizeInput(schooling, 100);
+  const safeEnum   = sanitizeInput(enumeration, 200);
+  const safeNext   = sanitizeInput(nextLevel, 200);
 
-  const isOER = (evalType === 'OER');
+  const isOER     = (evalType === 'OER');
   const evalLabel = isOER ? 'OER (Officer Evaluation Report)' : 'NCOER (Non-Commissioned Officer Evaluation Report)';
 
-  const prompt = `You are a senior Army leader writing the Senior Rater narrative for an ${evalLabel} per AR 623-3 (Evaluation Reporting System).
+  const ncoerNextRank = { SGT:'SSG', SSG:'SFC', SFC:'MSG/1SG', MSG:'1SG', '1SG':'SGM/CSM', SGM:'CSM', CSM:'SMA' };
+  const oerNextRank   = { '2LT':'1LT', '1LT':'CPT', CPT:'MAJ', MAJ:'LTC', LTC:'COL' };
+  const nextRank      = isOER ? (oerNextRank[safeRank] || 'the next grade') : (ncoerNextRank[safeRank] || 'the next grade');
 
-CRITICAL DOCTRINE — AR 623-3:
-The Senior Rater's comments address POTENTIAL only — not performance. Performance is the Rater's responsibility. The Senior Rater provides the Army's most important long-term talent management assessment, used by senior leaders for promotion and assignment decisions. Every sentence must forward-look at the rated individual's capacity for increased responsibility.
+  const prompt = `You are writing the Senior Rater narrative block for a U.S. Army ${evalLabel} per AR 623-3 (Evaluation Reporting System).
 
-Evaluation Type: ${evalLabel}
-Rated Individual: ${safeRank} ${safeName}
+DOCTRINAL REQUIREMENT (AR 623-3): The Senior Rater assesses POTENTIAL only — future capability, readiness for promotion, and assignment potential. Performance is the Rater's domain. Every sentence must be forward-looking.
 
-ESPN INPUTS:
-E — Enumeration (peer standing): ${safeEnum}
-S — School Recommendation: ${safeSchool}
-P — Promotion Recommendation: ${safePromo}
-N — Next Level Potential: ${safeNext || 'Not specified'}
+INPUTS PROVIDED:
+- Rated Individual: ${safeRank} ${safeName || '[Soldier]'}
+- Enumeration (peer standing): ${safeEnum}
+- School Recommendation: ${safeSchool}
+- Promotion Recommendation: ${safePromo}
+- Next Level Assignment: ${safeNext || 'key leadership assignment'}
 
-TASK:
-Write a precise 4-6 sentence senior rater narrative using these four inputs in order:
+OUTPUT REQUIREMENTS — Write exactly 5 sentences in this order:
 
-1. ENUMERATION SENTENCE: Open with the peer ranking statement. This is the most important sentence — it establishes where this individual stands among their contemporaries. Example format: "[Name] is [X] of [Y] [rank]s I currently senior rate..."
-2. PROMOTION SENTENCE: State the promotion recommendation ([${safePromo}]) and give ONE forward-looking reason they are ready for the next grade.
-3. SCHOOL SENTENCE: State the school recommendation ([${safeSchool}]) and connect it to their demonstrated readiness for that level of PME.
-4. NEXT LEVEL SENTENCE(S): Close with the specific position or assignment [${safeNext}] they are ready for. Be direct and decisive — "ready for," "send immediately to," "will excel as."
+SENTENCE 1 — ENUMERATION (open with peer ranking, word for word):
+State the enumeration exactly as given. Example output: "1 of 5 SFC I currently senior rate."
 
-AR 623-3 STYLE RULES:
+SENTENCE 2 — POTENTIAL (1 sentence, forward-looking only):
+Connect their standing to readiness for the next level. Speak to judgment, character, and capacity for greater responsibility. No past accomplishments. Example: "[Name] demonstrates the tactical competence and leadership maturity ready for ${nextRank}-level responsibilities."
+
+SENTENCE 3 — SCHOOL (direct command, no hedging):
+Recommend school as a firm directive. Example output: "Send to ${safeSchool} immediately."
+
+SENTENCE 4 — PROMOTION (direct command, name the next rank):
+State promotion as a direct command. Example output: "Promote to ${nextRank} now."
+
+SENTENCE 5 — NEXT LEVEL ASSIGNMENT (direct command):
+Close with the specific assignment as a direct command. Example output: "Provide ${safeNext || 'a key leadership position'} immediately."
+
+ABSOLUTE RULES:
 - Third person only — never use "I"
-- Forward-looking language only — no narrating past accomplishments (that is the Rater's job)
-- Be direct and definitive, not hedged or generic
-- No filler praise like "outstanding leader" without context
-- The tone is a senior leader making a firm talent management recommendation to the promotion board
-
-Return ONLY the narrative paragraph. No labels, headers, or explanations.`
+- Sentence 3, 4, and 5 are commands — short, direct, no "I recommend" or "I believe"
+- The enumeration in Sentence 1 must appear verbatim as given
+- Return ONLY the 5-sentence paragraph — no labels, no headers, nothing else`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
