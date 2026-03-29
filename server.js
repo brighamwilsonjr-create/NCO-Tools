@@ -8,6 +8,9 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const rateLimit = require('express-rate-limit');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
 
 const app = express();
 
@@ -29,6 +32,16 @@ const authLimiter = rateLimit({
   message: { error: 'Too many attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false
+});
+
+// File upload config — memory storage, PDF/DOCX only, 10MB max
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    allowed.includes(file.mimetype) ? cb(null, true) : cb(new Error('Only PDF and DOCX files are allowed'));
+  }
 });
 
 const aiLimiter = rateLimit({
@@ -1282,6 +1295,116 @@ app.delete('/api/save/award/:id', async (req, res) => {
   }
 });
 
+
+// ── DOCUMENT UPLOAD & MANAGEMENT ─────────────────────────────────────────────
+
+app.post('/api/save/document', upload.single('file'), async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  const { soldierName } = req.body;
+  const { originalname, mimetype, buffer } = req.file;
+  try {
+    let extractedText = '';
+    if (mimetype === 'application/pdf') {
+      const parsed = await pdfParse(buffer);
+      extractedText = parsed.text;
+    } else {
+      const result = await mammoth.extractRawText({ buffer });
+      extractedText = result.value;
+    }
+    if (!extractedText.trim()) {
+      return res.status(422).json({ error: 'Could not extract text from this file. Make sure it is not a scanned image.' });
+    }
+    const fileType = mimetype === 'application/pdf' ? 'pdf' : 'docx';
+    const result = await pool.query(
+      'INSERT INTO saved_documents (user_id, soldier_name, filename, file_type, extracted_text) VALUES ($1,$2,$3,$4,$5) RETURNING id',
+      [user.id, soldierName || '', originalname, fileType, extractedText.substring(0, 50000)]
+    );
+    res.json({ success: true, id: result.rows[0].id, charCount: extractedText.length });
+  } catch (err) {
+    console.error('Document upload error:', err);
+    res.status(500).json({ error: 'Failed to process document' });
+  }
+});
+
+app.get('/api/save/documents', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { name } = req.query;
+  try {
+    const query = name
+      ? 'SELECT id, soldier_name, filename, file_type, created_at FROM saved_documents WHERE user_id = $1 AND LOWER(soldier_name) LIKE $2 ORDER BY created_at DESC'
+      : 'SELECT id, soldier_name, filename, file_type, created_at FROM saved_documents WHERE user_id = $1 ORDER BY created_at DESC';
+    const params = name ? [user.id, '%' + name.toLowerCase() + '%'] : [user.id];
+    const result = await pool.query(query, params);
+    res.json({ documents: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load documents' });
+  }
+});
+
+app.get('/api/save/document/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM saved_documents WHERE id = $1 AND user_id = $2',
+      [req.params.id, user.id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ document: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to load' });
+  }
+});
+
+app.delete('/api/save/document/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_documents WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete' });
+  }
+});
+
+app.post('/api/analyze-document', aiLimiter, checkUsageLimit(1), async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { documentId, analysisType, soldierName, rank } = req.body;
+  if (!documentId || !analysisType) return res.status(400).json({ error: 'documentId and analysisType are required' });
+  try {
+    const docResult = await pool.query(
+      'SELECT extracted_text, filename FROM saved_documents WHERE id = $1 AND user_id = $2',
+      [documentId, user.id]
+    );
+    if (docResult.rows.length === 0) return res.status(404).json({ error: 'Document not found' });
+    const { extracted_text, filename } = docResult.rows[0];
+    const safeText = extracted_text.substring(0, 8000);
+    const safeName = sanitizeInput(soldierName, 100) || 'the Soldier';
+    const safeRank = sanitizeInput(rank, 50) || '';
+    let prompt;
+    if (analysisType === 'bullets') {
+      prompt = 'You are an expert Army NCO writer. Review the following document and extract the most significant accomplishments. Write 5 strong NCOER-style bullet points.\n\nDocument: "' + filename + '"\nSoldier: ' + safeRank + ' ' + safeName + '\n\nDocument Content:\n' + safeText + '\n\nRules:\n- Start each bullet with a strong action verb\n- Third person, no "I"\n- Quantify with numbers/metrics wherever the document provides them\n- Under 175 characters each\n- Do NOT number the bullets or add symbols\n\nRespond with ONLY the 5 bullets, one per line.';
+    } else {
+      prompt = 'You are an expert Army awards writer. Review the following document and write a narrative award citation suitable for an Army Commendation Medal (ARCOM).\n\nDocument: "' + filename + '"\nSoldier: ' + safeRank + ' ' + safeName + '\n\nDocument Content:\n' + safeText + '\n\nRules:\n- Opens with "For meritorious service..."\n- Third person throughout\n- Highlight specific measurable impacts\n- Keep strictly under 640 characters\n- Professional Army awards language per AR 600-8-22\n\nRespond with ONLY the citation paragraph.';
+    }
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await response.json();
+    if (data.error) return res.status(500).json({ error: data.error.message });
+    const output = data.content.map(i => i.text || '').join('').trim();
+    res.json({ output, analysisType });
+  } catch (err) {
+    console.error('Analyze document error:', err);
+    res.status(500).json({ error: 'Failed to analyze document' });
+  }
+});
 app.get('/verify', async (req, res) => {
   const { token } = req.query;
   if (!token) return res.redirect('/?error=invalid_token');
@@ -1434,6 +1557,17 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_awards_user ON saved_awards(user_id)`);
+
+        await pool.query(`CREATE TABLE IF NOT EXISTS saved_documents (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      soldier_name VARCHAR(255),
+      filename VARCHAR(500),
+      file_type VARCHAR(20),
+      extracted_text TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_documents_user ON saved_documents(user_id)`);
 
     console.log('Database initialized successfully');
   } catch (err) {
