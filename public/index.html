@@ -2413,12 +2413,131 @@
       else data.awards.forEach(function(aw) { html += '<div style="display:flex;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--od-dark);font-size:13px"><span style="color:var(--tan);font-weight:600;min-width:130px">'+(aw.award_level||'')+'</span><span style="flex:1">'+(aw.period||'')+'</span><span style="color:var(--tan-dark);font-size:11px">'+fmt(aw.created_at)+'</span></div>'; });
       html += '</div>';
       content.innerHTML = html;
+      fetchAndRenderDocs(name, content);
     } catch(err) { content.innerHTML = '<div class="empty-state">Failed to load. Try again.</div>'; }
   }
 
   function closeSoldierProfile() {
     document.getElementById('soldierProfileModal').style.display = 'none';
     document.body.style.overflow = '';
+  }
+
+  async function fetchAndRenderDocs(soldierName, container) {
+    try {
+      var docsRes = await fetch('/api/save/documents?name=' + encodeURIComponent(soldierName));
+      if (!docsRes.ok) return;
+      var docs = await docsRes.json();
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.id = 'docs-card';
+      var dh = '<h3 style="margin-bottom:10px">📎 Documents</h3>';
+      if (docs.length === 0) {
+        dh += '<div class="empty-state" style="padding:8px 0;font-size:13px">No documents uploaded yet.</div>';
+      } else {
+        docs.forEach(function(doc) {
+          dh += '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)">';
+          dh += '<div><div style="font-weight:600;font-size:13px">' + escHtml(doc.filename) + '</div>';
+          dh += '<div style="font-size:11px;color:var(--tan-dark)">' + doc.file_type.toUpperCase() + ' · ' + new Date(doc.created_at).toLocaleDateString() + '</div></div>';
+          dh += '<div style="display:flex;gap:6px">';
+          dh += '<button data-doc-id="' + doc.id + '" data-doc-name="' + escAttr(doc.filename) + '" data-soldier="' + escAttr(soldierName) + '" class="btn-secondary doc-analyze-btn" style="font-size:11px;padding:4px 8px">🤖 Analyze</button>';
+          dh += '<button data-doc-id="' + doc.id + '" data-soldier="' + escAttr(soldierName) + '" class="doc-delete-btn" style="font-size:11px;padding:4px 8px;background:#c0392b;color:#fff;border:none;border-radius:4px;cursor:pointer">🗑</button>';
+          dh += '</div></div>';
+        });
+      }
+      dh += '<div style="margin-top:12px"><button data-soldier="' + escAttr(soldierName) + '" class="doc-upload-btn btn-primary" style="font-size:12px;padding:6px 14px">📤 Upload PDF/DOCX</button></div>';
+      card.innerHTML = dh;
+      container.appendChild(card);
+      card.addEventListener('click', function(e) {
+        var ab = e.target.closest('.doc-analyze-btn');
+        var db = e.target.closest('.doc-delete-btn');
+        var ub = e.target.closest('.doc-upload-btn');
+        if (ab) analyzeDocument(ab.dataset.docId, ab.dataset.docName, ab.dataset.soldier);
+        if (db) deleteSoldierDocument(db.dataset.docId, db.dataset.soldier);
+        if (ub) uploadSoldierDocument(ub.dataset.soldier);
+      });
+    } catch(e2) { /* ignore */ }
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function escAttr(str) {
+    return String(str).replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
+
+  function uploadSoldierDocument(soldierName) {
+    var inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    inp.onchange = async function() {
+      var file = inp.files[0];
+      if (!file) return;
+      var fd = new FormData();
+      fd.append('document', file);
+      fd.append('soldierName', soldierName);
+      try {
+        var r = await fetch('/api/save/document', { method: 'POST', body: fd });
+        var d = await r.json();
+        if (!r.ok) { alert(d.error || 'Upload failed'); return; }
+        var cont = document.getElementById('profileModalContent');
+        var old = document.getElementById('docs-card');
+        if (old) old.remove();
+        fetchAndRenderDocs(soldierName, cont);
+        if (d.docId && confirm('Document uploaded! Analyze it with AI now?')) {
+          analyzeDocument(d.docId, file.name, soldierName);
+        }
+      } catch(e3) { alert('Upload error: ' + e3.message); }
+    };
+    inp.click();
+  }
+
+  async function deleteSoldierDocument(docId, soldierName) {
+    if (!confirm('Delete this document?')) return;
+    try {
+      var r2 = await fetch('/api/save/document/' + docId, { method: 'DELETE' });
+      if (!r2.ok) { alert('Delete failed'); return; }
+      var cont2 = document.getElementById('profileModalContent');
+      var old2 = document.getElementById('docs-card');
+      if (old2) old2.remove();
+      fetchAndRenderDocs(soldierName, cont2);
+    } catch(e4) { alert('Error: ' + e4.message); }
+  }
+
+  function analyzeDocument(docId, filename, soldierName) {
+    document.getElementById('docAnalysisModal').style.display = 'flex';
+    document.getElementById('docAnalysisFilename').textContent = filename;
+    document.getElementById('docAnalysisResult').innerHTML = '';
+    document.getElementById('docAnalysisBtns').style.display = 'flex';
+    window._pendingDocAnalysis = { docId: docId, filename: filename, soldierName: soldierName };
+  }
+
+  async function runDocumentAnalysis(type) {
+    var info = window._pendingDocAnalysis;
+    if (!info) return;
+    document.getElementById('docAnalysisBtns').style.display = 'none';
+    document.getElementById('docAnalysisResult').innerHTML = '<div class="empty-state">Analyzing with AI…</div>';
+    try {
+      var r3 = await fetch('/api/analyze-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docId: info.docId, type: type, soldierName: info.soldierName })
+      });
+      var d3 = await r3.json();
+      if (!r3.ok) {
+        var msg = (d3.error === 'limit_reached') ? 'AI usage limit reached. Upgrade to premium for unlimited access.' : (d3.error || 'Analysis failed');
+        document.getElementById('docAnalysisResult').innerHTML = '<div style="color:#c0392b">' + msg + '</div>';
+        return;
+      }
+      document.getElementById('docAnalysisResult').innerHTML = '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.6">' + escHtml(d3.result) + '</pre>';
+    } catch(e5) {
+      document.getElementById('docAnalysisResult').innerHTML = '<div style="color:#c0392b">Error: ' + e5.message + '</div>';
+    }
+  }
+
+  function closeDocAnalysisModal() {
+    document.getElementById('docAnalysisModal').style.display = 'none';
+    window._pendingDocAnalysis = null;
   }
 
   // BULLET BUILDER — AI POWERED
@@ -3972,5 +4091,19 @@ async function generateAward() {
     <div id="profileModalContent"><div class="empty-state">Loading...</div></div>
   </div>
 </div>
+
+  <!-- Document Analysis Modal -->
+  <div id="docAnalysisModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10000;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--bg-card,#1a1a2e);border-radius:12px;padding:28px;max-width:600px;width:100%;max-height:80vh;overflow-y:auto;position:relative">
+      <button onclick="closeDocAnalysisModal()" style="position:absolute;top:14px;right:16px;background:none;border:none;font-size:22px;cursor:pointer;color:var(--text-muted)">&#x2715;</button>
+      <h2 style="margin:0 0 6px">🤖 Analyze Document</h2>
+      <div id="docAnalysisFilename" style="font-size:13px;color:var(--tan-dark);margin-bottom:18px"></div>
+      <div id="docAnalysisBtns" style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:18px">
+        <button onclick="runDocumentAnalysis('bullets')" class="btn-primary" style="flex:1;min-width:160px">&#x1F4CB; Generate NCOER Bullets</button>
+        <button onclick="runDocumentAnalysis('award')" class="btn-secondary" style="flex:1;min-width:160px">&#x1F3C5; Generate Award Citation</button>
+      </div>
+      <div id="docAnalysisResult"></div>
+    </div>
+  </div>
 </body>
 </html>
