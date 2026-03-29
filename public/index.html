@@ -2474,7 +2474,7 @@
       var file = inp.files[0];
       if (!file) return;
       var fd = new FormData();
-      fd.append('document', file);
+      fd.append('file', file);
       fd.append('soldierName', soldierName);
       try {
         var r = await fetch('/api/save/document', { method: 'POST', body: fd });
@@ -2484,7 +2484,7 @@
         var old = document.getElementById('docs-card');
         if (old) old.remove();
         fetchAndRenderDocs(soldierName, cont);
-        if (d.docId && confirm('Document uploaded! Analyze it with AI now?')) {
+        if (d.id && confirm('Document uploaded! Analyze it with AI now?')) {
           analyzeDocument(d.docId, file.name, soldierName);
         }
       } catch(e3) { alert('Upload error: ' + e3.message); }
@@ -2521,7 +2521,7 @@
       var r3 = await fetch('/api/analyze-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ docId: info.docId, type: type, soldierName: info.soldierName })
+        body: JSON.stringify({ documentId: info.docId, analysisType: type, soldierName: info.soldierName })
       });
       var d3 = await r3.json();
       if (!r3.ok) {
