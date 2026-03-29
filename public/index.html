@@ -1566,8 +1566,8 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Evaluation Details</div>
-      <div class="form-grid three" style="margin-bottom:16px;">
+      <div class="card-title">Soldier Information</div>
+      <div class="form-grid three">
         <div class="field">
           <label>Evaluation Type</label>
           <select id="sr_eval_type" onchange="updateSRDropdowns()">
@@ -1576,40 +1576,48 @@
           </select>
         </div>
         <div class="field">
-          <label>Rated Individual Name</label>
-          <input type="text" id="sr_name" placeholder="CPT Smith">
+          <label>Rated Individual</label>
+          <input type="text" id="sr_name" placeholder="SFC Smith">
         </div>
         <div class="field">
           <label>Rank</label>
-          <select id="sr_rank">
+          <select id="sr_rank" onchange="updateSREnumLabel()">
             <option value="">Select Rank</option>
           </select>
-        </div>
-      </div>
-      <div class="form-grid two" style="margin-bottom:8px;">
-        <div class="field">
-          <label>Promotion Recommendation</label>
-          <select id="sr_promotion"></select>
-        </div>
-        <div class="field">
-          <label>Schooling Recommendation</label>
-          <select id="sr_schooling"></select>
         </div>
       </div>
     </div>
 
     <div class="card">
       <div class="card-title">ESPN Inputs</div>
-      <div class="field" style="margin-bottom:16px;">
-        <label>E — Enumeration <span style="font-family:'Source Code Pro',monospace;font-size:10px;color:var(--tan);letter-spacing:1px;">(Top 3-5 accomplishments, one per line)</span></label>
-        <textarea id="sr_enumeration" rows="5" placeholder="1. Led 12-soldier section through 180-day deployment with zero casualties&#10;2. Developed battalion-wide training program adopted across 3 units&#10;3. Selected as honor graduate, ALC Class 002-25"></textarea>
+
+      <div class="field" style="margin-bottom:20px;">
+        <label>E — Enumeration <span style="font-family:'Source Code Pro',monospace;font-size:10px;color:var(--tan);letter-spacing:1px;">(Peer ranking within your senior rated population)</span></label>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:14px;color:var(--white);">
+          <input type="number" id="sr_enum_rank" min="1" max="99" style="width:56px;padding:6px;text-align:center;background:var(--input-bg,#111d14);border:1px solid var(--border);color:var(--white);border-radius:4px;" placeholder="1" oninput="updateSREnumLabel()">
+          <span>of</span>
+          <input type="number" id="sr_enum_total" min="1" max="99" style="width:56px;padding:6px;text-align:center;background:var(--input-bg,#111d14);border:1px solid var(--border);color:var(--white);border-radius:4px;" placeholder="5">
+          <span id="sr_enum_rank_label" style="color:var(--tan);font-weight:600;font-family:'Oswald',sans-serif;letter-spacing:1px;">Soldiers</span>
+          <span>I currently senior rate</span>
+        </div>
       </div>
+
+      <div class="form-grid two" style="margin-bottom:20px;">
+        <div class="field">
+          <label>S — School Recommendation</label>
+          <select id="sr_schooling"></select>
+        </div>
+        <div class="field">
+          <label>P — Promotion Recommendation</label>
+          <select id="sr_promotion"></select>
+        </div>
+      </div>
+
       <div class="field">
-        <label>N — Next Level Potential <span style="font-family:'Source Code Pro',monospace;font-size:10px;color:var(--tan);letter-spacing:1px;">(Positions/roles they are ready for)</span></label>
-        <textarea id="sr_next_level" rows="3" placeholder="Ready for company command, battalion S3, or 18-month broadening assignment"></textarea>
+        <label>N — Next Level Potential <span style="font-family:'Source Code Pro',monospace;font-size:10px;color:var(--tan);letter-spacing:1px;">(Specific position or assignment they are ready for)</span></label>
+        <input type="text" id="sr_next_level" placeholder="1SG, key developmental assignment, Sergeant Major Academy">
       </div>
     </div>
-
     <button class="btn btn-primary" id="srBtn" onclick="generateSeniorRater()" style="width:100%;margin-bottom:16px;">⭐ GENERATE SENIOR RATER NARRATIVE</button>
 
     <div id="srLoading" style="display:none;" class="card">
@@ -3426,7 +3434,7 @@
   const SR_OER_PROMOTION  = ['Best Qualified','Highly Qualified','Qualified','Not Qualified'];
   const SR_NCOER_PROMOTION = ['Most Qualified','Highly Qualified','Qualified','Not Qualified'];
   const SR_OER_SCHOOLING  = ['Resident ILE','Non-Resident ILE','Senior Service College (Resident)','Senior Service College (Non-Resident)','International Military Fellow','Not Recommended'];
-  const SR_NCOER_SCHOOLING = ['Sergeant Major Academy (Resident)','Sergeant Major Academy (Non-Resident)','Resident PME (Next Level)','Non-Resident PME (Next Level)','Not Recommended'];
+  const SR_NCOER_SCHOOLING = ['Sergeant Major Academy (SMA)','Master Leader Course (MLC)','Senior Leader Course (SLC)','Advanced Leader Course (ALC)','Not Recommended'];
   const SR_OER_RANKS  = ['2LT','1LT','CPT','MAJ','LTC','COL'];
   const SR_NCOER_RANKS = ['SGT','SSG','SFC','MSG','1SG','SGM','CSM','SMA'];
 
@@ -3442,6 +3450,16 @@
     if (promoSel)  promoSel.innerHTML  = promoOpts.map(o  => '<option value="'+o+'">'+o+'</option>').join('');
     if (schoolSel) schoolSel.innerHTML = schoolOpts.map(o => '<option value="'+o+'">'+o+'</option>').join('');
     if (rankSel)   rankSel.innerHTML   = '<option value="">Select Rank</option>' + rankOpts.map(o => '<option value="'+o+'">'+o+'</option>').join('');
+    updateSREnumLabel();
+  }
+  function updateSREnumLabel() {
+    const rankSel = document.getElementById('sr_rank');
+    const label   = document.getElementById('sr_enum_rank_label');
+    if (label && rankSel && rankSel.value) {
+      label.textContent = rankSel.value + 's';
+    } else if (label) {
+      label.textContent = 'Soldiers';
+    }
   }
 
   let srLoadingInterval = null;
@@ -3452,11 +3470,13 @@
     const rank        = document.getElementById('sr_rank').value;
     const promotion   = document.getElementById('sr_promotion').value;
     const schooling   = document.getElementById('sr_schooling').value;
-    const enumeration = document.getElementById('sr_enumeration').value.trim();
+        const enumRank    = parseInt(document.getElementById('sr_enum_rank')?.value) || 0;
+    const enumTotal   = parseInt(document.getElementById('sr_enum_total')?.value) || 0;
+    const enumeration = enumRank + ' of ' + enumTotal + ' ' + rank + 's I currently senior rate';
     const nextLevel   = document.getElementById('sr_next_level').value.trim();
 
-    if (!enumeration) { alert('Please enter accomplishments in the Enumeration field.'); return; }
-    if (!nextLevel)   { alert('Please describe next level potential.'); return; }
+    if (!enumRank || !enumTotal) { alert('Please enter your peer ranking (e.g., 1 of 5).'); return; }
+    if (!nextLevel) { alert('Please enter the next level position or assignment.'); return; }
     if (checkAnonLimit()) return;
 
     const btn = document.getElementById('srBtn');
