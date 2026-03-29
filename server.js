@@ -1553,6 +1553,27 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
+// Soldier Profile — all records for a soldier by name
+app.get('/api/save/soldier-profile', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'Soldier name required' });
+  const search = '%' + name.toLowerCase() + '%';
+  try {
+    const [c, b, a, aw] = await Promise.all([
+      pool.query('SELECT id, date, counseling_type, subject, created_at FROM saved_counselings WHERE user_id=$1 AND LOWER(soldier_name) LIKE $2 ORDER BY created_at DESC', [user.id, search]),
+      pool.query('SELECT id, category, bullets, created_at FROM saved_bullets WHERE user_id=$1 AND LOWER(soldier_name) LIKE $2 ORDER BY created_at DESC', [user.id, search]),
+      pool.query('SELECT id, test_date, standard, total, pass_fail, created_at FROM saved_aft_scores WHERE user_id=$1 AND LOWER(soldier_name) LIKE $2 ORDER BY created_at DESC', [user.id, search]),
+      pool.query('SELECT id, award_level, period, created_at FROM saved_awards WHERE user_id=$1 AND LOWER(soldier_name) LIKE $2 ORDER BY created_at DESC', [user.id, search])
+    ]);
+    res.json({ name, counselings: c.rows, bullets: b.rows, aft: a.rows, awards: aw.rows });
+  } catch (err) {
+    console.error('Soldier profile error:', err);
+    res.status(500).json({ error: 'Failed to load soldier profile' });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`NCO Kit running on port ${PORT}`);
