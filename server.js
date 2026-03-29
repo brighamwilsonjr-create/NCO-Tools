@@ -805,35 +805,36 @@ app.post('/api/senior-rater', aiLimiter, checkUsageLimit, async (req, res) => {
   const isOER = (evalType === 'OER');
   const evalLabel = isOER ? 'OER (Officer Evaluation Report)' : 'NCOER (Non-Commissioned Officer Evaluation Report)';
 
-  const prompt = `You are an expert Army senior rater with 20+ years experience writing evaluation narratives. You use the ESPN framework: Enumeration, School, Promotion, Next Level.
+  const prompt = `You are a senior Army leader writing the Senior Rater narrative for an ${evalLabel} per AR 623-3 (Evaluation Reporting System).
+
+CRITICAL DOCTRINE — AR 623-3:
+The Senior Rater's comments address POTENTIAL only — not performance. Performance is the Rater's responsibility. The Senior Rater provides the Army's most important long-term talent management assessment, used by senior leaders for promotion and assignment decisions. Every sentence must forward-look at the rated individual's capacity for increased responsibility.
 
 Evaluation Type: ${evalLabel}
-Rated Soldier: ${safeRank} ${safeName}
-Promotion Recommendation: ${safePromo}
-Schooling Recommendation: ${safeSchool}
+Rated Individual: ${safeRank} ${safeName}
 
 ESPN INPUTS:
-E - Enumeration (key achievements/contributions):
-${safeEnum}
+E — Enumeration (peer standing): ${safeEnum}
+S — School Recommendation: ${safeSchool}
+P — Promotion Recommendation: ${safePromo}
+N — Next Level Potential: ${safeNext || 'Not specified'}
 
-N - Next Level assignment / broadening potential:
-${safeNext || 'Not specified'}
+TASK:
+Write a precise 4-6 sentence senior rater narrative using these four inputs in order:
 
-INSTRUCTIONS:
-Write a polished senior rater narrative using the ESPN framework. The narrative must:
-1. ENUMERATION: Open by highlighting 2-3 of the soldier's most significant contributions with specific impact. Use strong action verbs and quantify where possible.
-2. SCHOOL: Clearly state the schooling recommendation (${safeSchool}) and briefly justify why the soldier is ready.
-3. PROMOTION: State the promotion recommendation (${safePromo}) with one concise sentence on why they are ready for increased responsibility.
-4. NEXT LEVEL: Close with the specific next-level position or broadening assignment recommendation.
+1. ENUMERATION SENTENCE: Open with the peer ranking statement. This is the most important sentence — it establishes where this individual stands among their contemporaries. Example format: "[Name] is [X] of [Y] [rank]s I currently senior rate..."
+2. PROMOTION SENTENCE: State the promotion recommendation ([${safePromo}]) and give ONE forward-looking reason they are ready for the next grade.
+3. SCHOOL SENTENCE: State the school recommendation ([${safeSchool}]) and connect it to their demonstrated readiness for that level of PME.
+4. NEXT LEVEL SENTENCE(S): Close with the specific position or assignment [${safeNext}] they are ready for. Be direct and decisive — "ready for," "send immediately to," "will excel as."
 
-Style rules:
-- Third person, active voice, no "I"
-- 4-6 sentences total — concise and hard-hitting
-- No filler phrases like "this soldier" repeated excessively
-- Write as a senior leader who has personally observed this performance
-- Final sentence must be a strong, direct recommendation
+AR 623-3 STYLE RULES:
+- Third person only — never use "I"
+- Forward-looking language only — no narrating past accomplishments (that is the Rater's job)
+- Be direct and definitive, not hedged or generic
+- No filler praise like "outstanding leader" without context
+- The tone is a senior leader making a firm talent management recommendation to the promotion board
 
-Return ONLY the narrative paragraph. No labels, no headers, no explanations.`;
+Return ONLY the narrative paragraph. No labels, headers, or explanations.`
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
