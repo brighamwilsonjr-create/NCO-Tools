@@ -809,45 +809,74 @@ app.post('/api/senior-rater', aiLimiter, checkUsageLimit, async (req, res) => {
   const oerNextRank   = { '2LT':'1LT', '1LT':'CPT', CPT:'MAJ', MAJ:'LTC', LTC:'COL' };
   const nextRank      = isOER ? (oerNextRank[safeRank] || 'the next grade') : (ncoerNextRank[safeRank] || 'the next grade');
 
+  // Promotion-level guidance injected into the prompt — drives tone and urgency per AR 623-3
+  const promoGuide = {
+    'Most Qualified': `MOST QUALIFIED — Top ~23% of the senior rater's population. This is the highest rating possible.
+Tone: MAXIMUM urgency. Superlative language. This soldier stands above all contemporaries and demands immediate action from the Army.
+Sentence 2 guidance: Use language like "stands above all peers in my population," "exceptional potential," "ready to perform two levels above current grade." The language must convey that waiting to act would be a mistake.
+Sentence 3 (school): Use: "Send to ${safeSchool} immediately — do not delay." or "Select for ${safeSchool} without hesitation."
+Sentence 4 (promote): Use: "Promote to ${nextRank} immediately." or "Promote now — do not pass over this soldier."
+Sentence 5 (assignment): Use: "Provide ${safeNext || 'a key leadership position'} now — this soldier is ready." or "Assign to ${safeNext} immediately."`,
+
+    'Highly Qualified': `HIGHLY QUALIFIED — Above center of mass. Ready for promotion ahead of peers.
+Tone: Confident and strong, but not superlative. This soldier is ahead of contemporaries and should be promoted before peers.
+Sentence 2 guidance: Use language like "above peers in potential," "demonstrates the competence and judgment for ${nextRank}-level responsibilities," "ready for increased responsibility."
+Sentence 3 (school): Use: "Send to ${safeSchool}." or "Select for ${safeSchool} — ready for this level of PME."
+Sentence 4 (promote): Use: "Promote to ${nextRank} ahead of peers." or "Recommend promotion to ${nextRank}."
+Sentence 5 (assignment): Use: "Assign to ${safeNext || 'a broadening position'} — will succeed." or "Provide ${safeNext} — ready for this assignment."`,
+
+    'Qualified': `QUALIFIED — Center of mass. Meets all standards. Developing steadily toward promotion.
+Tone: Measured and supportive. Do NOT use urgency language. This is an average positive rating — the narrative should reflect solid but not exceptional standing.
+Sentence 2 guidance: Use language like "meets standards," "developing steadily toward ${nextRank}-level responsibilities," "demonstrates the fundamentals needed for future promotion."
+Sentence 3 (school): Use: "Recommend for ${safeSchool} when eligible." or "Should attend ${safeSchool} before next promotion."
+Sentence 4 (promote): Use: "Will be competitive for promotion to ${nextRank}." or "Recommend for promotion to ${nextRank} when fully qualified."
+Sentence 5 (assignment): Use: "Will benefit from continued service in ${safeNext || 'developmental assignments'}." or "Place in ${safeNext} to continue development."`,
+
+    'Not Qualified': `NOT QUALIFIED — Below center of mass. Not ready for promotion this evaluation period.
+Tone: Honest and direct. No promotion urgency. Narrative must address what development is needed.
+Sentence 2 guidance: Acknowledge where development is required before the next grade. Be specific and honest.
+Sentence 3 (school): Reference school as a developmental step, not an immediate reward: "Must complete ${safeSchool} before further consideration."
+Sentence 4 (promote): Use: "Not recommended for promotion to ${nextRank} at this time."
+Sentence 5 (assignment): Recommend assignment targeting the developmental gap.`
+  };
+
+  const guidance = promoGuide[safePromo] || promoGuide['Qualified'];
+
   const prompt = `You are writing the Senior Rater narrative block for a U.S. Army ${evalLabel} per AR 623-3 (Evaluation Reporting System).
 
 DOCTRINAL REQUIREMENT (AR 623-3): The Senior Rater assesses POTENTIAL only — future capability, readiness for promotion, and assignment potential. Performance is the Rater's domain. Every sentence must be forward-looking.
 
-INPUTS PROVIDED:
+INPUTS:
 - Rated Individual: ${safeRank} ${safeName || '[Soldier]'}
 - Enumeration (peer standing): ${safeEnum}
 - School Recommendation: ${safeSchool}
 - Promotion Recommendation: ${safePromo}
 - Next Level Assignment: ${safeNext || 'key leadership assignment'}
 
-OUTPUT REQUIREMENTS — Write exactly 5 sentences in this order:
+===== PROMOTION LEVEL GUIDANCE — THIS CONTROLS YOUR ENTIRE TONE =====
+${guidance}
+======================================================================
 
-SENTENCE 1 — ENUMERATION (open with peer ranking, word for word):
-State the enumeration exactly as given. Example output: "1 of 5 SFC I currently senior rate."
+CONSISTENCY RULE: The enumeration ("${safeEnum}") and the promotion recommendation ("${safePromo}") must tell the same story. A high ranking (e.g., "1 of 3") with Most Qualified = maximum urgency throughout. A lower ranking (e.g., "4 of 5") with Qualified = measured language throughout. Do not let these contradict.
 
-SENTENCE 2 — POTENTIAL (1 sentence, forward-looking only):
-Connect their standing to readiness for the next level. Speak to judgment, character, and capacity for greater responsibility. No past accomplishments. Example: "[Name] demonstrates the tactical competence and leadership maturity ready for ${nextRank}-level responsibilities."
+OUTPUT — Write exactly 5 sentences in this order:
+1. ENUMERATION: Copy this verbatim as Sentence 1: "${safeEnum}"
+2. POTENTIAL: One sentence on future potential — calibrated to the promotion level above.
+3. SCHOOL: Direct ${safeSchool} recommendation — tone per promotion level above.
+4. PROMOTION: Direct ${nextRank} recommendation — tone per promotion level above.
+5. NEXT LEVEL: Direct ${safeNext || 'next assignment'} recommendation — tone per promotion level above.
 
-SENTENCE 3 — SCHOOL (direct command, no hedging):
-Recommend school as a firm directive. Example output: "Send to ${safeSchool} immediately."
-
-SENTENCE 4 — PROMOTION (direct command, name the next rank):
-State promotion as a direct command. Example output: "Promote to ${nextRank} now."
-
-SENTENCE 5 — NEXT LEVEL ASSIGNMENT (direct command):
-Close with the specific assignment as a direct command. Example output: "Provide ${safeNext || 'a key leadership position'} immediately."
-
-ABSOLUTE RULES:
-- Third person only — never use "I"
-- Sentence 3, 4, and 5 are commands — short, direct, no "I recommend" or "I believe"
-- The enumeration in Sentence 1 must appear verbatim as given
-- Return ONLY the 5-sentence paragraph — no labels, no headers, nothing else`;
+HARD RULES:
+- Third person only — never "I"
+- No "I recommend," "I believe," or "I suggest"
+- Sentence 1 must appear verbatim exactly as given
+- Return ONLY the 5-sentence paragraph — no labels, headers, or explanations`;
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 400, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 450, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
     if (data.error) return res.status(500).json({ error: data.error.message });
