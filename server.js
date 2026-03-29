@@ -377,84 +377,55 @@ app.post('/api/auth/resend-verification', async (req, res) => {
 // Free account: 10/month tracked in DB
 // Premium: unlimited
 
-async function checkUsageLimit(req, res, next) {
-  const user = await getUserFromSession(req);
+function checkUsageLimit(deductCount) {
+  return async function(req, res, next) {
+    const user = await getUserFromSession(req);
 
-  if (!user) {
-    const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
-    if (anonCount >= 3) {
-      return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
+    if (!user) {
+      const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
+      if (anonCount >= 3) {
+        return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
+      }
+      return next();
     }
-    return next();
-  }
 
-  if (user.plan === 'premium') return next();
+    if (user.plan === 'premium') return next();
 
-  const now = new Date();
-  const resetDate = new Date(user.bullets_reset_date);
-  const needsReset = now.getFullYear() > resetDate.getFullYear() ||
-    now.getMonth() > resetDate.getMonth();
+    const now = new Date();
+    const resetDate = new Date(user.bullets_reset_date);
+    const needsReset = now.getFullYear() > resetDate.getFullYear() ||
+      now.getMonth() > resetDate.getMonth();
 
-  if (needsReset) {
+    if (needsReset) {
+      await pool.query(
+        'UPDATE users SET bullets_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
+        [user.id]
+      );
+      user.bullets_used_this_month = 0;
+    }
+
+    const count = (deductCount === 'bullets')
+      ? Math.max(1, parseInt(req.body.count) || 3)
+      : (deductCount || 1);
+
+    const used = user.bullets_used_this_month || 0;
+    const limit = 10;
+
+    if (used + count > limit) {
+      return res.status(403).json({ error: 'limit_reached', limitType: 'free', used, limit, needed: count });
+    }
+
     await pool.query(
-      'UPDATE users SET bullets_used_this_month = 0, counseling_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
-      [user.id]
+      'UPDATE users SET bullets_used_this_month = bullets_used_this_month + $1 WHERE id = $2',
+      [count, user.id]
     );
-    user.bullets_used_this_month = 0;
-    user.counseling_used_this_month = 0;
-  }
 
-  if (user.bullets_used_this_month >= 10) {
-    return res.status(403).json({ error: 'limit_reached', limitType: 'free', used: user.bullets_used_this_month, limit: 10 });
-  }
-
-  await pool.query(
-    'UPDATE users SET bullets_used_this_month = bullets_used_this_month + 1 WHERE id = $1',
-    [user.id]
-  );
-
-  next();
+    next();
+  };
 }
 
-async function checkCounselingLimit(req, res, next) {
-  const user = await getUserFromSession(req);
 
-  if (!user) {
-    const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
-    if (anonCount >= 3) {
-      return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
-    }
-    return next();
-  }
-
-  if (user.plan === 'premium') return next();
-
-  const now = new Date();
-  const resetDate = new Date(user.bullets_reset_date);
-  const needsReset = now.getFullYear() > resetDate.getFullYear() ||
-    now.getMonth() > resetDate.getMonth();
-
-  if (needsReset) {
-    await pool.query(
-      'UPDATE users SET bullets_used_this_month = 0, counseling_used_this_month = 0, bullets_reset_date = CURRENT_DATE WHERE id = $1',
-      [user.id]
-    );
-    user.counseling_used_this_month = 0;
-  }
-
-  if ((user.counseling_used_this_month || 0) >= 5) {
-    return res.status(403).json({ error: 'limit_reached', limitType: 'counseling', used: user.counseling_used_this_month, limit: 5 });
-  }
-
-  await pool.query(
-    'UPDATE users SET counseling_used_this_month = counseling_used_this_month + 1 WHERE id = $1',
-    [user.id]
-  );
-
-  next();
-}
-
-app.post('/api/enhance-counseling', aiLimiter, checkCounselingLimit, async (req, res) => {
+app.post('/api/enhance-counseling', aiLimiter, checkUsageLimit(1), async (req, res) => {
   const { rawText, section, soldierName, rank, counselingType } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
   const safeText = sanitizeInput(rawText, 1000);
@@ -523,7 +494,7 @@ app.post('/api/generate-4856', (req, res) => {
   doc.end();
 });
 
-app.post('/api/bullets', aiLimiter, checkUsageLimit, async (req, res) => {
+app.post('/api/bullets', aiLimiter, checkUsageLimit('bullets'), async (req, res) => {
   const { name, category, action, impact, count, mos } = req.body;
   if (!action) return res.status(400).json({ error: 'Action field is required.' });
   const safeName = sanitizeInput(name, 100);
@@ -660,7 +631,7 @@ app.post('/api/stripe/portal', async (req, res) => {
 });
 
 // Awards Recommendation Writer
-app.post('/api/awards', aiLimiter, checkUsageLimit, async (req, res) => {
+app.post('/api/awards', aiLimiter, checkUsageLimit(1), async (req, res) => {
   const { soldierName, rank, unit, awardLevel, period, accomplishments } = req.body;
   if (!accomplishments || !awardLevel) return res.status(400).json({ error: 'Award level and accomplishments are required.' });
   const safeSoldierName = sanitizeInput(soldierName, 100);
@@ -791,7 +762,7 @@ ADVISORY:
 });
 
 // Senior Rater Narrative
-app.post('/api/senior-rater', aiLimiter, checkUsageLimit, async (req, res) => {
+app.post('/api/senior-rater', aiLimiter, checkUsageLimit(1), async (req, res) => {
   const { evalType, name, rank, promotion, schooling, enumeration, nextLevel } = req.body;
   if (!enumeration) return res.status(400).json({ error: 'Peer ranking (Enumeration) is required.' });
 
@@ -888,7 +859,7 @@ HARD RULES:
 });
 
 // Memo AI Enhancement
-app.post('/api/memo-enhance', aiLimiter, checkUsageLimit, async (req, res) => {
+app.post('/api/memo-enhance', aiLimiter, checkUsageLimit(1), async (req, res) => {
   const { body, subject, type } = req.body;
   if (!body) return res.status(400).json({ error: 'Body is required.' });
 
