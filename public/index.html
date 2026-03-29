@@ -45,7 +45,7 @@
   "@type": "WebApplication",
   "name": "NCO Kit",
   "url": "https://ncokit.com",
-  "description": "AI-powered administrative toolkit for Army enlisted leaders. Features DA 4856 counseling generator, NCOER bullet builder, AFT score calculator, and soldier roster tracker.",
+  "description": "AI-powered administrative toolkit for Army Leaders. Features DA 4856 counseling generator, NCOER bullet builder, AFT score calculator, and soldier roster tracker.",
   "applicationCategory": "ProductivityApplication",
   "operatingSystem": "Web Browser",
   "offers": {
@@ -1076,7 +1076,7 @@
     <div class="section-header">
       <div>
         <div class="section-title">Soldier Roster</div>
-        <div class="section-sub">Track counseling status across your formation</div>
+        <div class="section-sub">Soldier Tracker — all records in one place</div>
       </div>
       <button class="btn btn-primary btn-sm" onclick="toggleAddSoldier()">+ Add Soldier</button>
     </div>
@@ -1137,7 +1137,7 @@
             <th>Last Counseling</th>
             <th>Status</th>
             <th>Notes</th>
-            <th></th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody id="rosterBody"></tbody>
@@ -1766,21 +1766,21 @@
     <div class="section-header">
       <div>
         <div class="section-title">About NCO Kit</div>
-        <div class="section-sub">AI-powered administrative tools built for Army enlisted leaders</div>
+        <div class="section-sub">AI-powered administrative tools built for Army Leaders</div>
       </div>
     </div>
 
     <!-- Hero -->
     <div style="background:var(--od-dark); border:1px solid var(--tan); padding:32px; text-align:center; margin-bottom:24px;">
       <div style="font-family:'Oswald',sans-serif; font-size:42px; letter-spacing:6px; color:var(--tan); margin-bottom:8px;">NCO KIT</div>
-      <div style="font-family:'Libre Franklin',sans-serif; font-size:15px; color:var(--white); margin-bottom:16px;">AI-Powered Administrative Tools for Army Enlisted Leaders</div>
+      <div style="font-family:'Libre Franklin',sans-serif; font-size:15px; color:var(--white); margin-bottom:16px;">AI-Powered Administrative Tools for Army Leaders</div>
       <div style="font-family:'Source Code Pro',monospace; font-size:12px; color:var(--tan-dark);">ncokit.com &mdash; No installation required &mdash; Works on any device</div>
     </div>
 
     <!-- What is it -->
     <div class="card" style="margin-bottom:16px;">
       <div class="card-title">What Is NCO Kit?</div>
-      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0 0 12px 0;">NCO Kit is a free, web-based toolkit built specifically for Army enlisted leaders. It uses AI to automate the most time-consuming administrative tasks NCOs face daily — counseling documentation, NCOER bullet writing, fitness test scoring, and soldier management.</p>
+      <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0 0 12px 0;">NCO Kit is a free, web-based toolkit built specifically for Army Leaders. It uses AI to automate the most time-consuming administrative tasks NCOs face daily — counseling documentation, NCOER bullet writing, fitness test scoring, and soldier management.</p>
       <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:var(--white); line-height:1.8; margin:0;">The app runs entirely in your browser. No downloads, no CAC required, no Army network dependency. It works on your phone, your personal laptop, or any device with internet access.</p>
     </div>
 
@@ -2043,8 +2043,8 @@
 
   <div style="border-top:1px solid #2a3a2a; padding-top:40px;">
 
-    <h2 style="font-family:'Oswald',sans-serif; font-size:22px; letter-spacing:3px; color:#C8B48A; margin-bottom:16px; text-transform:uppercase;">Army Administrative Tools for Enlisted Leaders</h2>
-    <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:#a08e65; line-height:1.8; margin-bottom:24px;">NCO Kit is a free AI-powered web application built for Army NCOs and enlisted leaders. It automates the most time-consuming administrative tasks in daily Army life — from writing NCOER evaluation bullets to generating DA Form 4856 developmental counseling forms. No installation required. Works on any device.</p>
+    <h2 style="font-family:'Oswald',sans-serif; font-size:22px; letter-spacing:3px; color:#C8B48A; margin-bottom:16px; text-transform:uppercase;">Administrative Tools for Army Leaders</h2>
+    <p style="font-family:'Libre Franklin',sans-serif; font-size:14px; color:#a08e65; line-height:1.8; margin-bottom:24px;">NCO Kit is a free AI-powered web application built for Army Leaders. It automates the most time-consuming administrative tasks in daily Army life — from writing NCOER evaluation bullets to generating DA Form 4856 developmental counseling forms. No installation required. Works on any device.</p>
 
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-bottom:32px;">
 
@@ -2379,9 +2379,47 @@
         <td>${lastDate}</td>
         <td><span class="badge ${badgeClass}">${badgeText}</span></td>
         <td style="font-size:12px; color: var(--tan-dark)">${s.notes}</td>
-        <td><button class="btn btn-danger" onclick="removeSoldier(${s.id})">Remove</button></td>
+        <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openSoldierProfile(this.dataset.name)" data-name="${s.name}" style="margin-right:5px">File</button><button class="btn btn-danger" onclick="removeSoldier(${s.id})">Remove</button></td>
       </tr>`;
     }).join('');
+  }
+
+  // SOLDIER PROFILE
+  async function openSoldierProfile(name) {
+    if (!currentUser) { showAuth('login'); return; }
+    var modal = document.getElementById('soldierProfileModal');
+    var content = document.getElementById('profileModalContent');
+    document.getElementById('profileModalName').textContent = name + ' — SOLDIER FILE';
+    content.innerHTML = '<div class="empty-state">Loading records...</div>';
+    modal.style.display = 'block'; document.body.style.overflow = 'hidden';
+    try {
+      var res = await fetch('/api/save/soldier-profile?name=' + encodeURIComponent(name), { headers: authHeader() });
+      var data = await res.json();
+      var fmt = function(d) { return d ? new Date(d.length <= 10 ? d + 'T12:00:00' : d).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—'; };
+      var html = '';
+      html += '<div class="card" style="margin-bottom:16px"><div class="card-title">DA 4856 Counselings (' + data.counselings.length + ')</div>';
+      if (!data.counselings.length) html += '<div style="color:var(--tan-dark);font-size:13px;padding:6px 0">No counselings saved yet.</div>';
+      else data.counselings.forEach(function(c) { html += '<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--od-dark);font-size:13px"><span style="color:var(--tan);min-width:85px">' + fmt(c.date) + '</span><span style="flex:1">' + (c.counseling_type||'') + ' — ' + (c.subject||'') + '</span><span style="color:var(--tan-dark);font-size:11px">' + fmt(c.created_at) + '</span></div>'; });
+      html += '</div>';
+      html += '<div class="card" style="margin-bottom:16px"><div class="card-title">NCOER Bullets (' + data.bullets.length + ' sets)</div>';
+      if (!data.bullets.length) html += '<div style="color:var(--tan-dark);font-size:13px;padding:6px 0">No bullets saved yet.</div>';
+      else data.bullets.forEach(function(b) { var bl = typeof b.bullets === 'string' ? JSON.parse(b.bullets) : (b.bullets||[]); var s = '<div style="padding:7px 0;border-bottom:1px solid var(--od-dark)"><div style="color:var(--tan);font-size:12px;font-weight:600;margin-bottom:3px">' + (b.category||'General') + ' — ' + fmt(b.created_at) + '</div>'; bl.forEach(function(x){s+='<div style="font-size:12px;padding:2px 0 2px 12px">• '+x+'</div>';}); s+='</div>'; html+=s; });
+      html += '</div>';
+      html += '<div class="card" style="margin-bottom:16px"><div class="card-title">AFT Scores (' + data.aft.length + ')</div>';
+      if (!data.aft.length) html += '<div style="color:var(--tan-dark);font-size:13px;padding:6px 0">No AFT scores saved yet.</div>';
+      else data.aft.forEach(function(a) { var bg = a.pass_fail ? '<span class="badge badge-green">PASS</span>' : '<span class="badge badge-red">FAIL</span>'; html += '<div style="display:flex;gap:14px;align-items:center;padding:7px 0;border-bottom:1px solid var(--od-dark);font-size:13px"><span style="color:var(--tan);min-width:85px">'+fmt(a.test_date)+'</span><span style="flex:1">'+(a.standard||'')+'</span><span style="font-weight:600">Score: '+(a.total||'—')+'</span>'+bg+'</div>'; });
+      html += '</div>';
+      html += '<div class="card"><div class="card-title">Awards (' + data.awards.length + ')</div>';
+      if (!data.awards.length) html += '<div style="color:var(--tan-dark);font-size:13px;padding:6px 0">No awards saved yet.</div>';
+      else data.awards.forEach(function(aw) { html += '<div style="display:flex;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--od-dark);font-size:13px"><span style="color:var(--tan);font-weight:600;min-width:130px">'+(aw.award_level||'')+'</span><span style="flex:1">'+(aw.period||'')+'</span><span style="color:var(--tan-dark);font-size:11px">'+fmt(aw.created_at)+'</span></div>'; });
+      html += '</div>';
+      content.innerHTML = html;
+    } catch(err) { content.innerHTML = '<div class="empty-state">Failed to load. Try again.</div>'; }
+  }
+
+  function closeSoldierProfile() {
+    document.getElementById('soldierProfileModal').style.display = 'none';
+    document.body.style.overflow = '';
   }
 
   // BULLET BUILDER — AI POWERED
@@ -3925,5 +3963,19 @@ async function generateAward() {
   handleVerifyToken();
   handlePaymentReturn();
 </script>
+
+<!-- ===== SOLDIER PROFILE MODAL ===== -->
+<div id="soldierProfileModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.78);z-index:9999;overflow-y:auto;padding:20px;box-sizing:border-box">
+  <div style="max-width:780px;margin:20px auto;background:var(--od);border:2px solid var(--tan);border-radius:4px;padding:28px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;border-bottom:1px solid var(--od-dark);padding-bottom:16px">
+      <div>
+        <div id="profileModalName" style="font-family:'Oswald',sans-serif;font-size:22px;letter-spacing:2px;color:var(--tan)">SOLDIER FILE</div>
+        <div style="font-size:12px;color:var(--tan-dark);margin-top:4px">DA 4856s · NCOER Bullets · AFT Scores · Awards</div>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="closeSoldierProfile()">× Close</button>
+    </div>
+    <div id="profileModalContent"><div class="empty-state">Loading...</div></div>
+  </div>
+</div>
 </body>
 </html>
