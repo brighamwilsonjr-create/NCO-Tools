@@ -1548,11 +1548,6 @@ app.post('/api/admin/gift-premium', async (req, res) => {
   }
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
 // Soldier Profile — all records for a soldier by name
 app.get('/api/save/soldier-profile', async (req, res) => {
   const user = await getUserFromSession(req);
@@ -1572,6 +1567,11 @@ app.get('/api/save/soldier-profile', async (req, res) => {
     console.error('Soldier profile error:', err);
     res.status(500).json({ error: 'Failed to load soldier profile' });
   }
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Not found' });
 });
 
 const PORT = process.env.PORT || 3000;
