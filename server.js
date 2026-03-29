@@ -790,6 +790,66 @@ ADVISORY:
   }
 });
 
+// Senior Rater Narrative
+app.post('/api/senior-rater', aiLimiter, checkUsageLimit, async (req, res) => {
+  const { evalType, name, rank, promotion, schooling, enumeration, nextLevel } = req.body;
+  if (!enumeration) return res.status(400).json({ error: 'Enumeration of achievements is required.' });
+
+  const safeName     = sanitizeInput(name, 100);
+  const safeRank     = sanitizeInput(rank, 50);
+  const safePromo    = sanitizeInput(promotion, 100);
+  const safeSchool   = sanitizeInput(schooling, 100);
+  const safeEnum     = sanitizeInput(enumeration, 3000);
+  const safeNext     = sanitizeInput(nextLevel, 1000);
+
+  const isOER = (evalType === 'OER');
+  const evalLabel = isOER ? 'OER (Officer Evaluation Report)' : 'NCOER (Non-Commissioned Officer Evaluation Report)';
+
+  const prompt = `You are an expert Army senior rater with 20+ years experience writing evaluation narratives. You use the ESPN framework: Enumeration, School, Promotion, Next Level.
+
+Evaluation Type: ${evalLabel}
+Rated Soldier: ${safeRank} ${safeName}
+Promotion Recommendation: ${safePromo}
+Schooling Recommendation: ${safeSchool}
+
+ESPN INPUTS:
+E - Enumeration (key achievements/contributions):
+${safeEnum}
+
+N - Next Level assignment / broadening potential:
+${safeNext || 'Not specified'}
+
+INSTRUCTIONS:
+Write a polished senior rater narrative using the ESPN framework. The narrative must:
+1. ENUMERATION: Open by highlighting 2-3 of the soldier's most significant contributions with specific impact. Use strong action verbs and quantify where possible.
+2. SCHOOL: Clearly state the schooling recommendation (${safeSchool}) and briefly justify why the soldier is ready.
+3. PROMOTION: State the promotion recommendation (${safePromo}) with one concise sentence on why they are ready for increased responsibility.
+4. NEXT LEVEL: Close with the specific next-level position or broadening assignment recommendation.
+
+Style rules:
+- Third person, active voice, no "I"
+- 4-6 sentences total — concise and hard-hitting
+- No filler phrases like "this soldier" repeated excessively
+- Write as a senior leader who has personally observed this performance
+- Final sentence must be a strong, direct recommendation
+
+Return ONLY the narrative paragraph. No labels, no headers, no explanations.`;
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] })
+    });
+    const data = await response.json();
+    if (data.error) return res.status(500).json({ error: data.error.message });
+    const narrative = data.content.map(i => i.text || '').join('').trim();
+    res.json({ narrative });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to reach AI service.' });
+  }
+});
+
 // Memo AI Enhancement
 app.post('/api/memo-enhance', aiLimiter, checkUsageLimit, async (req, res) => {
   const { body, subject, type } = req.body;
