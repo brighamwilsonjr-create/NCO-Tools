@@ -1758,6 +1758,49 @@ app.get('/api/save/soldier-profile', async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════════
+// GA4 HELPERS — uses GOOGLE_SA_JSON env var (service account JSON)
+// GA4 Property ID: 529138485
+// ═══════════════════════════════════════════════════════════════════
+async function getGAToken() {
+  try {
+    const sa = JSON.parse(process.env.GOOGLE_SA_JSON || 'null');
+    if (!sa || !sa.private_key) return null;
+    const now = Math.floor(Date.now() / 1000);
+    const hdr = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+    const pay = Buffer.from(JSON.stringify({
+      iss: sa.client_email,
+      scope: 'https://www.googleapis.com/auth/analytics.readonly',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600, iat: now
+    })).toString('base64url');
+    const signer = crypto.createSign('RSA-SHA256');
+    signer.update(`${hdr}.${pay}`);
+    const sig = signer.sign(sa.private_key, 'base64url');
+    const jwt = `${hdr}.${pay}.${sig}`;
+    const r = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${jwt}`
+    });
+    const d = await r.json();
+    return d.access_token || null;
+  } catch(e) { console.error('GA token err:', e.message); return null; }
+}
+
+async function ga4Report(token, metrics, dimensions, startDate) {
+  const r = await fetch('https://analyticsdata.googleapis.com/v1beta/properties/529138485:runReport', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify({
+      dateRanges: [{ startDate, endDate: 'today' }],
+      metrics: metrics.map(m => ({ name: m })),
+      ...(dimensions ? { dimensions: dimensions.map(d => ({ name: d })), orderBys: [{ metric: { metricName: metrics[0] }, desc: true }], limit: 6 } : {})
+    })
+  });
+  return r.json();
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // WEEKLY REPORT — Monday rollup email via Resend
 // Trigger: POST /api/admin/weekly-report with x-report-secret header
 // ═══════════════════════════════════════════════════════════════════
@@ -1788,18 +1831,18 @@ app.post('/api/admin/weekly-report', async (req, res) => {
       pool.query('SELECT COUNT(*) FROM saved_oer_bullets WHERE created_at >= $1', [weekAgoISO]),
     ]);
     const db = {
-      totalUsers:    parseInt(totalU.rows[0].count),
-      newUsers:      parseInt(newU.rows[0].count),
-      premiumUsers:  parseInt(premU.rows[0].count),
-      newPremium:    parseInt(newPremU.rows[0].count),
+      totalUsers:     parseInt(totalU.rows[0].count),
+      newUsers:       parseInt(newU.rows[0].count),
+      premiumUsers:   parseInt(premU.rows[0].count),
+      newPremium:     parseInt(newPremU.rows[0].count),
       totCounselings: parseInt(totC.rows[0].count),
       newCounselings: parseInt(newC.rows[0].count),
-      totBullets:    parseInt(totB.rows[0].count),
-      newBullets:    parseInt(newB.rows[0].count),
-      totAwards:     parseInt(totA.rows[0].count),
-      newAwards:     parseInt(newA.rows[0].count),
-      totOER:        parseInt(totO.rows[0].count),
-      newOER:        parseInt(newO.rows[0].count),
+      totBullets:     parseInt(totB.rows[0].count),
+      newBullets:     parseInt(newB.rows[0].count),
+      totAwards:      parseInt(totA.rows[0].count),
+      newAwards:      parseInt(newA.rows[0].count),
+      totOER:         parseInt(totO.rows[0].count),
+      newOER:         parseInt(newO.rows[0].count),
     };
 
     // ── Stripe Stats ─────────────────────────────────────────────────
@@ -1817,9 +1860,62 @@ app.post('/api/admin/weekly-report', async (req, res) => {
       s.newSubs      = newSubs.data.length;
     } catch(e) { console.error('Stripe report err:', e.message); }
 
+    // ── GA4 Traffic Stats ─────────────────────────────────────────────
+    let ga = { sessions: 'N/A', newUsers: 'N/A', avgDuration: 'N/A', bounceRate: 'N/A', topSources: [], topPages: [], enabled: false };
+    try {
+      const gaToken = await getGAToken();
+      if (gaToken) {
+        const [overview, sources, pages] = await Promise.all([
+          ga4Report(gaToken, ['sessions','newUsers','activeUsers','averageSessionDuration','bounceRate'], null, '7daysAgo'),
+          ga4Report(gaToken, ['sessions'], ['sessionDefaultChannelGrouping'], '7daysAgo'),
+          ga4Report(gaToken, ['screenPageViews'], ['pagePath'], '7daysAgo'),
+        ]);
+        if (overview.rows && overview.rows[0]) {
+          const v = overview.rows[0].metricValues;
+          const dur = parseFloat(v[3].value);
+          ga.sessions    = parseInt(v[0].value).toLocaleString();
+          ga.newUsers    = parseInt(v[1].value).toLocaleString();
+          ga.avgDuration = Math.floor(dur/60) + 'm ' + String(Math.floor(dur%60)).padStart(2,'0') + 's';
+          ga.bounceRate  = (parseFloat(v[4].value)*100).toFixed(1) + '%';
+          ga.enabled     = true;
+        }
+        if (sources.rows) {
+          ga.topSources = sources.rows.slice(0,5).map(r => ({
+            source: r.dimensionValues[0].value, sessions: parseInt(r.metricValues[0].value).toLocaleString()
+          }));
+        }
+        if (pages.rows) {
+          ga.topPages = pages.rows.slice(0,5).map(r => ({
+            page: r.dimensionValues[0].value, views: parseInt(r.metricValues[0].value).toLocaleString()
+          }));
+        }
+      }
+    } catch(e) { console.error('GA4 report err:', e.message); }
+
     // ── Date Range Label ─────────────────────────────────────────────
     const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const range = fmt(weekAgo) + ' – ' + now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    const range = fmt(weekAgo) + ' \u2013 ' + now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // ── GA4 Traffic HTML section ─────────────────────────────────────
+    const gaSection = ga.enabled ? `
+  <div class="sec">
+    <div class="sec-ttl">&#127760; Website Traffic &mdash; GA4</div>
+    <div class="grid" style="margin-bottom:10px">
+      <div class="stat"><div class="n">${ga.sessions}</div><div class="lbl">Sessions</div></div>
+      <div class="stat"><div class="n">${ga.newUsers}</div><div class="lbl">New Users</div></div>
+    </div>
+    <div class="grid">
+      <div class="stat"><div class="n">${ga.avgDuration}</div><div class="lbl">Avg Session Duration</div></div>
+      <div class="stat"><div class="n">${ga.bounceRate}</div><div class="lbl">Bounce Rate</div></div>
+    </div>
+    ${ga.topSources.length ? `<table style="width:100%;border-collapse:collapse;margin-top:14px"><tr><th style="text-align:left;font-size:10px;letter-spacing:2px;color:#C8B48A;font-family:monospace;padding:6px 8px;border-bottom:1px solid #3d5440">SOURCE / MEDIUM</th><th style="text-align:right;font-size:10px;letter-spacing:2px;color:#C8B48A;font-family:monospace;padding:6px 8px;border-bottom:1px solid #3d5440">SESSIONS</th></tr>${ga.topSources.map(s=>`<tr><td style="font-size:12px;color:#F4F1EA;padding:7px 8px;border-bottom:1px solid #2B3A2E;font-family:monospace">${s.source}</td><td style="font-size:12px;color:#C8B48A;text-align:right;padding:7px 8px;border-bottom:1px solid #2B3A2E;font-family:monospace">${s.sessions}</td></tr>`).join('')}</table>` : ''}
+    ${ga.topPages.length ? `<table style="width:100%;border-collapse:collapse;margin-top:10px"><tr><th style="text-align:left;font-size:10px;letter-spacing:2px;color:#C8B48A;font-family:monospace;padding:6px 8px;border-bottom:1px solid #3d5440">TOP PAGES</th><th style="text-align:right;font-size:10px;letter-spacing:2px;color:#C8B48A;font-family:monospace;padding:6px 8px;border-bottom:1px solid #3d5440">VIEWS</th></tr>${ga.topPages.map(p=>`<tr><td style="font-size:12px;color:#F4F1EA;padding:7px 8px;border-bottom:1px solid #2B3A2E;font-family:monospace">${p.page}</td><td style="font-size:12px;color:#C8B48A;text-align:right;padding:7px 8px;border-bottom:1px solid #2B3A2E;font-family:monospace">${p.views}</td></tr>`).join('')}</table>` : ''}
+  </div>` : `
+  <div class="sec">
+    <div class="sec-ttl">&#127760; Website Traffic</div>
+    <p style="font-size:11px;color:#a08e65;font-family:monospace;margin:0">GA4 not yet connected &mdash; add GOOGLE_SA_JSON to Render env to enable</p>
+    <a class="cta" href="https://analytics.google.com/analytics/web/#/p529138485/reports/reportinghub" style="margin-top:12px;display:inline-block">View GA4 Dashboard</a>
+  </div>`;
 
     // ── HTML Email ───────────────────────────────────────────────────
     const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
@@ -1853,10 +1949,12 @@ body{font-family:Arial,sans-serif;background:#0d0f0d;margin:0;padding:20px}
   <div class="sec">
     <div class="sec-ttl">&#128176; Revenue &mdash; Stripe</div>
     <div class="grid">
-      <div class="stat"><div class="n">${s.revenue}</div><div class="lbl">Revenue This Week</div><div class="new">${s.newCustomers} new customers</div></div>
+      <div class="stat"><div class="n">$${s.revenue}</div><div class="lbl">Revenue This Week</div><div class="new">${s.newCustomers} new customers</div></div>
       <div class="stat"><div class="n">${s.activeSubs}</div><div class="lbl">Active Subscriptions</div><div class="new">+${s.newSubs} new this week</div></div>
     </div>
   </div>
+
+  ${gaSection}
 
   <div class="sec">
     <div class="sec-ttl">&#128295; Tool Usage This Week</div>
@@ -1888,12 +1986,12 @@ body{font-family:Arial,sans-serif;background:#0d0f0d;margin:0;padding:20px}
       body: JSON.stringify({
         from: 'NCO Kit Reports <noreply@ncokit.com>',
         to: ['brighamwilsonjr@gmail.com'],
-        subject: `NCO Kit Weekly Report — ${range}`,
+        subject: `NCO Kit Weekly Report \u2014 ${range}`,
         html
       })
     });
     const emailData = await r.json();
-    res.json({ ok: true, db, stripe: s, emailId: emailData.id });
+    res.json({ ok: true, db, stripe: s, ga, emailId: emailData.id });
   } catch (err) {
     console.error('Weekly report error:', err);
     res.status(500).json({ error: err.message });
