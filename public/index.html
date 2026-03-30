@@ -2426,7 +2426,7 @@
     try {
       var docsRes = await fetch('/api/save/documents?name=' + encodeURIComponent(soldierName), { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
       if (!docsRes.ok) return;
-      var docs = await docsRes.json();
+      var docs = (await docsRes.json()).documents || [];
       var card = document.createElement('div');
       card.className = 'card';
       card.id = 'docs-card';
