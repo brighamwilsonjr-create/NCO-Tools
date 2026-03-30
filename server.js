@@ -1845,6 +1845,8 @@ app.post('/api/admin/weekly-report', async (req, res) => {
       newAwards:      parseInt(newA.rows[0].count),
       totOER:         parseInt(totO.rows[0].count),
       newOER:         parseInt(newO.rows[0].count),
+      newVerified:    parseInt(newVerifiedU.rows[0].count),
+      unverified:     parseInt(unverifiedU.rows[0].count),
     };
 
     // ── Stripe Stats ─────────────────────────────────────────────────
@@ -1868,16 +1870,19 @@ app.post('/api/admin/weekly-report', async (req, res) => {
       const gaToken = await getGAToken();
       if (gaToken) {
         const [overview, sources, pages] = await Promise.all([
-          ga4Report(gaToken, ['sessions','newUsers','returningUsers','averageSessionDuration','bounceRate'], null, '7daysAgo'),
+          ga4Report(gaToken, ['sessions','newUsers','activeUsers','averageSessionDuration','bounceRate'], null, '7daysAgo'),
           ga4Report(gaToken, ['sessions'], ['sessionDefaultChannelGrouping'], '7daysAgo'),
           ga4Report(gaToken, ['screenPageViews'], ['pagePath'], '7daysAgo'),
         ]);
         if (overview.rows && overview.rows[0]) {
           const v = overview.rows[0].metricValues;
           const dur = parseFloat(v[3].value);
-          ga.sessions       = parseInt(v[0].value).toLocaleString();
-          ga.newUsers       = parseInt(v[1].value).toLocaleString();
-          ga.returningUsers = parseInt(v[2].value).toLocaleString();
+          const sessCount   = parseInt(v[0].value);
+          const newCount     = parseInt(v[1].value);
+          const activeCount   = parseInt(v[2].value);
+          ga.sessions       = sessCount.toLocaleString();
+          ga.newUsers       = newCount.toLocaleString();
+          ga.returningUsers = Math.max(0, activeCount - newCount).toLocaleString();
           ga.avgDuration    = Math.floor(dur/60) + 'm ' + String(Math.floor(dur%60)).padStart(2,'0') + 's';
           ga.bounceRate     = (parseFloat(v[4].value)*100).toFixed(1) + '%';
           ga.enabled     = true;
