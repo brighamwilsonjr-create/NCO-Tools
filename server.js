@@ -1816,7 +1816,7 @@ app.post('/api/admin/weekly-report', async (req, res) => {
     const weekAgoUnix = Math.floor(weekAgo.getTime() / 1000);
 
     // ── DB Stats ─────────────────────────────────────────────────────
-    const [totalU, newU, premU, newPremU, totC, newC, totB, newB, totA, newA, totO, newO] = await Promise.all([
+    const [totalU, newU, premU, newPremU, totC, newC, totB, newB, totA, newA, totO, newO, newVerifiedU, unverifiedU] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM users'),
       pool.query('SELECT COUNT(*) FROM users WHERE created_at >= $1', [weekAgoISO]),
       pool.query("SELECT COUNT(*) FROM users WHERE plan = 'premium'"),
@@ -1829,6 +1829,8 @@ app.post('/api/admin/weekly-report', async (req, res) => {
       pool.query('SELECT COUNT(*) FROM saved_awards WHERE created_at >= $1', [weekAgoISO]),
       pool.query('SELECT COUNT(*) FROM saved_oer_bullets'),
       pool.query('SELECT COUNT(*) FROM saved_oer_bullets WHERE created_at >= $1', [weekAgoISO]),
+      pool.query('SELECT COUNT(*) FROM users WHERE verified = TRUE AND created_at >= $1', [weekAgoISO]),
+      pool.query('SELECT COUNT(*) FROM users WHERE verified = FALSE'),
     ]);
     const db = {
       totalUsers:     parseInt(totalU.rows[0].count),
@@ -1861,22 +1863,23 @@ app.post('/api/admin/weekly-report', async (req, res) => {
     } catch(e) { console.error('Stripe report err:', e.message); }
 
     // ── GA4 Traffic Stats ─────────────────────────────────────────────
-    let ga = { sessions: 'N/A', newUsers: 'N/A', avgDuration: 'N/A', bounceRate: 'N/A', topSources: [], topPages: [], enabled: false };
+    let ga = { sessions: 'N/A', newUsers: 'N/A', returningUsers: 'N/A', avgDuration: 'N/A', bounceRate: 'N/A', topSources: [], topPages: [], enabled: false };
     try {
       const gaToken = await getGAToken();
       if (gaToken) {
         const [overview, sources, pages] = await Promise.all([
-          ga4Report(gaToken, ['sessions','newUsers','activeUsers','averageSessionDuration','bounceRate'], null, '7daysAgo'),
+          ga4Report(gaToken, ['sessions','newUsers','returningUsers','averageSessionDuration','bounceRate'], null, '7daysAgo'),
           ga4Report(gaToken, ['sessions'], ['sessionDefaultChannelGrouping'], '7daysAgo'),
           ga4Report(gaToken, ['screenPageViews'], ['pagePath'], '7daysAgo'),
         ]);
         if (overview.rows && overview.rows[0]) {
           const v = overview.rows[0].metricValues;
           const dur = parseFloat(v[3].value);
-          ga.sessions    = parseInt(v[0].value).toLocaleString();
-          ga.newUsers    = parseInt(v[1].value).toLocaleString();
-          ga.avgDuration = Math.floor(dur/60) + 'm ' + String(Math.floor(dur%60)).padStart(2,'0') + 's';
-          ga.bounceRate  = (parseFloat(v[4].value)*100).toFixed(1) + '%';
+          ga.sessions       = parseInt(v[0].value).toLocaleString();
+          ga.newUsers       = parseInt(v[1].value).toLocaleString();
+          ga.returningUsers = parseInt(v[2].value).toLocaleString();
+          ga.avgDuration    = Math.floor(dur/60) + 'm ' + String(Math.floor(dur%60)).padStart(2,'0') + 's';
+          ga.bounceRate     = (parseFloat(v[4].value)*100).toFixed(1) + '%';
           ga.enabled     = true;
         }
         if (sources.rows) {
@@ -1902,7 +1905,10 @@ app.post('/api/admin/weekly-report', async (req, res) => {
     <div class="sec-ttl">&#127760; Website Traffic &mdash; GA4</div>
     <div class="grid" style="margin-bottom:10px">
       <div class="stat"><div class="n">${ga.sessions}</div><div class="lbl">Sessions</div></div>
-      <div class="stat"><div class="n">${ga.newUsers}</div><div class="lbl">New Users</div></div>
+      <div class="stat"><div class="n">${ga.newUsers}</div><div class="lbl">New Visitors</div></div>
+    </div>
+    <div class="grid" style="margin-bottom:10px">
+      <div class="stat"><div class="n">${ga.returningUsers}</div><div class="lbl">Returning Visitors</div></div>
     </div>
     <div class="grid">
       <div class="stat"><div class="n">${ga.avgDuration}</div><div class="lbl">Avg Session Duration</div></div>
@@ -1941,8 +1947,11 @@ body{font-family:Arial,sans-serif;background:#0d0f0d;margin:0;padding:20px}
   <div class="sec">
     <div class="sec-ttl">&#128202; User Growth</div>
     <div class="grid">
-      <div class="stat"><div class="n">${db.totalUsers}</div><div class="lbl">Total Users</div><div class="new">+${db.newUsers} this week</div></div>
+      <div class="stat"><div class="n">${db.totalUsers}</div><div class="lbl">Total Users</div><div class="new">+${db.newUsers} signed up this week</div></div>
       <div class="stat"><div class="n">${db.premiumUsers}</div><div class="lbl">Premium Subscribers</div><div class="new">+${db.newPremium} upgraded</div></div>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div class="stat"><div class="n">${db.newVerified}</div><div class="lbl">Verified This Week</div><div class="new" style="color:#C8B48A">${db.unverified} awaiting verification</div></div>
     </div>
   </div>
 
