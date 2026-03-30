@@ -913,11 +913,11 @@
 
   <!-- TABS -->
   <div class="tabs">
-    <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
-    <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
-    <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
+    <button class="tab active" onclick="switchTab('counseling', this)">📝 DA 4856 Generator</button>
+    <button class="tab" onclick="switchTab('roster', this)">🪖 Soldier Roster</button>
+    <button class="tab" onclick="switchTab('bullets', this)">🎯 NCOER Bullet Builder</button>
     <button class="tab" id="oerTab" onclick="switchTab('oer', this)">📋 OER Bullet Builder</button>
-    <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
+    <button class="tab" onclick="switchTab('aft', this)">🏃 AFT Scorer</button>
     <button class="tab" onclick="switchTab('awards', this)">🎖️ Awards Writer</button>
     <button class="tab" onclick="switchTab('memo', this)">📄 Memo Generator</button>
     <button class="tab" onclick="switchTab('senior-rater', this)">⭐ Senior Rater</button>
@@ -1328,19 +1328,21 @@
   <!-- ===== AFT PANEL ===== -->
   <div class="panel" id="panel-oer">
     <div class="section-header">
-      <h2>📋 OER Bullet Builder</h2>
-      <p style="color:var(--text-muted);margin-top:4px">AR 623-3 / ADP 6-22 compliant officer evaluation bullets</p>
+      <div>
+        <div class="section-title">OER Bullet Builder</div>
+        <div class="section-sub">AR 623-3 / ADP 6-22 — Officer Evaluation Report</div>
+      </div>
     </div>
     <div class="card">
-      <h3>Officer Information</h3>
-      <div class="form-row">
-        <div class="form-group">
+      <div class="card-title">Officer Information</div>
+      <div class="form-grid">
+        <div class="field">
           <label>Officer Name</label>
-          <input type="text" id="oer_name" placeholder="Last, First MI" class="form-control">
+          <input type="text" id="oer_name" placeholder="Last, First MI">
         </div>
-        <div class="form-group">
+        <div class="field">
           <label>Rank</label>
-          <select id="oer_rank" class="form-control">
+          <select id="oer_rank">
             <option value="2LT">2LT</option>
             <option value="1LT">1LT</option>
             <option value="CPT" selected>CPT</option>
@@ -1350,23 +1352,23 @@
           </select>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
+      <div class="form-grid">
+        <div class="field">
           <label>Unit</label>
-          <input type="text" id="oer_unit" placeholder="e.g. 1-502 IN, 101st ABN DIV" class="form-control">
+          <input type="text" id="oer_unit" placeholder="e.g. 1-502 IN, 101st ABN DIV">
         </div>
-        <div class="form-group">
+        <div class="field">
           <label>Rating Period</label>
-          <input type="text" id="oer_period" placeholder="e.g. 20240101-20241231" class="form-control">
+          <input type="text" id="oer_period" placeholder="e.g. 20240101-20241231">
         </div>
       </div>
     </div>
     <div class="card">
-      <h3>Generate OER Bullets</h3>
-      <div class="form-row">
-        <div class="form-group">
+      <div class="card-title">Generate OER Bullets</div>
+      <div class="form-grid">
+        <div class="field">
           <label>ADP 6-22 Attribute</label>
-          <select id="oer_attribute" class="form-control">
+          <select id="oer_attribute">
             <option value="Character">Character — Army Values, Empathy, Warrior Ethos, Discipline</option>
             <option value="Presence">Presence — Military Bearing, Fitness, Confidence, Resilience</option>
             <option value="Intellect">Intellect — Judgment, Innovation, Interpersonal Tact, Expertise</option>
@@ -1375,20 +1377,23 @@
             <option value="Achieves">Achieves — Gets Results, Mission Accomplishment, Decisive Action</option>
           </select>
         </div>
-        <div class="form-group">
+        <div class="field">
           <label>Number of Bullets</label>
-          <select id="oer_count" class="form-control">
+          <select id="oer_count">
+            <option value="1">1</option>
             <option value="3">3</option>
             <option value="5" selected>5</option>
             <option value="7">7</option>
           </select>
         </div>
       </div>
-      <div class="form-group">
+      <div class="field">
         <label>Accomplishments / Key Actions</label>
-        <textarea id="oer_accomplishments" class="form-control" rows="5" placeholder="Describe the officer's key accomplishments, actions, impact, and results for this attribute..."></textarea>
+        <textarea id="oer_accomplishments" style="min-height:120px" rows="5" placeholder="Describe the officer's key accomplishments, actions, impact, and results for this attribute..."></textarea>
       </div>
-      <button class="btn btn-primary" onclick="generateOERBullets()">&#x26A1; Generate OER Bullets</button>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="generateOERBullets()">&#x26A1; Generate OER Bullets</button>
+      </div>
     </div>
     <div id="oer-results"></div>
   </div>
