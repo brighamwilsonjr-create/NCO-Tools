@@ -892,7 +892,11 @@
       <div class="stat-number" id="statAwards">0</div>
       <div class="stat-label">Awards Written</div>
     </div>
-  </div>>
+      <div class="stat-card" style="cursor:pointer" onclick="switchTab('oer', document.getElementById('oerTab'))">
+      <div class="stat-number" id="statOERBullets">0</div>
+      <div class="stat-label">OER Bullets</div>
+    </div>
+  </div>
 
   <!-- ONBOARDING PROMPT -->
   <div id="onboardingBanner" style="display:none; background:var(--card); border:1px solid var(--tan); padding:16px 20px; margin-bottom:20px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -912,6 +916,7 @@
     <button class="tab active" onclick="switchTab('counseling', this)">DA 4856 Generator</button>
     <button class="tab" onclick="switchTab('roster', this)">Soldier Roster</button>
     <button class="tab" onclick="switchTab('bullets', this)">NCOER Bullet Builder</button>
+    <button class="tab" id="oerTab" onclick="switchTab('oer', this)">📋 OER Bullet Builder</button>
     <button class="tab" onclick="switchTab('aft', this)">AFT Scorer</button>
     <button class="tab" onclick="switchTab('awards', this)">🎖️ Awards Writer</button>
     <button class="tab" onclick="switchTab('memo', this)">📄 Memo Generator</button>
@@ -1321,6 +1326,72 @@
   </div>
 
   <!-- ===== AFT PANEL ===== -->
+  <div class="panel" id="panel-oer">
+    <div class="section-header">
+      <h2>📋 OER Bullet Builder</h2>
+      <p style="color:var(--text-muted);margin-top:4px">AR 623-3 / ADP 6-22 compliant officer evaluation bullets</p>
+    </div>
+    <div class="card">
+      <h3>Officer Information</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Officer Name</label>
+          <input type="text" id="oer_name" placeholder="Last, First MI" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Rank</label>
+          <select id="oer_rank" class="form-control">
+            <option value="2LT">2LT</option>
+            <option value="1LT">1LT</option>
+            <option value="CPT" selected>CPT</option>
+            <option value="MAJ">MAJ</option>
+            <option value="LTC">LTC</option>
+            <option value="COL">COL</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Unit</label>
+          <input type="text" id="oer_unit" placeholder="e.g. 1-502 IN, 101st ABN DIV" class="form-control">
+        </div>
+        <div class="form-group">
+          <label>Rating Period</label>
+          <input type="text" id="oer_period" placeholder="e.g. 20240101-20241231" class="form-control">
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Generate OER Bullets</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>ADP 6-22 Attribute</label>
+          <select id="oer_attribute" class="form-control">
+            <option value="Character">Character — Army Values, Empathy, Warrior Ethos, Discipline</option>
+            <option value="Presence">Presence — Military Bearing, Fitness, Confidence, Resilience</option>
+            <option value="Intellect">Intellect — Judgment, Innovation, Interpersonal Tact, Expertise</option>
+            <option value="Leads">Leads — Leads Others, Builds Trust, Communicates, Leads by Example</option>
+            <option value="Develops">Develops — Positive Environment, Esprit de Corps, Develops Others</option>
+            <option value="Achieves">Achieves — Gets Results, Mission Accomplishment, Decisive Action</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Number of Bullets</label>
+          <select id="oer_count" class="form-control">
+            <option value="3">3</option>
+            <option value="5" selected>5</option>
+            <option value="7">7</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Accomplishments / Key Actions</label>
+        <textarea id="oer_accomplishments" class="form-control" rows="5" placeholder="Describe the officer's key accomplishments, actions, impact, and results for this attribute..."></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="generateOERBullets()">&#x26A1; Generate OER Bullets</button>
+    </div>
+    <div id="oer-results"></div>
+  </div>
   <div class="panel" id="panel-aft">
 
     <div class="section-header">
@@ -2004,6 +2075,7 @@
       <button class="tab" id="saveSubBullets" onclick="switchSavesTab('bullets', this)" style="font-size:12px; padding:8px 16px;">Bullets</button>
       <button class="tab" id="saveSubAwards" onclick="switchSavesTab('awards', this)" style="font-size:12px; padding:8px 16px;">Awards</button>
       <button class="tab" id="saveSubAFT" onclick="switchSavesTab('aft', this)" style="font-size:12px; padding:8px 16px;">AFT Scores</button>
+          <button class="tab" id="saveSubOERBullets" onclick="switchSavesTab('oer-bullets', this)" style="font-size:12px; padding:8px 16px;">OER Bullets</button>
       <button class="tab" id="saveSubSoldiers" onclick="switchSavesTab('soldiers', this)" style="font-size:12px; padding:8px 16px;">Soldiers</button>
     </div>
 
@@ -2029,6 +2101,11 @@
     <div id="saves-aft" style="display:none">
       <div class="empty-state" id="savedAFTEmpty" style="display:none">NO SAVED AFT SCORES YET — Score a test in the AFT Scorer and click "Save Score" to track it here</div>
       <div id="savedAFTList"></div>
+    </div>
+
+    <div id="saves-oer-bullets" style="display:none">
+      <div class="empty-state" id="savedOERBulletsEmpty" style="display:none">NO SAVED OER BULLETS YET — Generate bullets in the OER Bullet Builder and click “Save Bullets” to track them here</div>
+      <div id="savedOERBulletsList"></div>
     </div>
 
     <!-- Saved Soldiers -->
@@ -2085,6 +2162,7 @@
   let counselingCount = 0;
   let bulletCount = 0;
   let awardCount = 0;
+  let oerBulletCount = 0;
 
   // TAB SWITCHING
   function switchTab(name, el) {
@@ -2092,6 +2170,7 @@
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.getElementById('panel-' + name).classList.add('active');
     el.classList.add('active');
+    if (name === 'oer') { loadOERBulletsCount(); }
     if (name === 'saves') {
       switchSavesTab('counselings', document.getElementById('saveSubCounseling'));
     }
@@ -2140,6 +2219,103 @@
     } catch(e) {}
   }
 
+  async function generateOERBullets() {
+    const tok = localStorage.getItem('ncokit_token');
+    if (!tok) { alert('Please log in to generate OER bullets.'); return; }
+    const officerName = document.getElementById('oer_name').value.trim();
+    const rank = document.getElementById('oer_rank').value;
+    const unit = document.getElementById('oer_unit').value.trim();
+    const attribute = document.getElementById('oer_attribute').value;
+    const count = document.getElementById('oer_count').value;
+    const accomplishments = document.getElementById('oer_accomplishments').value.trim();
+    if (!accomplishments) { alert('Please enter accomplishments to generate bullets.'); return; }
+    const btn = document.querySelector('#panel-oer .btn-primary');
+    btn.disabled = true; btn.textContent = '⏳ Generating...';
+    try {
+      const res = await fetch('/api/oer-bullets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ officerName, rank, unit, attribute, accomplishments, count: parseInt(count) })
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Error generating bullets'); return; }
+      const bullets = data.bullets || [];
+      const resultsDiv = document.getElementById('oer-results');
+      resultsDiv.innerHTML = '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3>Generated OER Bullets &mdash; ' + attribute + '</h3><button class="btn btn-success" onclick="saveOERBullets(this,\'' + officerName.replace(/'/g, "\\'") + '\',\'' + rank + '\',\'' + unit.replace(/'/g, "\\'") + '\',\'' + attribute + '\')">&#x1F4BE; Save Bullets</button></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><button class="btn btn-sm btn-outline" onclick="validateOERCategory(this,\'' + attribute + '\')">&#x2705; Validate Category</button></div>' + bullets.map(function(b) { return '<div class="bullet-item" style="padding:12px;background:var(--dark);border-radius:6px;margin-bottom:8px"><div style="font-size:13px;color:var(--text)">' + b + '</div></div>'; }).join('') + '</div>';
+    } catch(e) { alert('Error: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '&#x26A1; Generate OER Bullets'; }
+  }
+
+  async function validateOERCategory(btn, attribute) {
+    const accomplishments = document.getElementById('oer_accomplishments').value.trim();
+    if (!accomplishments) { alert('No accomplishments to validate.'); return; }
+    btn.disabled = true; btn.textContent = '⏳ Checking...';
+    try {
+      const res = await fetch('/api/validate-oer-category', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('ncokit_token') || '') },
+        body: JSON.stringify({ attribute, accomplishments })
+      });
+      const data = await res.json();
+      const msg = data.valid ? ('\u2705 "' + attribute + '" is the correct ADP 6-22 attribute for this content.') : ('\u26A0\uFE0F Suggested attribute: "' + data.suggested + '" \u2014 ' + data.reason);
+      alert(msg);
+    } catch(e) { alert('Validation error: ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '\u2705 Validate Category'; }
+  }
+
+  async function saveOERBullets(btn, officerName, rank, unit, attribute) {
+    const tok = localStorage.getItem('ncokit_token');
+    if (!tok) { alert('Please log in to save.'); return; }
+    const bullets = [...document.querySelectorAll('#oer-results .bullet-item')].map(function(el) { return el.querySelector('div').textContent.trim(); });
+    if (!bullets.length) { alert('No bullets to save.'); return; }
+    btn.disabled = true; btn.textContent = '⏳ Saving...';
+    try {
+      const res = await fetch('/api/save/oer-bullet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ officerName, rank, unit, attribute, bullets })
+      });
+      const data = await res.json();
+      if (!res.ok) { alert(data.error || 'Save failed'); return; }
+      btn.textContent = '\u2705 Saved!';
+      oerBulletCount++;
+      updateStats();
+      setTimeout(function() { btn.disabled = false; btn.textContent = '\uD83D\uDCBE Save Bullets'; }, 2000);
+    } catch(e) { alert('Error: ' + e.message); btn.disabled = false; btn.textContent = '\uD83D\uDCBE Save Bullets'; }
+  }
+
+  async function loadOERBulletsCount() {
+    const tok = localStorage.getItem('ncokit_token');
+    if (!tok) return;
+    try {
+      const r = await fetch('/api/save/oer-bullets', { headers: { 'Authorization': 'Bearer ' + tok } });
+      const d = await r.json();
+      if (Array.isArray(d.bullets)) { oerBulletCount = d.bullets.length; updateStats(); }
+    } catch(e) {}
+  }
+
+  function renderSavedOERBullets(items) {
+    const list = document.getElementById('savedOERBulletsList');
+    const empty = document.getElementById('savedOERBulletsEmpty');
+    if (!items || !items.length) { empty.style.display = ''; list.innerHTML = ''; return; }
+    empty.style.display = 'none';
+    list.innerHTML = items.map(function(item) {
+      const bullets = Array.isArray(item.bullets) ? item.bullets : [];
+      return '<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><strong>' + (item.rank || '') + ' ' + (item.officer_name || 'Unknown Officer') + '</strong><span style="color:var(--tan);font-size:12px;margin-left:8px">' + (item.attribute || '') + '</span>' + (item.unit ? '<span style="color:var(--text-muted);font-size:11px;margin-left:8px">&middot; ' + item.unit + '</span>' : '') + '</div><button class="btn btn-sm btn-danger" onclick="deleteOERBullet(\'' + item.id + '\',this)">\uD83D\uDDD1\uFE0F Delete</button></div>' + bullets.map(function(b) { return '<div class="bullet-item" style="padding:10px;background:var(--dark);border-radius:6px;margin-bottom:6px;font-size:13px">' + b + '</div>'; }).join('') + '<small style="color:var(--text-muted)">' + new Date(item.created_at).toLocaleDateString() + '</small></div>';
+    }).join('');
+  }
+
+  async function deleteOERBullet(id, btn) {
+    if (!confirm('Delete this OER bullet set?')) return;
+    btn.disabled = true;
+    try {
+      const tok = localStorage.getItem('ncokit_token');
+      const res = await fetch('/api/save/oer-bullet/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + tok } });
+      if (res.ok) { btn.closest('.card').remove(); oerBulletCount = Math.max(0, oerBulletCount - 1); updateStats(); }
+      else { alert('Delete failed'); btn.disabled = false; }
+    } catch(e) { alert('Error: ' + e.message); btn.disabled = false; }
+  }
+
   // NOTIFY ME
   async function submitNotify() {
     const emailVal = document.getElementById('notifyEmail').value.trim();
@@ -2177,6 +2353,7 @@
       banner.style.display = (allZero && currentUser) ? 'flex' : 'none';
     }
     document.getElementById('statAwards').textContent = awardCount;
+    document.getElementById('statOERBullets').textContent = oerBulletCount;
   }
 
   // SET TODAY'S DATE
@@ -3878,7 +4055,7 @@ async function generateAward() {
   }
 
   function switchSavesTab(tab, el) {
-    ['counselings','bullets','awards','aft','soldiers'].forEach(t => {
+    ['counselings','bullets','awards','aft','soldiers','oer-bullets'].forEach(t => {
       document.getElementById('saves-' + t).style.display = t === tab ? 'block' : 'none';
     });
     document.querySelectorAll('#panel-saves .tab').forEach(t => t.classList.remove('active'));
@@ -3905,6 +4082,10 @@ async function generateAward() {
         const res = await fetch('/api/save/aft', { headers: authHeader() });
         const data = await res.json();
         renderSavedAFT(data.scores || []);
+      } else if (tab === 'oer-bullets') {
+        const res = await fetch('/api/save/oer-bullets', { headers: authHeader() });
+        const data = await res.json();
+        renderSavedOERBullets(data.bullets || []);
       } else if (tab === 'soldiers') {
         const res = await fetch('/api/save/soldiers', { headers: authHeader() });
         const data = await res.json();
@@ -4136,6 +4317,7 @@ async function generateAward() {
   loadSoldiersFromDB();
   loadBulletsCount();
   loadAwardsCount();
+  loadOERBulletsCount();
 
   // Initialize after all functions defined
   initAuth();
