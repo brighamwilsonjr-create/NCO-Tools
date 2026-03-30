@@ -586,6 +586,32 @@ Respond with ONLY the bullets, one per line, nothing else.`;
   }
 });
 
+
+// OER Bullet Builder
+app.post('/api/oer-bullets', aiLimiter, checkUsageLimit('bullets'), async (req, res) => {
+  const { officerName, rank, unit, attribute, accomplishments, count } = req.body;
+  if (!attribute || !accomplishments) return res.status(400).json({ error: 'Attribute and accomplishments required.' });
+  const attributeGuidance = {
+    'Character': 'Army Values (LDRSHIP), empathy, warrior ethos, service ethos, discipline',
+    'Presence': 'Military bearing, professional bearing, fitness, confidence, resilience',
+    'Intellect': 'Mental agility, sound judgment, innovation, interpersonal tact, domain expertise',
+    'Leads': 'Leads others, builds trust, extends influence beyond chain, leads by example, communicates',
+    'Develops': 'Creates positive environment, esprit de corps, prepares self, develops others, stewards profession',
+    'Achieves': 'Gets results, mission accomplishment, unit performance, decisive action'
+  };
+  const guidance = attributeGuidance[attribute] || attribute;
+  const safeRank = (rank || 'Officer').replace(/[^a-zA-Z0-9 \/]/g, '');
+  const safeName = (officerName || '').replace(/[^a-zA-Z0-9 \.'-]/g, '').slice(0, 60);
+  const safeUnit = (unit || '').replace(/[^a-zA-Z0-9 \.'-\/]/g, '').slice(0, 80);
+  const safeAccomplishments = (accomplishments || '').replace(/<[^>]*>/g, '').slice(0, 2000);
+  const prompt = `You are an expert Army officer rater who writes exceptional OER evaluation bullets following AR 623-3 and ADP 6-22.\n\nGenerate exactly ${count||3} OER bullet(s) for the "${attribute}" attribute section.\nAttribute focus: ${guidance}\n\nOfficer: ${safeRank} ${safeName}\nUnit: ${safeUnit}\nAccomplishments: ${safeAccomplishments}\n\nRules:\n- Start each bullet with a strong past-tense action verb\n- Write in third person (never 'I' — use 'Led', 'Managed', 'Directed')\n- Quantify results with numbers, percentages, or timelines where possible\n- Demonstrate the ${attribute} ADP 6-22 attribute\n- Each bullet max 200 characters, 1-2 punchy sentences\n- Do NOT number bullets or add symbols\n- Follow AR 623-3 Army writing standards: active voice, specific accomplishments\n\nRespond with ONLY the bullets, one per line, nothing else.`;
+  try {
+    const data = await anthropic.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] });
+    const bullets = data.content.map(i=>i.text||'').join('').trim().split('\n').map(b=>b.trim()).filter(b=>b.length>0);
+    res.json({ bullets });
+  } catch(e) { res.status(500).json({ error: 'Generation failed' }); }
+});
+
 app.post('/api/aft-score', (req, res) => {
   try {
     res.json(calculateAFT(req.body));
@@ -1080,6 +1106,19 @@ Respond with ONLY "CORRECT" or the one-sentence suggestion. Nothing else.`;
 
 
 // Save counseling
+
+// OER Category Validation
+app.post('/api/validate-oer-category', aiLimiter, async (req, res) => {
+  const { bullets, attribute } = req.body;
+  if (!bullets || !attribute) return res.json({ suggestion: null });
+  const prompt = `You are an Army OER expert familiar with ADP 6-22 and AR 623-3. A rater placed these bullets in the "${attribute}" section of an OER.\n\nBullets:\n${bullets.join('\n')}\n\nDetermine if a different ADP 6-22 attribute (Character, Presence, Intellect, Leads, Develops, or Achieves) would be significantly more appropriate.\n\nIf yes, respond with one short sentence starting with "These bullets describe" and ending with the better attribute name. Example: "These bullets describe mission accomplishment — consider moving them to Achieves instead."\n\nIf the current attribute is appropriate, respond with exactly: ok\n\nRespond with ONLY that one sentence or ok. No other text.`;
+  try {
+    const data = await anthropic.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 80, messages: [{ role: 'user', content: prompt }] });
+    const suggestion = data.content.map(i=>i.text||'').join('').trim();
+    res.json({ suggestion: suggestion === 'ok' ? null : suggestion });
+  } catch(e) { res.json({ suggestion: null }); }
+});
+
 app.post('/api/save/counseling', async (req, res) => {
   const user = await getUserFromSession(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
@@ -1168,6 +1207,39 @@ app.delete('/api/save/bullets/:id', async (req, res) => {
 });
 
 // Save AFT score
+
+// Save OER bullets
+app.post('/api/save/oer-bullet', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  const { officerName, rank, unit, attribute, bullets } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO saved_oer_bullets (user_id, officer_name, rank, unit, attribute, bullets) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id',
+      [user.id, officerName, rank, unit, attribute, JSON.stringify(bullets)]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch(e) { res.status(500).json({ error: 'Save failed' }); }
+});
+// Get saved OER bullets
+app.get('/api/save/oer-bullets', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    const result = await pool.query('SELECT * FROM saved_oer_bullets WHERE user_id = $1 ORDER BY created_at DESC', [user.id]);
+    res.json({ bullets: result.rows });
+  } catch(e) { res.status(500).json({ error: 'Load failed' }); }
+});
+// Delete saved OER bullet
+app.delete('/api/save/oer-bullet/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    await pool.query('DELETE FROM saved_oer_bullets WHERE id = $1 AND user_id = $2', [req.params.id, user.id]);
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: 'Delete failed' }); }
+});
+
 app.post('/api/save/aft', async (req, res) => {
   const user = await getUserFromSession(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
@@ -1557,6 +1629,17 @@ async function initDB() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_awards_user ON saved_awards(user_id)`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS saved_oer_bullets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      officer_name TEXT,
+      rank TEXT,
+      unit TEXT,
+      attribute TEXT,
+      bullets JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_oer_bullets_user ON saved_oer_bullets(user_id)`);
 
         await pool.query(`CREATE TABLE IF NOT EXISTS saved_documents (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
