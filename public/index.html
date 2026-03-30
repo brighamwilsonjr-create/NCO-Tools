@@ -872,19 +872,19 @@
 
   <!-- STATS -->
   <div class="stats-row" id="statsRow">
-    <div class="stat-card">
+    <div class="stat-card" style="cursor:pointer" onclick="switchTab('roster', document.querySelector('.tab:nth-child(2)'))">>
       <div class="stat-number" id="statSoldiers">0</div>
       <div class="stat-label">Soldiers Tracked</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="cursor:pointer" onclick="switchTab('saves', document.getElementById('savesTab')); switchSavesTab('counselings', document.getElementById('saveSubCounseling'))">>
       <div class="stat-number" id="statCounselings">0</div>
       <div class="stat-label">Counselings Generated</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="cursor:pointer" onclick="switchTab('saves', document.getElementById('savesTab')); switchSavesTab('bullets', document.getElementById('saveSubBullets'))">>
       <div class="stat-number" id="statBullets">0</div>
       <div class="stat-label">Bullets Built</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="cursor:pointer" onclick="switchTab('roster', document.querySelector('.tab:nth-child(2)'))">>
       <div class="stat-number" id="statOverdue">0</div>
       <div class="stat-label">Overdue Counselings</div>
     </div>
@@ -2112,6 +2112,16 @@
         renderRoster();
         updateStats();
       }
+    } catch(e) {}
+  }
+
+  async function loadBulletsCount() {
+    const tok = localStorage.getItem('ncokit_token');
+    if (!tok) return;
+    try {
+      const r = await fetch('/api/save/bullets', { headers: { 'Authorization': 'Bearer ' + tok } });
+      const d = await r.json();
+      if (Array.isArray(d.bullets)) { bulletCount = d.bullets.length; updateStats(); }
     } catch(e) {}
   }
 
@@ -4076,7 +4086,7 @@ async function generateAward() {
         body: JSON.stringify({ soldierName, category, bullets })
       });
       const data = await res.json();
-      if (data.success) { btn.textContent = '✓ Saved'; setTimeout(() => btn.textContent = '💾 Save Bullets', 2000); }
+      if (data.success) { bulletCount++; updateStats(); btn.textContent = '✓ Saved'; setTimeout(() => btn.textContent = '💾 Save Bullets', 2000); }
     } catch (e) { alert('Failed to save.'); }
   }
 
@@ -4107,6 +4117,7 @@ async function generateAward() {
 
   updateStats();
   loadSoldiersFromDB();
+  loadBulletsCount();
 
   // Initialize after all functions defined
   initAuth();
