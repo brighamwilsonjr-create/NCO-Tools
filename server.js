@@ -1757,6 +1757,149 @@ app.get('/api/save/soldier-profile', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// WEEKLY REPORT — Monday rollup email via Resend
+// Trigger: POST /api/admin/weekly-report with x-report-secret header
+// ═══════════════════════════════════════════════════════════════════
+app.post('/api/admin/weekly-report', async (req, res) => {
+  const secret = req.headers['x-report-secret'] || req.query.secret;
+  if (!secret || secret !== process.env.WEEKLY_REPORT_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const now = new Date();
+    const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const weekAgoISO = weekAgo.toISOString();
+    const weekAgoUnix = Math.floor(weekAgo.getTime() / 1000);
+
+    // ── DB Stats ─────────────────────────────────────────────────────
+    const [totalU, newU, premU, newPremU, totC, newC, totB, newB, totA, newA, totO, newO] = await Promise.all([
+      pool.query('SELECT COUNT(*) FROM users'),
+      pool.query('SELECT COUNT(*) FROM users WHERE created_at >= $1', [weekAgoISO]),
+      pool.query("SELECT COUNT(*) FROM users WHERE plan = 'premium'"),
+      pool.query("SELECT COUNT(*) FROM users WHERE plan = 'premium' AND updated_at >= $1", [weekAgoISO]),
+      pool.query('SELECT COUNT(*) FROM saved_counselings'),
+      pool.query('SELECT COUNT(*) FROM saved_counselings WHERE created_at >= $1', [weekAgoISO]),
+      pool.query('SELECT COUNT(*) FROM saved_bullets'),
+      pool.query('SELECT COUNT(*) FROM saved_bullets WHERE created_at >= $1', [weekAgoISO]),
+      pool.query('SELECT COUNT(*) FROM saved_awards'),
+      pool.query('SELECT COUNT(*) FROM saved_awards WHERE created_at >= $1', [weekAgoISO]),
+      pool.query('SELECT COUNT(*) FROM saved_oer_bullets'),
+      pool.query('SELECT COUNT(*) FROM saved_oer_bullets WHERE created_at >= $1', [weekAgoISO]),
+    ]);
+    const db = {
+      totalUsers:    parseInt(totalU.rows[0].count),
+      newUsers:      parseInt(newU.rows[0].count),
+      premiumUsers:  parseInt(premU.rows[0].count),
+      newPremium:    parseInt(newPremU.rows[0].count),
+      totCounselings: parseInt(totC.rows[0].count),
+      newCounselings: parseInt(newC.rows[0].count),
+      totBullets:    parseInt(totB.rows[0].count),
+      newBullets:    parseInt(newB.rows[0].count),
+      totAwards:     parseInt(totA.rows[0].count),
+      newAwards:     parseInt(newA.rows[0].count),
+      totOER:        parseInt(totO.rows[0].count),
+      newOER:        parseInt(newO.rows[0].count),
+    };
+
+    // ── Stripe Stats ─────────────────────────────────────────────────
+    let s = { revenue: '0.00', newCustomers: 0, activeSubs: 0, newSubs: 0 };
+    try {
+      const [charges, newCusts, activeSubs, newSubs] = await Promise.all([
+        stripe.charges.list({ created: { gte: weekAgoUnix }, limit: 100 }),
+        stripe.customers.list({ created: { gte: weekAgoUnix }, limit: 100 }),
+        stripe.subscriptions.list({ status: 'active', limit: 100 }),
+        stripe.subscriptions.list({ created: { gte: weekAgoUnix }, limit: 100 }),
+      ]);
+      s.revenue      = (charges.data.filter(c => c.paid && !c.refunded).reduce((sum, c) => sum + c.amount, 0) / 100).toFixed(2);
+      s.newCustomers = newCusts.data.length;
+      s.activeSubs   = activeSubs.data.length;
+      s.newSubs      = newSubs.data.length;
+    } catch(e) { console.error('Stripe report err:', e.message); }
+
+    // ── Date Range Label ─────────────────────────────────────────────
+    const fmt = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const range = fmt(weekAgo) + ' – ' + now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+    // ── HTML Email ───────────────────────────────────────────────────
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{font-family:Arial,sans-serif;background:#0d0f0d;margin:0;padding:20px}
+.wrap{max-width:620px;margin:0 auto;background:#1a2419;border:1px solid #3d5440}
+.hdr{background:#2B3A2E;border-bottom:3px solid #C8B48A;padding:28px 32px}
+.hdr h1{font-size:20px;letter-spacing:4px;text-transform:uppercase;color:#C8B48A;margin:0 0 4px}
+.hdr p{font-size:11px;color:#a08e65;letter-spacing:2px;margin:0;font-family:monospace}
+.sec{padding:22px 32px;border-bottom:1px solid #3d5440}
+.sec-ttl{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#C8B48A;font-family:monospace;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.stat{background:#0d0f0d;border:1px solid #3d5440;border-bottom:2px solid #C8B48A;padding:14px 16px}
+.n{font-size:26px;color:#C8B48A;font-weight:bold;font-family:monospace;line-height:1}
+.lbl{font-size:10px;color:#a08e65;letter-spacing:1px;text-transform:uppercase;font-family:monospace;margin-top:4px}
+.new{font-size:10px;color:#4CAF50;font-family:monospace;margin-top:3px}
+.cta{display:inline-block;background:#C8B48A;color:#1a2419;font-size:11px;letter-spacing:2px;text-transform:uppercase;text-decoration:none;padding:10px 18px;font-family:monospace;font-weight:bold;margin:4px}
+.ftr{padding:18px 32px;text-align:center;font-size:10px;color:#a08e65;font-family:monospace;letter-spacing:1px}
+</style></head><body>
+<div class="wrap">
+  <div class="hdr"><h1>&#11088; NCO Kit Weekly Report</h1><p>${range}</p></div>
+
+  <div class="sec">
+    <div class="sec-ttl">&#128202; User Growth</div>
+    <div class="grid">
+      <div class="stat"><div class="n">${db.totalUsers}</div><div class="lbl">Total Users</div><div class="new">+${db.newUsers} this week</div></div>
+      <div class="stat"><div class="n">${db.premiumUsers}</div><div class="lbl">Premium Subscribers</div><div class="new">+${db.newPremium} upgraded</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-ttl">&#128176; Revenue &mdash; Stripe</div>
+    <div class="grid">
+      <div class="stat"><div class="n">${s.revenue}</div><div class="lbl">Revenue This Week</div><div class="new">${s.newCustomers} new customers</div></div>
+      <div class="stat"><div class="n">${s.activeSubs}</div><div class="lbl">Active Subscriptions</div><div class="new">+${s.newSubs} new this week</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-ttl">&#128295; Tool Usage This Week</div>
+    <div class="grid3">
+      <div class="stat"><div class="n">${db.newCounselings}</div><div class="lbl">Counselings</div><div class="new">${db.totCounselings} all-time</div></div>
+      <div class="stat"><div class="n">${db.newBullets}</div><div class="lbl">NCOER Bullets</div><div class="new">${db.totBullets} all-time</div></div>
+      <div class="stat"><div class="n">${db.newAwards}</div><div class="lbl">Awards</div><div class="new">${db.totAwards} all-time</div></div>
+    </div>
+    <div class="grid" style="margin-top:10px">
+      <div class="stat"><div class="n">${db.newOER}</div><div class="lbl">OER Bullets</div><div class="new">${db.totOER} all-time</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-ttl">&#128279; Dashboards</div>
+    <a class="cta" href="https://analytics.google.com/analytics/web/#/p529138485/reports/reportinghub">GA4 Analytics</a>
+    <a class="cta" href="https://dashboard.stripe.com/dashboard">Stripe Dashboard</a>
+    <a class="cta" href="https://ncokit.com">NCO Kit Live</a>
+  </div>
+
+  <div class="ftr">NCO Kit &mdash; Automated weekly report &mdash; ncokit.com</div>
+</div>
+</body></html>`;
+
+    // ── Send via Resend ──────────────────────────────────────────────
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from: 'NCO Kit Reports <noreply@ncokit.com>',
+        to: ['brighamwilsonjr@gmail.com'],
+        subject: `NCO Kit Weekly Report — ${range}`,
+        html
+      })
+    });
+    const emailData = await r.json();
+    res.json({ ok: true, db, stripe: s, emailId: emailData.id });
+  } catch (err) {
+    console.error('Weekly report error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
