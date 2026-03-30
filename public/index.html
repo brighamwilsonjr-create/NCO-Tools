@@ -2424,7 +2424,7 @@
 
   async function fetchAndRenderDocs(soldierName, container) {
     try {
-      var docsRes = await fetch('/api/save/documents?name=' + encodeURIComponent(soldierName));
+      var docsRes = await fetch('/api/save/documents?name=' + encodeURIComponent(soldierName), { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
       if (!docsRes.ok) return;
       var docs = await docsRes.json();
       var card = document.createElement('div');
@@ -2477,7 +2477,7 @@
       fd.append('file', file);
       fd.append('soldierName', soldierName);
       try {
-        var r = await fetch('/api/save/document', { method: 'POST', body: fd });
+        var r = await fetch('/api/save/document', { method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
         var d = await r.json();
         if (!r.ok) { alert(d.error || 'Upload failed'); return; }
         var cont = document.getElementById('profileModalContent');
@@ -2495,7 +2495,7 @@
   async function deleteSoldierDocument(docId, soldierName) {
     if (!confirm('Delete this document?')) return;
     try {
-      var r2 = await fetch('/api/save/document/' + docId, { method: 'DELETE' });
+      var r2 = await fetch('/api/save/document/' + docId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
       if (!r2.ok) { alert('Delete failed'); return; }
       var cont2 = document.getElementById('profileModalContent');
       var old2 = document.getElementById('docs-card');
@@ -2520,7 +2520,7 @@
     try {
       var r3 = await fetch('/api/analyze-document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') },
         body: JSON.stringify({ documentId: info.docId, analysisType: type, soldierName: info.soldierName })
       });
       var d3 = await r3.json();
