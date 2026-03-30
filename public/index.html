@@ -2090,6 +2090,29 @@
     if (name === 'saves') {
       switchSavesTab('counselings', document.getElementById('saveSubCounseling'));
     }
+    if (name === 'roster') { loadSoldiersFromDB(); }
+  }
+
+  async function loadSoldiersFromDB() {
+    const tok = localStorage.getItem('ncokit_token');
+    if (!tok) return;
+    try {
+      const r = await fetch('/api/save/soldiers', { headers: { 'Authorization': 'Bearer ' + tok } });
+      const d = await r.json();
+      if (d.soldiers && d.soldiers.length > 0) {
+        soldiers = d.soldiers.map(s => ({
+          id: s.id,
+          name: s.name,
+          rank: s.rank || '—',
+          mos: s.mos || '—',
+          lastCounseling: s.last_counseling || '—',
+          status: s.status || 'current',
+          notes: s.notes || '—'
+        }));
+        renderRoster();
+        updateStats();
+      }
+    } catch(e) {}
   }
 
   // NOTIFY ME
@@ -2319,37 +2342,49 @@
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   }
 
-  function addSoldier() {
+  async function addSoldier() {
     const name = document.getElementById('r_name').value.trim();
     if (!name) { alert('Name is required.'); return; }
-
-    const soldier = {
-      id: Date.now(),
-      name,
-      rank: document.getElementById('r_rank').value,
-      mos: document.getElementById('r_mos').value || '—',
-      lastCounseling: document.getElementById('r_lastCounseling').value || '—',
-      status: document.getElementById('r_status').value,
-      notes: document.getElementById('r_notes').value || '—'
-    };
-
-    soldiers.push(soldier);
+    const rank = document.getElementById('r_rank').value;
+    const mos = document.getElementById('r_mos').value || '—';
+    const lastCounseling = document.getElementById('r_lastCounseling').value || '';
+    const status = document.getElementById('r_status').value;
+    const notes = document.getElementById('r_notes').value || '—';
+    const tok = localStorage.getItem('ncokit_token');
+    if (tok) {
+      try {
+        const r = await fetch('/api/save/soldier', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+          body: JSON.stringify({ name, rank, mos, lastCounseling, status, notes })
+        });
+        const d = await r.json();
+        soldiers.push({ id: r.ok ? d.id : Date.now(), name, rank, mos, lastCounseling: lastCounseling || '—', status, notes });
+      } catch(e) {
+        soldiers.push({ id: Date.now(), name, rank, mos, lastCounseling: lastCounseling || '—', status, notes });
+      }
+    } else {
+      soldiers.push({ id: Date.now(), name, rank, mos, lastCounseling: lastCounseling || '—', status, notes });
+    }
     renderRoster();
     updateStats();
     toggleAddSoldier();
-
     ['r_name','r_mos','r_notes'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('r_lastCounseling').value = '';
     document.getElementById('r_rank').value = 'SPC';
     document.getElementById('r_status').value = 'current';
   }
-
-  function removeSoldier(id) {
+  async function removeSoldier(id) {
+    const tok = localStorage.getItem('ncokit_token');
+    if (tok) {
+      try {
+        await fetch('/api/save/soldier/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + tok } });
+      } catch(e) {}
+    }
     soldiers = soldiers.filter(s => s.id !== id);
     renderRoster();
     updateStats();
   }
-
   function renderRoster() {
     const tbody = document.getElementById('rosterBody');
     const table = document.getElementById('rosterTable');
@@ -2378,7 +2413,7 @@
         <td>${lastDate}</td>
         <td><span class="badge ${badgeClass}">${badgeText}</span></td>
         <td style="font-size:12px; color: var(--tan-dark)">${s.notes}</td>
-        <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openSoldierProfile(this.dataset.name)" data-name="${s.name}" style="margin-right:5px">File</button><button class="btn btn-danger" onclick="removeSoldier(${s.id})">Remove</button></td>
+        <td style="white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="openSoldierProfile(this.dataset.name)" data-name="${s.name}" style="margin-right:5px">File</button><button class="btn btn-danger" onclick="removeSoldier('${s.id}')">Remove</button></td>
       </tr>`;
     }).join('');
   }
