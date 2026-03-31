@@ -582,6 +582,24 @@
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-VV26RCZYJ0"></script>
 <script>
+  // ── Safe Storage — government/restricted computers block safeStorage ──────
+  // Falls back: safeStorage → sessionStorage → in-memory. Fully transparent.
+  const safeStorage = (function() {
+    function test(s) {
+      try { s.setItem('__t__', '1'); s.removeItem('__t__'); return true; }
+      catch(e) { return false; }
+    }
+    if (test(window.safeStorage))  return window.safeStorage;
+    if (test(window.sessionStorage)) return window.sessionStorage;
+    // In-memory fallback (session only, no persistence — but app stays functional)
+    const _m = {};
+    return {
+      getItem:    function(k) { return Object.prototype.hasOwnProperty.call(_m, k) ? _m[k] : null; },
+      setItem:    function(k, v) { _m[k] = String(v); },
+      removeItem: function(k) { delete _m[k]; },
+      clear:      function() { Object.keys(_m).forEach(function(k){ delete _m[k]; }); }
+    };
+  })();
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
@@ -2183,7 +2201,7 @@
   }
 
   async function loadSoldiersFromDB() {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (!tok) return;
     try {
       const r = await fetch('/api/save/soldiers', { headers: { 'Authorization': 'Bearer ' + tok } });
@@ -2205,7 +2223,7 @@
   }
 
   async function loadBulletsCount() {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (!tok) return;
     try {
       const r = await fetch('/api/save/bullets', { headers: { 'Authorization': 'Bearer ' + tok } });
@@ -2215,7 +2233,7 @@
   }
 
   async function loadAwardsCount() {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (!tok) return;
     try {
       const r = await fetch('/api/save/awards', { headers: { 'Authorization': 'Bearer ' + tok } });
@@ -2225,7 +2243,7 @@
   }
 
   async function generateOERBullets() {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (!tok) { alert('Please log in to generate OER bullets.'); return; }
     const officerName = document.getElementById('oer_name').value.trim();
     const rank = document.getElementById('oer_rank').value;
@@ -2258,7 +2276,7 @@
     try {
       const res = await fetch('/api/validate-oer-category', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('ncokit_token') || '') },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (safeStorage.getItem('ncokit_token') || '') },
         body: JSON.stringify({ attribute, accomplishments })
       });
       const data = await res.json();
@@ -2269,7 +2287,7 @@
   }
 
   async function saveOERBullets(btn, officerName, rank, unit, attribute) {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (!tok) { alert('Please log in to save.'); return; }
     const bullets = [...document.querySelectorAll('#oer-results .bullet-item')].map(function(el) { return el.querySelector('div').textContent.trim(); });
     if (!bullets.length) { alert('No bullets to save.'); return; }
@@ -2290,7 +2308,7 @@
   }
 
   async function loadOERBulletsCount() {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (!tok) return;
     try {
       const r = await fetch('/api/save/oer-bullets', { headers: { 'Authorization': 'Bearer ' + tok } });
@@ -2314,7 +2332,7 @@
     if (!confirm('Delete this OER bullet set?')) return;
     btn.disabled = true;
     try {
-      const tok = localStorage.getItem('ncokit_token');
+      const tok = safeStorage.getItem('ncokit_token');
       const res = await fetch('/api/save/oer-bullet/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + tok } });
       if (res.ok) { btn.closest('.card').remove(); oerBulletCount = Math.max(0, oerBulletCount - 1); updateStats(); }
       else { alert('Delete failed'); btn.disabled = false; }
@@ -2558,7 +2576,7 @@
     const lastCounseling = document.getElementById('r_lastCounseling').value || '';
     const status = document.getElementById('r_status').value;
     const notes = document.getElementById('r_notes').value || '—';
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (tok) {
       try {
         const r = await fetch('/api/save/soldier', {
@@ -2583,7 +2601,7 @@
     document.getElementById('r_status').value = 'current';
   }
   async function removeSoldier(id) {
-    const tok = localStorage.getItem('ncokit_token');
+    const tok = safeStorage.getItem('ncokit_token');
     if (tok) {
       try {
         await fetch('/api/save/soldier/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + tok } });
@@ -2667,7 +2685,7 @@
 
   async function fetchAndRenderDocs(soldierName, container) {
     try {
-      var docsRes = await fetch('/api/save/documents?name=' + encodeURIComponent(soldierName), { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
+      var docsRes = await fetch('/api/save/documents?name=' + encodeURIComponent(soldierName), { headers: { 'Authorization': 'Bearer ' + safeStorage.getItem('ncokit_token') } });
       if (!docsRes.ok) return;
       var docs = (await docsRes.json()).documents || [];
       var card = document.createElement('div');
@@ -2720,7 +2738,7 @@
       fd.append('file', file);
       fd.append('soldierName', soldierName);
       try {
-        var r = await fetch('/api/save/document', { method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
+        var r = await fetch('/api/save/document', { method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + safeStorage.getItem('ncokit_token') } });
         var d = await r.json();
         if (!r.ok) { alert(d.error || 'Upload failed'); return; }
         var cont = document.getElementById('profileModalContent');
@@ -2738,7 +2756,7 @@
   async function deleteSoldierDocument(docId, soldierName) {
     if (!confirm('Delete this document?')) return;
     try {
-      var r2 = await fetch('/api/save/document/' + docId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') } });
+      var r2 = await fetch('/api/save/document/' + docId, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + safeStorage.getItem('ncokit_token') } });
       if (!r2.ok) { alert('Delete failed'); return; }
       var cont2 = document.getElementById('profileModalContent');
       var old2 = document.getElementById('docs-card');
@@ -2763,7 +2781,7 @@
     try {
       var r3 = await fetch('/api/analyze-document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + localStorage.getItem('ncokit_token') },
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + safeStorage.getItem('ncokit_token') },
         body: JSON.stringify({ documentId: info.docId, analysisType: type, soldierName: info.soldierName })
       });
       var d3 = await r3.json();
@@ -3165,11 +3183,11 @@
 
   function dismissInstallBanner() {
     document.getElementById('installBanner').style.display = 'none';
-    localStorage.setItem('ncokit_install_dismissed', '1');
+    safeStorage.setItem('ncokit_install_dismissed', '1');
   }
 
   // Don't show if already dismissed
-  if (localStorage.getItem('ncokit_install_dismissed')) {
+  if (safeStorage.getItem('ncokit_install_dismissed')) {
     const banner = document.getElementById('installBanner');
     if (banner) banner.style.display = 'none';
   }
@@ -3186,11 +3204,11 @@
     const btn = document.getElementById('themeToggle');
     const isLight = body.classList.toggle('light-mode');
     btn.textContent = isLight ? '🌙 DARK' : '☀ LIGHT';
-    localStorage.setItem('ncokit_theme', isLight ? 'light' : 'dark');
+    safeStorage.setItem('ncokit_theme', isLight ? 'light' : 'dark');
   }
 
   // Apply saved theme on load
-  if (localStorage.getItem('ncokit_theme') === 'light') {
+  if (safeStorage.getItem('ncokit_theme') === 'light') {
     document.body.classList.add('light-mode');
     document.getElementById('themeToggle').textContent = '🌙 DARK';
   }
@@ -3200,7 +3218,7 @@
   let currentUser = null;
 
   async function initAuth() {
-    const token = localStorage.getItem('ncokit_token');
+    const token = safeStorage.getItem('ncokit_token');
     if (!token) return;
     try {
       const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
@@ -3208,14 +3226,14 @@
         const user = await res.json();
         setLoggedIn(user, token);
       } else {
-        localStorage.removeItem('ncokit_token');
+        safeStorage.removeItem('ncokit_token');
       }
     } catch (e) {}
   }
 
   function setLoggedIn(user, token) {
     currentUser = user;
-    localStorage.setItem('ncokit_token', token);
+    safeStorage.setItem('ncokit_token', token);
     resetAnonUsage();
     document.getElementById('authButtons').style.display = 'none';
     document.getElementById('userMenu').style.display = 'flex';
@@ -3364,9 +3382,9 @@
   }
 
   async function logout() {
-    const token = localStorage.getItem('ncokit_token');
+    const token = safeStorage.getItem('ncokit_token');
     if (token) await fetch('/api/auth/logout', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } });
-    localStorage.removeItem('ncokit_token');
+    safeStorage.removeItem('ncokit_token');
     currentUser = null;
     document.getElementById('authButtons').style.display = 'flex';
     document.getElementById('userMenu').style.display = 'none';
@@ -3449,7 +3467,7 @@
     const params = new URLSearchParams(window.location.search);
     if (params.get('upgraded') === 'true') {
       // Refresh user data to get new plan
-      const token = localStorage.getItem('ncokit_token');
+      const token = safeStorage.getItem('ncokit_token');
       if (token) {
         const res = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
         if (res.ok) {
@@ -3575,22 +3593,22 @@
   const FREE_LIMIT = 10;
 
   function getAnonUsage() {
-    return parseInt(localStorage.getItem('ncokit_anon_usage') || '0');
+    return parseInt(safeStorage.getItem('ncokit_anon_usage') || '0');
   }
 
   function incrementAnonUsage() {
     const count = getAnonUsage() + 1;
-    localStorage.setItem('ncokit_anon_usage', count);
+    safeStorage.setItem('ncokit_anon_usage', count);
     return count;
   }
 
   function resetAnonUsage() {
-    localStorage.setItem('ncokit_anon_usage', '0');
+    safeStorage.setItem('ncokit_anon_usage', '0');
   }
 
   function getUsageHeaders() {
     const headers = { 'Content-Type': 'application/json' };
-    const token = localStorage.getItem('ncokit_token');
+    const token = safeStorage.getItem('ncokit_token');
     if (token) headers['Authorization'] = `Bearer ${token}`;
     else headers['x-anon-usage'] = String(getAnonUsage());
     return headers;
@@ -4055,7 +4073,7 @@ async function generateAward() {
   // ── SAVES ──────────────────────────────────────────────────────────────────
 
   function authHeader() {
-    const token = localStorage.getItem('ncokit_token');
+    const token = safeStorage.getItem('ncokit_token');
     return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
   }
 
