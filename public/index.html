@@ -879,9 +879,7 @@
     </div>
 
     <!-- Footer note -->
-    <div style="padding:12px 24px; border-top:1px solid var(--border); font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-align:center;">
-      Free to use during testing — no credit card required &nbsp;|&nbsp; <a href="/privacy" style="color:var(--tan-dark); text-decoration:none;">Privacy Policy</a>
-    </div>
+
   </div>
 </div>
 
@@ -3296,7 +3294,7 @@
     document.getElementById('loginTab').classList.toggle('active', tab === 'login');
     document.getElementById('registerTab').classList.toggle('active', tab === 'register');
     document.getElementById('modalTitle').textContent = tab === 'register' ? 'Create Account' : tab === 'forgot' ? 'Reset Password' : 'Sign In';
-    document.getElementById('modalSub').textContent = tab === 'register' ? 'Free to use — no credit card required' : tab === 'forgot' ? 'We\'ll email you a reset link' : 'Access your NCO Kit account';
+    document.getElementById('modalSub').textContent = tab === 'register' ? '' : tab === 'forgot' ? 'We\'ll email you a reset link' : 'Access your NCO Kit account';
   }
 
   function showForgotPassword() { switchAuthTab('forgot'); }
