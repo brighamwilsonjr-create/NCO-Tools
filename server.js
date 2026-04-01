@@ -2042,8 +2042,19 @@ app.get('/api/admin/usage-stats', async (req, res) => {
         COUNT(*) FILTER (WHERE plan = 'premium') AS total_premium
       FROM users
     `);
+    // Inactive users: signed up > 72 hours ago, never used the tool
+    const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+    const inactive = await pool.query(`
+      SELECT email, created_at
+      FROM users
+      WHERE plan = 'free' AND bullets_used_this_month = 0 AND created_at < $1
+      ORDER BY created_at DESC
+    `, [cutoff]);
+
     res.json({
       summary: allFree.rows[0],
+      inactiveCount: inactive.rows.length,
+      inactiveUsers: inactive.rows,
       atLimit: atLimit.rows,
       nearLimit: nearLimit.rows
     });
