@@ -2012,6 +2012,47 @@ body{font-family:Arial,sans-serif;background:#0d0f0d;margin:0;padding:20px}
   }
 });
 
+// ── ADMIN: USAGE STATS ────────────────────────────────────────────────────────
+app.get('/api/admin/usage-stats', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+    // Users who have hit or are near the 10/month limit
+    const atLimit = await pool.query(`
+      SELECT email, plan, bullets_used_this_month, bullets_reset_date, verified, created_at
+      FROM users
+      WHERE plan = 'free' AND bullets_used_this_month >= 10
+      ORDER BY bullets_used_this_month DESC
+    `);
+    const nearLimit = await pool.query(`
+      SELECT email, plan, bullets_used_this_month, bullets_reset_date, verified, created_at
+      FROM users
+      WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10
+      ORDER BY bullets_used_this_month DESC
+    `);
+    const allFree = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE plan = 'free') AS total_free,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 10) AS at_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10) AS near_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month > 0 AND bullets_used_this_month < 7) AS active_under_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month = 0) AS not_used,
+        COUNT(*) FILTER (WHERE plan = 'premium') AS total_premium
+      FROM users
+    `);
+    res.json({
+      summary: allFree.rows[0],
+      atLimit: atLimit.rows,
+      nearLimit: nearLimit.rows
+    });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
