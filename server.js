@@ -2170,6 +2170,25 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 });
 
 
+// ── ADMIN: USER LOOKUP ────────────────────────────────────────────────────────
+app.get('/api/admin/user-lookup', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const email = req.query.email;
+  if (!email) return res.status(400).json({ error: 'email query param required' });
+  try {
+    const result = await pool.query(
+      'SELECT id, email, plan, verified, bullets_used_this_month, bullets_reset_date, created_at FROM users WHERE email = $1',
+      [email.toLowerCase().trim()]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
