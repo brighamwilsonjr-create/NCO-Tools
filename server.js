@@ -2064,6 +2064,112 @@ app.get('/api/admin/usage-stats', async (req, res) => {
 });
 
 
+// ── ADMIN: RE-ENGAGEMENT BATCH SEND ──────────────────────────────────────────
+// Sends 48 emails per batch to inactive free users (signed up >72h ago, 0 usage)
+// Call with { batch: 0 } for first 48, { batch: 1 } for next 48, { batch: 2 } for last batch
+app.post('/api/admin/send-reengagement', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+
+  const batchSize = 48;
+  const batchNum  = parseInt(req.body.batch ?? 0);
+  const offset    = batchNum * batchSize;
+  const cutoff    = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+
+  try {
+    const result = await pool.query(`
+      SELECT email FROM users
+      WHERE plan = 'free' AND bullets_used_this_month = 0 AND created_at < $1
+      ORDER BY created_at DESC
+      LIMIT $2 OFFSET $3
+    `, [cutoff, batchSize, offset]);
+
+    const recipients = result.rows.map(r => r.email);
+    if (recipients.length === 0) return res.json({ sent: 0, message: 'No recipients in this batch' });
+
+    const htmlBody = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NCO Kit</title>
+</head>
+<body style="margin:0;padding:0;background:#1a1a1a;font-family:'Georgia',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#1a1a1a;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr><td style="background:#2a2419;border-top:4px solid #a08e65;border-radius:8px 8px 0 0;padding:28px 40px;">
+          <p style="margin:0;font-size:22px;font-weight:bold;color:#a08e65;letter-spacing:2px;text-transform:uppercase;">NCO Kit</p>
+          <p style="margin:4px 0 0;font-size:11px;color:#6b5e45;letter-spacing:1px;text-transform:uppercase;">Army Leader's Toolkit</p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="background:#242018;padding:36px 40px;">
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c8b88a;">
+            You set up an NCO Kit account a little while back but haven't had a chance to use it yet.
+            No problem — we know the battle rhythm doesn't slow down.
+          </p>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c8b88a;">
+            When you get a free five minutes, here's the fastest way to see what it can do:
+            pick a category, type in what your Soldier did, and get three ready-to-use NCOER bullets
+            back in seconds — formatted to Army writing standards, calibrated to their MOS.
+          </p>
+          <p style="margin:0 0 32px;font-size:15px;line-height:1.7;color:#c8b88a;">
+            NCO Kit also handles DA 4856 counselings, awards write-ups, OER bullets, and AFT scores.
+            Everything you hate typing, done in one place.
+          </p>
+
+          <!-- CTA Button -->
+          <table cellpadding="0" cellspacing="0"><tr><td>
+            <a href="https://ncokit.com" style="display:inline-block;background:#a08e65;color:#1a1a1a;font-family:'Georgia',serif;font-size:15px;font-weight:bold;letter-spacing:1px;text-decoration:none;padding:14px 36px;border-radius:4px;text-transform:uppercase;">
+              Open NCO Kit →
+            </a>
+          </td></tr></table>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#1e1b14;border-top:1px solid #3a3020;border-radius:0 0 8px 8px;padding:20px 40px;">
+          <p style="margin:0;font-size:12px;color:#6b5e45;line-height:1.6;">
+            Built by NCOs, for NCOs.<br>
+            — Henry @ NCO Kit<br><br>
+            <a href="https://ncokit.com/privacy" style="color:#6b5e45;">Privacy Policy</a> &nbsp;|&nbsp;
+            You're receiving this because you created an account at ncokit.com.
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    let sent = 0;
+    const errors = [];
+    for (const email of recipients) {
+      try {
+        await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Henry @ NCO Kit <noreply@ncokit.com>',
+            to: email,
+            subject: "You've got an NCO Kit account — here's where to start",
+            html: htmlBody
+          })
+        });
+        sent++;
+      } catch(e) { errors.push({ email, error: e.message }); }
+    }
+
+    res.json({ batch: batchNum, sent, total: recipients.length, errors });
+  } catch(err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
