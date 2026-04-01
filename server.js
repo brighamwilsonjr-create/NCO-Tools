@@ -68,6 +68,17 @@ app.use((req, res, next) => {
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Content-Security-Policy',
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://js.stripe.com; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+    "font-src 'self' https://fonts.gstatic.com data:; " +
+    "img-src 'self' data: https:; " +
+    "connect-src 'self' https://api.stripe.com https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net; " +
+    "frame-src https://js.stripe.com; " +
+    "object-src 'none'; " +
+    "base-uri 'self';"
+  );
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (process.env.NODE_ENV === 'production') {
@@ -942,7 +953,7 @@ Rules for Army memo body:
 });
 
 // Memo PDF Generation — AR 25-50 compliant formatting
-app.post('/api/generate-memo', (req, res) => {
+app.post('/api/generate-memo', aiLimiter, checkUsageLimit(1), async (req, res) => {
   const { type, formattedDate, office, unit, addr1, addr2, memoFor, memoThru, subject, formattedBody, sigName, sigRank, sigTitle, sigUnit } = req.body;
 
   const doc = new PDFDocument({ margin: 72, size: 'letter' });
@@ -1108,7 +1119,7 @@ Respond with ONLY "CORRECT" or the one-sentence suggestion. Nothing else.`;
 // Save counseling
 
 // OER Category Validation
-app.post('/api/validate-oer-category', aiLimiter, async (req, res) => {
+app.post('/api/validate-oer-category', aiLimiter, checkUsageLimit(1), async (req, res) => {
   const { bullets, attribute } = req.body;
   if (!bullets || !attribute) return res.json({ suggestion: null });
   const prompt = `You are an Army OER expert familiar with ADP 6-22 and AR 623-3. A rater placed these bullets in the "${attribute}" section of an OER.\n\nBullets:\n${bullets.join('\n')}\n\nDetermine if a different ADP 6-22 attribute (Character, Presence, Intellect, Leads, Develops, or Achieves) would be significantly more appropriate.\n\nIf yes, respond with one short sentence starting with "These bullets describe" and ending with the better attribute name. Example: "These bullets describe mission accomplishment — consider moving them to Achieves instead."\n\nIf the current attribute is appropriate, respond with exactly: ok\n\nRespond with ONLY that one sentence or ok. No other text.`;
