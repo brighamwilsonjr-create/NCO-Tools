@@ -2207,6 +2207,7 @@
       switchSavesTab('counselings', document.getElementById('saveSubCounseling'));
     }
     if (name === 'roster') { loadSoldiersFromDB(); }
+    if (name === 'senior-rater') { updateSRDropdowns(); }
   }
 
   async function loadSoldiersFromDB() {
