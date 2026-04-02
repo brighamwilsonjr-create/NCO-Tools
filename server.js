@@ -2125,13 +2125,13 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 
   try {
     const result = await pool.query(`
-      SELECT email FROM users
+      SELECT email, referral_code FROM users
       WHERE plan = 'free' AND bullets_used_this_month = 0 AND created_at < $1
       ORDER BY created_at DESC
       LIMIT $2 OFFSET $3
     `, [cutoff, batchSize, offset]);
 
-    const recipients = result.rows.map(r => r.email);
+    const recipients = result.rows.map(r => ({ email: r.email, refCode: r.referral_code || '' }));
     if (recipients.length === 0) return res.json({ sent: 0, message: 'No recipients in this batch' });
 
     const htmlBody = `<!DOCTYPE html>
@@ -2170,7 +2170,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 
           <!-- CTA Button -->
           <table cellpadding="0" cellspacing="0"><tr><td>
-            <a href="https://ncokit.com" style="display:inline-block;background:#a08e65;color:#1a1a1a;font-family:'Georgia',serif;font-size:15px;font-weight:bold;letter-spacing:1px;text-decoration:none;padding:14px 36px;border-radius:4px;text-transform:uppercase;">
+            <a href="${refLink}" style="display:inline-block;background:#a08e65;color:#1a1a1a;font-family:'Georgia',serif;font-size:15px;font-weight:bold;letter-spacing:1px;text-decoration:none;padding:14px 36px;border-radius:4px;text-transform:uppercase;">
               Open NCO Kit →
             </a>
           </td></tr></table>
@@ -2194,8 +2194,10 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 
     let sent = 0;
     const errors = [];
-    for (const email of recipients) {
+    for (const { email, refCode } of recipients) {
       try {
+        const refLink = refCode ? `https://ncokit.com?ref=${refCode}` : 'https://ncokit.com';
+        const personalizedHtml = htmlBody.replace('${refLink}', refLink);
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -2203,7 +2205,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
             from: 'Henry @ NCO Kit <noreply@ncokit.com>',
             to: email,
             subject: "You've got an NCO Kit account — here's where to start",
-            html: htmlBody
+            html: personalizedHtml
           })
         });
         sent++;
