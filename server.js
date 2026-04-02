@@ -231,6 +231,138 @@ async function sendPasswordResetEmail(email, token) {
   `);
 }
 
+async function sendWelcomeEmail(email) {
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to NCO Kit</title>
+</head>
+<body style="margin:0;padding:0;background-color:#0a1a0a;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0a1a0a;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;width:100%;background-color:#0f1f0f;border:1px solid #2a4a2a;border-radius:6px;overflow:hidden;">
+          <!-- HEADER -->
+          <tr>
+            <td style="background-color:#0f1f0f;padding:28px 40px 22px;border-bottom:3px solid #c9a227;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td>
+                    <span style="font-size:28px;font-weight:900;color:#c9a227;letter-spacing:2px;text-transform:uppercase;">NCO KIT</span><br>
+                    <span style="font-size:11px;color:#7dab7d;letter-spacing:3px;text-transform:uppercase;">ncokit.com &nbsp;·&nbsp; Army Leader's Toolkit</span>
+                  </td>
+                  <td align="right" style="vertical-align:middle;">
+                    <span style="display:inline-block;background-color:#1a3a1a;border:1px solid #c9a227;border-radius:4px;padding:6px 14px;font-size:11px;font-weight:700;color:#c9a227;letter-spacing:2px;text-transform:uppercase;">✓ VERIFIED</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- HERO -->
+          <tr>
+            <td style="padding:44px 40px 32px;">
+              <p style="margin:0 0 6px;font-size:13px;color:#7dab7d;letter-spacing:3px;text-transform:uppercase;">Welcome</p>
+              <h1 style="margin:0 0 20px;font-size:34px;font-weight:900;color:#e8e4d4;line-height:1.2;">You're in. Let's get to work.</h1>
+              <p style="margin:0;font-size:16px;color:#a8c8a8;line-height:1.7;">
+                Your NCO Kit account is active. You now have access to every tool in the kit — counselings, NCOER bullets, awards, memos, and more.
+              </p>
+            </td>
+          </tr>
+          <!-- VIDEO CTA -->
+          <tr>
+            <td style="padding:0 40px 36px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0a140a;border:1px solid #2a4a2a;border-radius:6px;overflow:hidden;">
+                <tr>
+                  <td style="padding:0;">
+                    <a href="https://ncokit.com/demo" style="display:block;text-decoration:none;">
+                      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:linear-gradient(160deg,#0f2a0f 0%,#1a3a1a 100%);height:220px;">
+                        <tr>
+                          <td align="center" valign="middle" style="height:220px;padding:20px;">
+                            <div style="display:inline-block;width:68px;height:68px;background-color:#c9a227;border-radius:50%;text-align:center;line-height:68px;font-size:28px;margin-bottom:14px;">&#9654;</div>
+                            <br>
+                            <span style="font-size:18px;font-weight:700;color:#e8e4d4;letter-spacing:1px;">2-MINUTE FEATURE TOUR</span><br>
+                            <span style="font-size:13px;color:#7dab7d;margin-top:6px;display:inline-block;">See all 7 tools in action &rarr;</span>
+                          </td>
+                        </tr>
+                      </table>
+                    </a>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 20px;border-top:1px solid #1a3a1a;">
+                    <span style="font-size:12px;color:#5a8a5a;">&#128241; &nbsp;Watch on your phone &mdash; formatted for mobile</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <!-- DIVIDER -->
+          <tr><td style="padding:0 40px 8px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid #1a3a1a;">&nbsp;</td></tr></table></td></tr>
+          <!-- WHAT'S IN THE KIT -->
+          <tr><td style="padding:16px 40px 8px;"><h2 style="margin:0 0 24px;font-size:13px;font-weight:700;color:#7dab7d;letter-spacing:3px;text-transform:uppercase;">What's in the kit</h2></td></tr>
+          <!-- DA 4856 -->
+          <tr><td style="padding:0 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#128203; &nbsp;DA Form 4856 &mdash; Counseling Generator</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Fill in rough notes &mdash; AI rewrites them in proper Army regulatory language and generates a print-ready DA 4856. Works for initial, monthly, and event-driven counselings.</span></td></tr></table></td></tr>
+          <!-- Soldier Roster -->
+          <tr><td style="padding:4px 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#129510; &nbsp;Soldier Roster &mdash; Track Your Whole Squad</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">See every Soldier's counseling status &mdash; Current, Due, or Overdue &mdash; at a glance. Upload previous counselings to keep a complete record in one place. Hit <strong style="color:#e8e4d4;">&#10022; AI Scrub</strong> on any Soldier to instantly generate awards or NCOER bullets from their record.</span></td></tr></table></td></tr>
+          <!-- NCOER Bullets -->
+          <tr><td style="padding:4px 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#11088; &nbsp;NCOER Bullet Builder &mdash; AI-Powered</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Type a plain-language achievement. AI converts it into tight, impact-first NCOER bullets that meet Army writing standards &mdash; character-count compliant, no fluff.</span></td></tr></table></td></tr>
+          <!-- Awards -->
+          <tr><td style="padding:4px 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#127885; &nbsp;Awards Writer &mdash; AAM &middot; ARCOM &middot; MSM</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Draft complete award citations from bullet points. AI formats them to the correct standard for any award level &mdash; grounded in AR 600-8-22 and Army writing standards.</span></td></tr></table></td></tr>
+          <!-- OER -->
+          <tr><td style="padding:4px 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#128221; &nbsp;OER Bullet Builder</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Same AI-powered engine, built specifically for OER narratives. Proper formatting, proper language, ready to paste.</span></td></tr></table></td></tr>
+          <!-- Memo -->
+          <tr><td style="padding:4px 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#128196; &nbsp;Memo Generator &mdash; AR 25-50 Compliant</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Generate properly formatted Army memorandums in seconds. Fill in the key facts &mdash; AI handles the structure, format, and language.</span></td></tr></table></td></tr>
+          <!-- ACFT Calculator -->
+          <tr><td style="padding:4px 40px 6px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#127939; &nbsp;ACFT Calculator</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Score any ACFT event instantly. Enter raw scores across all six events and get a pass/fail result with point totals &mdash; calibrated by age and gender per Army standards.</span></td></tr></table></td></tr>
+          <!-- Senior Rater -->
+          <tr><td style="padding:4px 40px 24px;"><table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0f2a0f;border-left:3px solid #c9a227;border-radius:0 4px 4px 0;"><tr><td style="padding:16px 18px;"><span style="font-size:13px;font-weight:700;color:#c9a227;text-transform:uppercase;letter-spacing:1px;">&#9889; &nbsp;Senior Rater Narrative Generator</span><br><span style="font-size:14px;color:#a8c8a8;line-height:1.6;display:block;margin-top:5px;">Build EES-ready Senior Rater narratives using the ESPN framework &mdash; Enumeration, School, Promotion, Next Level. Specify the Soldier's ranking and the AI produces a polished, differentiated narrative.</span></td></tr></table></td></tr>
+          <!-- CTA -->
+          <tr><td style="padding:4px 40px 36px;" align="center"><a href="https://ncokit.com" style="display:inline-block;background-color:#c9a227;color:#0a140a;font-size:17px;font-weight:900;text-decoration:none;padding:16px 48px;border-radius:4px;letter-spacing:1px;text-transform:uppercase;">Open NCO Kit &rarr;</a><br><span style="font-size:12px;color:#4a7a4a;display:block;margin-top:12px;">Free. No credit card. No catch.</span></td></tr>
+          <!-- DIVIDER -->
+          <tr><td style="padding:0 40px;"><table width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid #1a3a1a;">&nbsp;</td></tr></table></td></tr>
+          <!-- TIPS -->
+          <tr>
+            <td style="padding:28px 40px 32px;">
+              <h2 style="margin:0 0 16px;font-size:13px;font-weight:700;color:#7dab7d;letter-spacing:3px;text-transform:uppercase;">Quick tips to get started</h2>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="padding:5px 0;font-size:14px;color:#a8c8a8;line-height:1.6;"><strong style="color:#c9a227;">1.</strong> &nbsp;Start with the <strong style="color:#e8e4d4;">Soldier Roster</strong> &mdash; add your squad and get a live counseling dashboard.</td></tr>
+                <tr><td style="padding:5px 0;font-size:14px;color:#a8c8a8;line-height:1.6;"><strong style="color:#c9a227;">2.</strong> &nbsp;Hit <strong style="color:#e8e4d4;">&#10022; AI Scrub</strong> on any Soldier to generate bullets or an award citation instantly.</td></tr>
+                <tr><td style="padding:5px 0;font-size:14px;color:#a8c8a8;line-height:1.6;"><strong style="color:#c9a227;">3.</strong> &nbsp;All documents are exportable. Generate a DA 4856, review it, and print &mdash; takes about 60 seconds.</td></tr>
+                <tr><td style="padding:5px 0;font-size:14px;color:#a8c8a8;line-height:1.6;"><strong style="color:#c9a227;">4.</strong> &nbsp;Upload previous counselings directly into a Soldier's record to keep everything in one place.</td></tr>
+                <tr><td style="padding:5px 0;font-size:14px;color:#a8c8a8;line-height:1.6;"><strong style="color:#c9a227;">5.</strong> &nbsp;The site works on your phone. Add it to your home screen for quick access in the field.</td></tr>
+              </table>
+            </td>
+          </tr>
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color:#080f08;border-top:3px solid #c9a227;padding:28px 40px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="text-align:center;">
+                    <span style="font-size:20px;font-weight:900;color:#c9a227;letter-spacing:2px;text-transform:uppercase;">NCO KIT</span><br>
+                    <span style="font-size:12px;color:#4a7a4a;letter-spacing:2px;text-transform:uppercase;display:block;margin-top:4px;">Army Leader's Toolkit</span>
+                    <br>
+                    <a href="https://ncokit.com" style="font-size:13px;color:#7dab7d;text-decoration:none;">ncokit.com</a>
+                    &nbsp;|&nbsp;
+                    <a href="https://ncokit.com/unsubscribe" style="font-size:13px;color:#4a7a4a;text-decoration:none;">Unsubscribe</a>
+                    <br><br>
+                    <span style="font-size:11px;color:#2a4a2a;line-height:1.6;">You're receiving this because you created an account at ncokit.com.<br>This is a transactional email related to your account.</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  await sendEmail(email, "You're verified — welcome to NCO Kit", html);
+}
+
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
@@ -328,11 +460,15 @@ app.post('/api/auth/verify', async (req, res) => {
   if (!token) return res.status(400).json({ error: 'Token required' });
   try {
     const result = await pool.query(
-      'SELECT id FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
+      'SELECT id, email FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
       [token]
     );
     if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired verification link' });
     await pool.query('UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = $1', [result.rows[0].id]);
+    // Send welcome email (non-blocking — don't let email failure break verification)
+    sendWelcomeEmail(result.rows[0].email).catch(err =>
+      console.error('Welcome email failed:', err.message)
+    );
     res.json({ success: true, message: 'Email verified. You can now log in.' });
   } catch (err) {
     console.error('Verify error:', err);
