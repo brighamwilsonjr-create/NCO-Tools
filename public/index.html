@@ -648,6 +648,17 @@
           </div>
 
           <button onclick="copyShareMessage()" id="copyShareBtn" style="width:100%; background:var(--od-dark); border:1px solid var(--border); color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; padding:8px; cursor:pointer; letter-spacing:1px; margin-bottom:8px;">📋 COPY SHARE MESSAGE</button>
+
+          <!-- Apply referral code — only shown if user has no referred_by -->
+          <div id="applyReferralSection" style="display:none; border-top:1px solid var(--border); padding-top:14px; margin-top:6px;">
+            <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; margin-bottom:8px;">HAVE A REFERRAL CODE?</div>
+            <div style="display:flex; gap:8px;">
+              <input type="text" id="applyReferralInput" placeholder="Enter code" maxlength="20"
+                style="flex:1; background:var(--od-dark); border:1px solid var(--border); color:var(--white); font-family:'Source Code Pro',monospace; font-size:12px; padding:6px 10px; letter-spacing:2px; text-transform:uppercase; outline:none;">
+              <button onclick="submitReferralCode()" style="background:var(--tan); border:none; color:var(--od-dark); font-family:'Source Code Pro',monospace; font-size:10px; font-weight:bold; padding:6px 12px; cursor:pointer; letter-spacing:1px; white-space:nowrap;">APPLY</button>
+            </div>
+            <div id="applyReferralMsg" style="font-family:'Libre Franklin',sans-serif; font-size:11px; margin-top:6px; min-height:16px;"></div>
+          </div>
           
         </div>
       </div>
@@ -3246,6 +3257,11 @@
     document.getElementById('accountMenuEmail').textContent = user.email;
     document.getElementById('accountMenuPlan').textContent = user.plan === 'premium' ? '⭐ Premium — Unlimited Access' : 'Free — 10 AI generations/month';
     document.getElementById('accountMenuCode').textContent = code || '...';
+    // Show referral input only if free user hasn't applied a referral code yet
+    const applySection = document.getElementById('applyReferralSection');
+    if (applySection) {
+      applySection.style.display = (!user.referredBy && !user.referred_by && user.plan === 'free') ? 'block' : 'none';
+    }
     if (document.getElementById('referralCodeDisplay')) {
       document.getElementById('referralCodeDisplay').textContent = code || '...';
     }
@@ -3562,6 +3578,35 @@
 
   function closeReferralModal() {
     document.getElementById('referralModal').style.display = 'none';
+  }
+
+  async function submitReferralCode() {
+    const input = document.getElementById('applyReferralInput');
+    const msg   = document.getElementById('applyReferralMsg');
+    const code  = (input.value || '').trim().toUpperCase();
+    if (!code) { msg.style.color = 'var(--tan-dark)'; msg.textContent = 'Enter a referral code first.'; return; }
+    msg.style.color = 'var(--tan-dark)'; msg.textContent = 'Applying…';
+    try {
+      const tok = safeStorage.getItem('ncokit_token');
+      const res = await fetch('/api/auth/apply-referral', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (tok || '') },
+        body: JSON.stringify({ code })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        msg.style.color = '#4CAF50';
+        msg.textContent = '✓ Code applied! Your 50% discount will be applied at checkout.';
+        input.value = '';
+        document.getElementById('applyReferralSection').style.display = 'none';
+        if (currentUser) currentUser.referredBy = code;
+      } else {
+        msg.style.color = '#e05555';
+        msg.textContent = data.error || 'Could not apply code. Check and try again.';
+      }
+    } catch(e) {
+      msg.style.color = '#e05555'; msg.textContent = 'Network error — try again.';
+    }
   }
 
   function copyReferralCode() {
