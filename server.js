@@ -254,6 +254,42 @@ app.get('/sitemap.xml', (req, res) => {
 </urlset>`);
 });
 
+// ── APPLY REFERRAL CODE (post-signup) ───────────────────────────────────────
+// Lets a free user who signed up without a referral code apply one later.
+// The 50% discount fires automatically at Stripe checkout if referred_by is set.
+app.post('/api/auth/apply-referral', authLimiter, async (req, res) => {
+  try {
+    const user = await getUserFromSession(req);
+    if (!user) return res.status(401).json({ error: 'Sign in to apply a referral code' });
+    if (user.referred_by) return res.status(400).json({ error: 'A referral code is already applied to your account' });
+    if (user.plan === 'premium') return res.status(400).json({ error: 'You are already on Premium — no discount needed!' });
+    if (user.stripe_customer_id) return res.status(400).json({ error: 'A referral code can only be applied before your first upgrade' });
+
+    const { code } = req.body;
+    if (!code || typeof code !== 'string') return res.status(400).json({ error: 'Invalid referral code' });
+    const cleanCode = code.trim().toUpperCase();
+
+    // Make sure the code exists and doesn't belong to the user themselves
+    const referrer = await pool.query(
+      'SELECT id FROM users WHERE referral_code = $1',
+      [cleanCode]
+    );
+    if (referrer.rows.length === 0) return res.status(404).json({ error: 'Referral code not found — double-check and try again' });
+    if (referrer.rows[0].id === user.id) return res.status(400).json({ error: 'You cannot use your own referral code' });
+
+    // Apply the code
+    await pool.query(
+      'UPDATE users SET referred_by = $1 WHERE id = $2',
+      [cleanCode, user.id]
+    );
+
+    res.json({ success: true, message: 'Referral code applied — your 50% discount will be applied at checkout' });
+  } catch (err) {
+    console.error('apply-referral error:', err);
+    res.status(500).json({ error: 'Something went wrong — try again' });
+  }
+});
+
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   const { email, password, referredBy } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
