@@ -3166,6 +3166,16 @@
   }
 
   // Install prompt
+  // Detect ?ref=CODE in URL — store for auto-fill and open register modal
+  (function() {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) {
+      safeStorage.setItem('ncokit_pending_ref', ref.trim().toUpperCase());
+      // Clean the URL without reloading
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  })();
+
   let deferredPrompt = null;
 
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -3311,6 +3321,14 @@
     document.getElementById('registerTab').classList.toggle('active', tab === 'register');
     document.getElementById('modalTitle').textContent = tab === 'register' ? 'Create Account' : tab === 'forgot' ? 'Reset Password' : 'Sign In';
     document.getElementById('modalSub').textContent = tab === 'register' ? '' : tab === 'forgot' ? 'We\'ll email you a reset link' : 'Access your NCO Kit account';
+    // Auto-fill referral code from URL param if present
+    if (tab === 'register') {
+      const pendingRef = safeStorage.getItem('ncokit_pending_ref');
+      if (pendingRef) {
+        const refInput = document.getElementById('regReferral');
+        if (refInput && !refInput.value) refInput.value = pendingRef;
+      }
+    }
   }
 
   function showForgotPassword() { switchAuthTab('forgot'); }
@@ -3572,7 +3590,7 @@
     const code = currentUser.referralCode || currentUser.referral_code;
     document.getElementById('referralCodeDisplay').textContent = code || '...';
     document.getElementById('referralShareText').textContent =
-      `Hey — check out NCO Kit (ncokit.com). It's an AI-powered toolkit for Army NCOs — generates DA 4856 counseling forms, NCOER bullets by MOS, award citations, and AFT scores. Use my referral code ${code} when signing up and you'll get 50% off your first month of Premium.`;
+      `Hey — check out NCO Kit: https://ncokit.com?ref=${code}\n\nIt's an AI-powered toolkit for Army NCOs — generates NCOER bullets by MOS, DA 4856 counseling forms, award citations, and AFT scores. That link has my referral code built in — you'll get 50% off your first month of Premium automatically when you sign up.`;
     document.getElementById('referralModal').style.display = 'flex';
   }
 
@@ -3619,7 +3637,7 @@
 
   function copyShareMessage() {
     const code = currentUser.referralCode || currentUser.referral_code;
-    const text = `Hey — check out NCO Kit (ncokit.com). It's an AI-powered toolkit for Army NCOs — generates DA 4856 counseling forms, NCOER bullets by MOS, award citations, and AFT scores. Use my referral code ${code} when signing up and you'll get 50% off your first month of Premium.`;
+    const text = `Hey — check out NCO Kit: https://ncokit.com?ref=${code}\n\nIt's an AI-powered toolkit for Army NCOs — generates NCOER bullets by MOS, DA 4856 counseling forms, award citations, and AFT scores. That link has my referral code built in — you'll get 50% off your first month of Premium automatically when you sign up.`;
     navigator.clipboard.writeText(text);
     const btn = document.getElementById('copyShareBtn');
     btn.textContent = '✓ COPIED';
