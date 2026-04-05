@@ -1588,26 +1588,45 @@ app.post('/api/save/document', upload.single('file'), async (req, res) => {
   const user = await getUserFromSession(req);
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
   const { soldierName } = req.body;
   const { originalname, mimetype, buffer } = req.file;
+
   try {
     let extractedText = '';
+
     if (mimetype === 'application/pdf') {
-      const parsed = await pdfParse(buffer);
+      let parsed;
+      try {
+        parsed = await pdfParse(buffer);
+      } catch (pdfErr) {
+        console.error('PDF parse error:', pdfErr.message);
+        if (pdfErr.message?.includes('bad XRef') || pdfErr.message?.includes('Crypt')) {
+          return res.status(422).json({
+            error: 'This PDF is encrypted or password-protected. Open it, print it to a new PDF, then re-upload.'
+          });
+        }
+        return res.status(422).json({
+          error: 'Could not read this PDF. Try re-saving it as a standard PDF and uploading again.'
+        });
+      }
       extractedText = parsed.text;
     } else {
       const result = await mammoth.extractRawText({ buffer });
       extractedText = result.value;
     }
+
     if (!extractedText.trim()) {
       return res.status(422).json({ error: 'Could not extract text from this file. Make sure it is not a scanned image.' });
     }
+
     const fileType = mimetype === 'application/pdf' ? 'pdf' : 'docx';
     const result = await pool.query(
       'INSERT INTO saved_documents (user_id, soldier_name, filename, file_type, extracted_text) VALUES ($1,$2,$3,$4,$5) RETURNING id',
       [user.id, soldierName || '', originalname, fileType, extractedText.substring(0, 50000)]
     );
     res.json({ success: true, id: result.rows[0].id, charCount: extractedText.length });
+
   } catch (err) {
     console.error('Document upload error:', err);
     res.status(500).json({ error: 'Failed to process document' });
