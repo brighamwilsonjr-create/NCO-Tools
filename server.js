@@ -117,6 +117,15 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           );
         }
         console.log(`User ${userId} upgraded to premium`);
+        // Unsubscribe from marketing emails in Resend when user upgrades to premium
+        const premiumUser = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
+        if (premiumUser.rows[0]?.email) {
+          fetch(`https://api.resend.com/audiences/${process.env.RESEND_AUDIENCE_ID}/contacts`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
+            body: JSON.stringify({ email: premiumUser.rows[0].email, unsubscribed: true })
+          }).catch(err => console.error('Resend premium update failed:', err.message));
+        }
       }
     }
     if (event.type === 'customer.subscription.deleted') {
@@ -496,6 +505,12 @@ app.post('/api/auth/verify', async (req, res) => {
     );
     if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired verification link' });
     await pool.query('UPDATE users SET verified = TRUE, verification_token = NULL, verification_expires = NULL WHERE id = $1', [result.rows[0].id]);
+    // Add to Resend audience for marketing emails (non-blocking)
+    fetch(`https://api.resend.com/audiences/${process.env.RESEND_AUDIENCE_ID}/contacts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
+      body: JSON.stringify({ email: result.rows[0].email, unsubscribed: false })
+    }).catch(err => console.error('Resend add contact failed:', err.message));
     // Send welcome email (non-blocking — don't let email failure break verification)
     sendWelcomeEmail(result.rows[0].email).catch(err =>
       console.error('Welcome email failed:', err.message)
