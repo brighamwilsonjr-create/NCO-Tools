@@ -1247,6 +1247,76 @@
 
   </div>
 
+  <!-- ===== ONBOARDING MODAL ===== -->
+  <div id="onboarding-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.88);z-index:9000;align-items:center;justify-content:center;">
+    <div style="background:var(--card,#0f1f0f);border:1px solid var(--tan,#c9a227);padding:36px 32px;max-width:580px;width:calc(100% - 40px);margin:20px auto;border-radius:8px;position:relative;max-height:90vh;overflow-y:auto;">
+
+      <!-- Step 1: Welcome -->
+      <div id="ob-step-1">
+        <div style="font-size:13px;font-weight:700;color:var(--tan,#c9a227);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Step 1 of 4</div>
+        <h2 style="color:var(--fg,#f4f1ea);font-size:22px;margin:0 0 12px;">Welcome to NCO Kit ⚡</h2>
+        <p style="color:#a8c8a8;font-size:15px;line-height:1.7;margin:0 0 20px;">You now have access to every Army leader tool in one place — NCOER bullets, counselings, awards, memos, and more. All free. All AI-powered.</p>
+        <p style="color:#a8c8a8;font-size:15px;line-height:1.7;margin:0 0 24px;">Let's take 60 seconds to show you how the <strong style="color:var(--tan,#c9a227);">NCOER Bullet Builder</strong> works — the fastest tool in the kit.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button onclick="obNext(2)" style="padding:12px 28px;background:var(--tan,#c9a227);color:#0f1f0f;font-weight:700;border:none;border-radius:4px;cursor:pointer;font-size:14px;letter-spacing:1px;text-transform:uppercase;">Let's Go →</button>
+          <button onclick="obSkip()" style="padding:12px 20px;background:transparent;color:#a8c8a8;border:1px solid #2a4a2a;border-radius:4px;cursor:pointer;font-size:13px;">Skip for Now</button>
+        </div>
+      </div>
+
+      <!-- Step 2: How it works -->
+      <div id="ob-step-2" style="display:none;">
+        <div style="font-size:13px;font-weight:700;color:var(--tan,#c9a227);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Step 2 of 4</div>
+        <h2 style="color:var(--fg,#f4f1ea);font-size:22px;margin:0 0 12px;">How It Works</h2>
+        <p style="color:#a8c8a8;font-size:15px;line-height:1.7;margin:0 0 16px;">Type what a Soldier did in plain language. The AI converts it into a properly formatted, AR 623-3 compliant NCOER bullet — instantly.</p>
+        <div style="background:#0a140a;border-left:3px solid var(--tan,#c9a227);border-radius:4px;padding:16px 18px;margin-bottom:16px;">
+          <div style="font-size:12px;color:#c9a227;font-weight:700;letter-spacing:1px;margin-bottom:6px;">YOU TYPE:</div>
+          <div style="color:#e8e4d4;font-size:14px;line-height:1.6;">"SGT Smith led PT every morning and improved his squad's ACFT scores by 15 points on average"</div>
+        </div>
+        <div style="background:#0a140a;border-left:3px solid #4a8a4a;border-radius:4px;padding:16px 18px;margin-bottom:24px;">
+          <div style="font-size:12px;color:#4a8a4a;font-weight:700;letter-spacing:1px;margin-bottom:6px;">AI GENERATES:</div>
+          <div style="color:#e8e4d4;font-size:14px;line-height:1.6;">"Enforced daily physical readiness training for 9-person squad; drove 15-pt avg ACFT score increase — exceeded platoon standard"</div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button onclick="obNext(3)" style="padding:12px 28px;background:var(--tan,#c9a227);color:#0f1f0f;font-weight:700;border:none;border-radius:4px;cursor:pointer;font-size:14px;letter-spacing:1px;text-transform:uppercase;">Next →</button>
+          <button onclick="obSkip()" style="padding:12px 20px;background:transparent;color:#a8c8a8;border:1px solid #2a4a2a;border-radius:4px;cursor:pointer;font-size:13px;">Skip</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Cross-attribute alert feature -->
+      <div id="ob-step-3" style="display:none;">
+        <div style="font-size:13px;font-weight:700;color:var(--tan,#c9a227);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Step 3 of 4</div>
+        <h2 style="color:var(--fg,#f4f1ea);font-size:22px;margin:0 0 12px;">Smart Category Advisor</h2>
+        <p style="color:#a8c8a8;font-size:15px;line-height:1.7;margin:0 0 16px;">NCO Kit is the only tool that tells you if your bullet fits the wrong NCOER category — based on AR 623-3 and FM 6-22.</p>
+        <div style="background:#0a140a;border:1px solid #2a4a2a;border-radius:6px;padding:16px 18px;margin-bottom:24px;">
+          <div style="font-size:13px;color:#c9a227;font-weight:700;margin-bottom:8px;">⚠ CATEGORY FIT ADVISORY</div>
+          <div style="color:#a8c8a8;font-size:13px;line-height:1.6;">You selected <strong style="color:#e8e4d4;">Leads</strong>, but this bullet may better align with <strong style="color:#e8e4d4;">Develops</strong> based on AR 623-3 criteria. Consider moving it for a stronger evaluation.</div>
+        </div>
+        <p style="color:#a8c8a8;font-size:14px;line-height:1.6;margin:0 0 24px;">This runs automatically on every bullet — no other Army tool does this.</p>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button onclick="obNext(4)" style="padding:12px 28px;background:var(--tan,#c9a227);color:#0f1f0f;font-weight:700;border:none;border-radius:4px;cursor:pointer;font-size:14px;letter-spacing:1px;text-transform:uppercase;">Next →</button>
+          <button onclick="obSkip()" style="padding:12px 20px;background:transparent;color:#a8c8a8;border:1px solid #2a4a2a;border-radius:4px;cursor:pointer;font-size:13px;">Skip</button>
+        </div>
+      </div>
+
+      <!-- Step 4: Your turn -->
+      <div id="ob-step-4" style="display:none;">
+        <div style="font-size:13px;font-weight:700;color:var(--tan,#c9a227);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Step 4 of 4</div>
+        <h2 style="color:var(--fg,#f4f1ea);font-size:22px;margin:0 0 12px;">You're Ready. Let's Build.</h2>
+        <p style="color:#a8c8a8;font-size:15px;line-height:1.7;margin:0 0 16px;">Head to the <strong style="color:var(--tan,#c9a227);">NCOER Bullet Builder</strong> tab and generate your first bullet. It takes less than 30 seconds.</p>
+        <ul style="color:#a8c8a8;font-size:14px;line-height:2;padding-left:20px;margin:0 0 24px;">
+          <li>Enter a Soldier's name and MOS</li>
+          <li>Pick a rating category (Character, Leads, Achieves, etc.)</li>
+          <li>Describe what they did in plain language</li>
+          <li>Hit <strong style="color:#e8e4d4;">⚡ Generate AI Bullets</strong></li>
+        </ul>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+          <button onclick="obFinish()" style="padding:12px 28px;background:var(--tan,#c9a227);color:#0f1f0f;font-weight:700;border:none;border-radius:4px;cursor:pointer;font-size:14px;letter-spacing:1px;text-transform:uppercase;">Start Building ⚡</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ===== BULLETS PANEL ===== -->
   <div class="panel" id="panel-bullets">
 
@@ -2955,6 +3025,11 @@
       // Run category validation in background
       checkCategoryFit(bullets, category, action, cardId);
 
+      // Mark onboarding complete on first successful bullet generation
+      if (typeof completeOnboarding === 'function') {
+        await completeOnboarding();
+      }
+
     } catch (err) {
       clearInterval(loadingInterval);
       document.getElementById('bulletLoading').style.display = 'none';
@@ -4502,5 +4577,83 @@ async function generateAward() {
       <div id="docAnalysisResult"></div>
     </div>
   </div>
+
+<script>
+// ── ONBOARDING TRACKING ────────────────────────────────────────────────────────
+
+function showOnboardingFlow() {
+  const modal = document.getElementById('onboarding-modal');
+  if (modal) modal.style.display = 'flex';
+}
+
+function hideOnboardingFlow() {
+  const modal = document.getElementById('onboarding-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+// Navigate between onboarding steps
+function obNext(step) {
+  for (let i = 1; i <= 4; i++) {
+    const el = document.getElementById('ob-step-' + i);
+    if (el) el.style.display = (i === step) ? 'block' : 'none';
+  }
+}
+
+// Skip onboarding — marks complete and closes modal
+async function obSkip() {
+  await completeOnboarding();
+}
+
+// Finish onboarding — marks complete, closes modal, switches to bullets tab
+async function obFinish() {
+  await completeOnboarding();
+  if (typeof switchTab === 'function') switchTab('bullets');
+}
+
+// Check onboarding status on load
+async function checkOnboardingStatus() {
+  const token = safeStorage.getItem('ncokit_token');
+  if (!token) return; // Not logged in — don't show onboarding to anonymous users
+
+  try {
+    const response = await fetch('/api/auth/onboarding-status', {
+      headers: { 'Authorization': 'Bearer ' + token }
+    });
+    const data = await response.json();
+    if (!data.hasCompleted) {
+      showOnboardingFlow();
+    }
+  } catch (err) {
+    console.error('Failed to check onboarding status:', err);
+  }
+}
+
+// Mark onboarding as complete — called on first bullet OR skip/finish
+async function completeOnboarding() {
+  const token = safeStorage.getItem('ncokit_token');
+  if (!token) return;
+
+  hideOnboardingFlow();
+
+  try {
+    await fetch('/api/auth/complete-onboarding', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + token,
+        'Content-Type': 'application/json'
+      }
+    });
+  } catch (err) {
+    console.error('Failed to mark onboarding complete:', err);
+  }
+}
+
+// Run after user logs in or on page load if already logged in
+document.addEventListener('DOMContentLoaded', () => {
+  // Small delay to allow auth state to initialize first
+  setTimeout(checkOnboardingStatus, 800);
+});
+</script>
+
 </body>
 </html>

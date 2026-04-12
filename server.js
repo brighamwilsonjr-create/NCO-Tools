@@ -583,6 +583,36 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
+// ── ONBOARDING TRACKING ENDPOINTS ────────────────────────────────────────────
+
+// Check if user has completed onboarding
+app.get('/api/auth/onboarding-status', async (req, res) => {
+  try {
+    const user = await getUserFromSession(req);
+    if (!user) return res.json({ hasCompleted: false });
+    res.json({ hasCompleted: user.onboarding_completed || false });
+  } catch (err) {
+    console.error('Onboarding status error:', err);
+    res.json({ hasCompleted: false });
+  }
+});
+
+// Mark onboarding as completed
+app.post('/api/auth/complete-onboarding', async (req, res) => {
+  try {
+    const user = await getUserFromSession(req);
+    if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    await pool.query(
+      'UPDATE users SET onboarding_completed = TRUE, onboarding_completed_at = NOW() WHERE id = $1',
+      [user.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Complete onboarding error:', err);
+    res.status(500).json({ error: 'Failed to mark onboarding complete' });
+  }
+});
+
 app.post('/api/auth/logout', async (req, res) => {
   const token = req.headers['authorization']?.replace('Bearer ', '');
   if (token) await pool.query('DELETE FROM sessions WHERE token = $1', [token]);
@@ -1848,6 +1878,11 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
+
+    // Onboarding tracking columns (auto-migration)
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_onboarding_completed ON users(onboarding_completed)`);
 
     // Audit logging table for AI usage tracking (Security Fix #3)
     await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_log (
