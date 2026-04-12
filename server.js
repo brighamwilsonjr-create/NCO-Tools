@@ -17,6 +17,29 @@ const app = express();
 // Trust Render's proxy so rate limiting works correctly
 app.set('trust proxy', 1);
 
+// ──────────────────────────────────────────────────────────────────────────────
+// SERVER-SIDE ANONYMOUS USAGE TRACKING (Security Fix #1)
+// Prevents users from spoofing the x-anon-usage header
+// ──────────────────────────────────────────────────────────────────────────────
+const anonUsageMap = new Map(); // Store: IP+UserAgent => usage count
+const ANON_USAGE_LIMIT = 3;
+const CLEANUP_INTERVAL = 60 * 60 * 1000; // Clean up old entries every hour
+
+function getAnonKey(req) {
+  // Create a unique identifier based on IP and user agent
+  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const userAgent = req.get('user-agent') || 'unknown';
+  return crypto.createHash('sha256').update(ip + userAgent).digest('hex');
+}
+
+// Cleanup old entries periodically to prevent memory leak
+setInterval(() => {
+  if (anonUsageMap.size > 5000) {
+    anonUsageMap.clear();
+    console.log('Cleaned up anonymous usage map (size exceeded 5000)');
+  }
+}, CLEANUP_INTERVAL);
+
 // CORS — restrict to ncokit.com only
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
@@ -211,6 +234,20 @@ async function getUserFromSession(req) {
     [token]
   );
   return result.rows[0] || null;
+}
+
+// Log AI API requests for audit trail and abuse detection (Security Fix #3)
+async function logAIRequest(userId, endpoint, inputLength, success, errorMessage = null) {
+  try {
+    await pool.query(
+      `INSERT INTO ai_usage_log (user_id, endpoint, input_length, success, error_message, timestamp)
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [userId || null, endpoint, inputLength, success, errorMessage]
+    );
+  } catch (err) {
+    console.error('Failed to log AI request:', err.message);
+    // Don't throw — logging failures shouldn't break the API
+  }
 }
 
 async function sendVerificationEmail(email, token) {
@@ -624,19 +661,31 @@ function checkUsageLimit(deductCount) {
     const user = await getUserFromSession(req);
 
     if (!user) {
-      const anonCount = parseInt(req.headers['x-anon-usage'] || '0');
-      if (anonCount >= 3) {
-        return res.status(403).json({ error: 'limit_reached', limitType: 'anonymous' });
+      // Server-side anonymous usage tracking (Security Fix #1)
+      const anonKey = getAnonKey(req);
+      const anonCount = anonUsageMap.get(anonKey) || 0;
+
+      if (anonCount >= ANON_USAGE_LIMIT) {
+        return res.status(403).json({
+          error: 'limit_reached',
+          limitType: 'anonymous',
+          message: `Anonymous users have a ${ANON_USAGE_LIMIT}-use limit. Sign up for a free account for 10 monthly uses.`
+        });
       }
+
+      // Increment anonymous usage
+      anonUsageMap.set(anonKey, anonCount + 1);
       return next();
     }
 
     if (user.plan === 'premium') return next();
 
+    // Monthly quota reset fix (Security Fix #2)
     const now = new Date();
     const resetDate = new Date(user.bullets_reset_date);
-    const needsReset = now.getFullYear() > resetDate.getFullYear() ||
-      now.getMonth() > resetDate.getMonth();
+    // Reset if more than 30 days have passed since last reset
+    const daysSinceReset = (now - resetDate) / (1000 * 60 * 60 * 24);
+    const needsReset = daysSinceReset >= 30;
 
     if (needsReset) {
       await pool.query(
@@ -668,6 +717,7 @@ function checkUsageLimit(deductCount) {
 
 
 app.post('/api/enhance-counseling', aiLimiter, checkUsageLimit(1), async (req, res) => {
+  const user = await getUserFromSession(req);
   const { rawText, section, soldierName, rank, counselingType } = req.body;
   if (!rawText) return res.status(400).json({ error: 'Text is required.' });
   const safeText = sanitizeInput(rawText, 1000);
@@ -689,9 +739,14 @@ app.post('/api/enhance-counseling', aiLimiter, checkUsageLimit(1), async (req, r
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 500, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    if (data.error) {
+      await logAIRequest(user?.id, '/api/enhance-counseling', safeText.length, false, data.error.message);
+      return res.status(500).json({ error: data.error.message });
+    }
+    await logAIRequest(user?.id, '/api/enhance-counseling', safeText.length, true);
     res.json({ enhanced: data.content.map(i => i.text || '').join('').trim() });
   } catch (err) {
+    await logAIRequest(user?.id, '/api/enhance-counseling', safeText.length, false, err.message);
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
@@ -1794,6 +1849,20 @@ async function initDB() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
 
+    // Audit logging table for AI usage tracking (Security Fix #3)
+    await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+      endpoint VARCHAR(255) NOT NULL,
+      input_length INTEGER,
+      success BOOLEAN DEFAULT TRUE,
+      error_message TEXT,
+      timestamp TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ai_usage_log_user_id ON ai_usage_log(user_id)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ai_usage_log_timestamp ON ai_usage_log(timestamp)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_ai_usage_log_endpoint ON ai_usage_log(endpoint)`);
+
     await pool.query(`CREATE TABLE IF NOT EXISTS saved_counselings (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
       user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -2311,6 +2380,94 @@ app.get('/api/admin/usage-stats', async (req, res) => {
   }
 });
 
+// ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
+// Detailed breakdown of subscriber usage, including 50%+ threshold analysis
+app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
+  const user = await getUserFromSession(req);
+  // Only allow admin (you) to access this endpoint
+  if (user?.email !== 'brighamwilsonjr@gmail.com') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+
+  try {
+    // Get all free users with their usage percentages
+    const usageQuery = await pool.query(`
+      SELECT
+        id,
+        email,
+        plan,
+        bullets_used_this_month,
+        bullets_reset_date,
+        verified,
+        created_at,
+        ROUND(100.0 * bullets_used_this_month / 10, 1) AS usage_percentage,
+        CASE
+          WHEN bullets_used_this_month >= 10 THEN 'at_limit'
+          WHEN bullets_used_this_month >= 5 THEN '50_percent_or_more'
+          WHEN bullets_used_this_month > 0 THEN 'under_50_percent'
+          ELSE 'zero_usage'
+        END AS usage_category
+      FROM users
+      WHERE plan = 'free'
+      ORDER BY bullets_used_this_month DESC
+    `);
+
+    // Summarize by category
+    const summary = {
+      total_free_users: 0,
+      users_at_limit: 0,
+      users_50_percent_or_more: 0,
+      users_under_50_percent: 0,
+      users_zero_usage: 0,
+      average_usage: 0,
+      median_usage: 0,
+      max_usage: 0
+    };
+
+    const allUsers = usageQuery.rows;
+    const usages = allUsers.map(u => u.bullets_used_this_month);
+
+    summary.total_free_users = allUsers.length;
+    summary.users_at_limit = allUsers.filter(u => u.usage_category === 'at_limit').length;
+    summary.users_50_percent_or_more = allUsers.filter(u => u.usage_category === '50_percent_or_more').length;
+    summary.users_under_50_percent = allUsers.filter(u => u.usage_category === 'under_50_percent').length;
+    summary.users_zero_usage = allUsers.filter(u => u.usage_category === 'zero_usage').length;
+    summary.average_usage = usages.length > 0 ? (usages.reduce((a, b) => a + b, 0) / usages.length).toFixed(2) : 0;
+    summary.max_usage = usages.length > 0 ? Math.max(...usages) : 0;
+
+    // Calculate median
+    if (usages.length > 0) {
+      const sorted = [...usages].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      summary.median_usage = sorted.length % 2 ? sorted[mid] : ((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2);
+    }
+
+    // AI request audit log summary
+    const auditSummary = await pool.query(`
+      SELECT
+        DATE(timestamp) as date,
+        endpoint,
+        COUNT(*) as request_count,
+        CASE WHEN success THEN 'success' ELSE 'error' END as status,
+        COUNT(*) FILTER (WHERE error_message IS NOT NULL) as error_count
+      FROM ai_usage_log
+      WHERE timestamp > NOW() - INTERVAL '30 days'
+      GROUP BY DATE(timestamp), endpoint, success
+      ORDER BY date DESC, endpoint
+    `);
+
+    res.json({
+      summary,
+      users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
+      users_at_limit: allUsers.filter(u => u.usage_category === 'at_limit'),
+      all_users_by_usage: allUsers,
+      audit_log_summary: auditSummary.rows
+    });
+  } catch(err) {
+    console.error('Analytics error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ── ADMIN: RE-ENGAGEMENT BATCH SEND ──────────────────────────────────────────
 // Sends 48 emails per batch to inactive free users (signed up >72h ago, 0 usage)
