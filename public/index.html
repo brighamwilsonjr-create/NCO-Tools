@@ -3417,6 +3417,8 @@
       document.getElementById('referralCodeDisplay').textContent = code || '...';
     }
     closeAuth();
+    // Check onboarding status after login — show modal if not yet completed
+    setTimeout(checkOnboardingStatus, 300);
   }
 
   function toggleAccountMenu() {
@@ -4648,10 +4650,10 @@ async function completeOnboarding() {
   }
 }
 
-// Run after user logs in or on page load if already logged in
+// Run on page load for already-logged-in users (token already in storage)
 document.addEventListener('DOMContentLoaded', () => {
-  // Small delay to allow auth state to initialize first
-  setTimeout(checkOnboardingStatus, 800);
+  // 1.5s delay gives the existing session restore time to initialize
+  setTimeout(checkOnboardingStatus, 1500);
 });
 </script>
 
