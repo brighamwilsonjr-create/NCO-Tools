@@ -2004,6 +2004,21 @@ async function initDB() {
     )`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_saved_documents_user ON saved_documents(user_id)`);
 
+    // Blog posts table
+    await pool.query(`CREATE TABLE IF NOT EXISTS blog_posts (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      title VARCHAR(255) NOT NULL,
+      slug VARCHAR(255) NOT NULL UNIQUE,
+      meta_description TEXT,
+      category VARCHAR(100),
+      content TEXT NOT NULL,
+      published_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_blog_posts_slug ON blog_posts(slug)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_blog_posts_published ON blog_posts(published_at DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_blog_posts_category ON blog_posts(category)`);
+
     console.log('Database initialized successfully');
   } catch (err) {
     console.error('Database init error:', err.message);
@@ -2630,6 +2645,241 @@ app.get('/api/admin/user-lookup', async (req, res) => {
   }
 });
 
+
+// ── BLOG ────────────────────────────────────────────────────────────────────
+
+// Helper: render a full HTML page with NCO Kit brand + SEO
+function blogPage({ title, metaDescription, canonicalUrl, schemaJson = '', bodyHtml }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title}</title>
+<meta name="description" content="${metaDescription}">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="${canonicalUrl}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${metaDescription}">
+<meta property="og:url" content="${canonicalUrl}">
+<meta property="og:site_name" content="NCO Kit">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${title}">
+<meta name="twitter:description" content="${metaDescription}">
+${schemaJson}
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Libre+Franklin:wght@300;400;500;600&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a2419; color: #F4F1EA; font-family: 'Libre Franklin', sans-serif; line-height: 1.7; }
+  a { color: #C8B48A; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Header */
+  .site-header { background: #2B3A2E; border-bottom: 1px solid #3d5440; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; }
+  .site-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-badge { background: #c9a227; color: #1a2419; font-family: 'Oswald', sans-serif; font-weight: 700; font-size: 13px; letter-spacing: 1px; padding: 4px 8px; clip-path: polygon(10% 0%, 90% 0%, 100% 50%, 90% 100%, 10% 100%, 0% 50%); }
+  .logo-text { font-family: 'Oswald', sans-serif; font-size: 20px; font-weight: 700; letter-spacing: 2px; color: #F4F1EA; }
+  .header-nav { display: flex; gap: 20px; align-items: center; font-family: 'Source Code Pro', monospace; font-size: 11px; letter-spacing: 1px; }
+  .header-nav a { color: #C8B48A; }
+
+  /* Layout */
+  .container { max-width: 820px; margin: 0 auto; padding: 48px 24px 80px; }
+
+  /* Blog index */
+  .blog-heading { font-family: 'Oswald', sans-serif; font-size: 32px; font-weight: 700; letter-spacing: 3px; color: #F4F1EA; margin-bottom: 8px; text-transform: uppercase; }
+  .blog-sub { font-size: 14px; color: #C8B48A; margin-bottom: 48px; font-family: 'Source Code Pro', monospace; letter-spacing: 1px; }
+  .post-list { display: flex; flex-direction: column; gap: 32px; }
+  .post-card { border: 1px solid #3d5440; background: #1e271f; padding: 28px; }
+  .post-category { font-family: 'Source Code Pro', monospace; font-size: 10px; letter-spacing: 2px; color: #c9a227; text-transform: uppercase; margin-bottom: 8px; }
+  .post-title { font-family: 'Oswald', sans-serif; font-size: 22px; font-weight: 600; color: #F4F1EA; margin-bottom: 10px; line-height: 1.3; }
+  .post-title a { color: inherit; }
+  .post-title a:hover { color: #C8B48A; text-decoration: none; }
+  .post-excerpt { font-size: 14px; color: #b0b8a8; line-height: 1.7; margin-bottom: 16px; }
+  .post-meta { font-family: 'Source Code Pro', monospace; font-size: 10px; color: #6b7a63; letter-spacing: 1px; }
+  .read-more { display: inline-block; margin-top: 14px; font-family: 'Source Code Pro', monospace; font-size: 11px; letter-spacing: 1px; color: #c9a227; border: 1px solid #c9a227; padding: 6px 14px; }
+  .read-more:hover { background: #c9a227; color: #1a2419; text-decoration: none; }
+
+  /* Single post */
+  .post-header { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid #3d5440; }
+  .post-header .post-category { font-size: 11px; margin-bottom: 12px; }
+  .post-header h1 { font-family: 'Oswald', sans-serif; font-size: 34px; font-weight: 700; letter-spacing: 2px; line-height: 1.25; margin-bottom: 16px; text-transform: uppercase; }
+  .post-header .post-meta { font-size: 11px; }
+  .post-body h2 { font-family: 'Oswald', sans-serif; font-size: 22px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #C8B48A; margin: 36px 0 14px; }
+  .post-body h3 { font-family: 'Oswald', sans-serif; font-size: 17px; font-weight: 600; letter-spacing: 1px; color: #F4F1EA; margin: 28px 0 10px; }
+  .post-body p { font-size: 15px; line-height: 1.8; color: #d4d9cc; margin-bottom: 18px; }
+  .post-body ul, .post-body ol { margin: 0 0 18px 24px; }
+  .post-body li { font-size: 15px; line-height: 1.8; color: #d4d9cc; margin-bottom: 6px; }
+  .post-body strong { color: #F4F1EA; }
+  .post-body .example-box { background: #2B3A2E; border-left: 3px solid #c9a227; padding: 16px 20px; margin: 24px 0; font-family: 'Source Code Pro', monospace; font-size: 13px; color: #C8B48A; line-height: 1.6; }
+  .cta-box { background: #2B3A2E; border: 1px solid #c9a227; padding: 28px; margin: 48px 0 0; text-align: center; }
+  .cta-box h3 { font-family: 'Oswald', sans-serif; font-size: 20px; letter-spacing: 2px; color: #c9a227; margin-bottom: 10px; text-transform: uppercase; }
+  .cta-box p { font-size: 14px; color: #b0b8a8; margin-bottom: 18px; }
+  .cta-btn { display: inline-block; background: #c9a227; color: #1a2419; font-family: 'Oswald', sans-serif; font-weight: 700; letter-spacing: 2px; font-size: 14px; padding: 12px 28px; text-decoration: none; }
+  .cta-btn:hover { background: #e8bc30; text-decoration: none; }
+  .back-link { display: inline-block; font-family: 'Source Code Pro', monospace; font-size: 11px; letter-spacing: 1px; color: #C8B48A; margin-bottom: 32px; }
+  .back-link:hover { text-decoration: underline; }
+
+  /* Footer */
+  .site-footer { border-top: 1px solid #3d5440; padding: 24px; text-align: center; font-family: 'Source Code Pro', monospace; font-size: 10px; color: #6b7a63; letter-spacing: 1px; }
+  .site-footer a { color: #C8B48A; }
+</style>
+</head>
+<body>
+<header class="site-header">
+  <a href="/" class="site-logo">
+    <div class="logo-badge">NCO</div>
+    <span class="logo-text">NCO Kit</span>
+  </a>
+  <nav class="header-nav">
+    <a href="/">Tools</a>
+    <a href="/blog">Blog</a>
+    <a href="/#pricing" style="color:#c9a227; border:1px solid #c9a227; padding:4px 12px;">Go Premium</a>
+  </nav>
+</header>
+<main class="container">
+${bodyHtml}
+</main>
+<footer class="site-footer">
+  <p>NCO Kit is not affiliated with or endorsed by the Department of the Army. &nbsp;|&nbsp; <a href="/privacy">Privacy Policy</a> &nbsp;|&nbsp; <a href="/blog">Blog</a></p>
+</footer>
+</body>
+</html>`;
+}
+
+// GET /blog — index page
+app.get('/blog', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, title, slug, meta_description, category, published_at,
+              LEFT(content, 400) AS excerpt
+       FROM blog_posts ORDER BY published_at DESC LIMIT 20`
+    );
+
+    const postCards = rows.length === 0
+      ? `<p style="color:#6b7a63; font-family:'Source Code Pro',monospace; font-size:13px;">First post coming soon. Check back next week.</p>`
+      : rows.map(p => {
+          const date = new Date(p.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          // Strip HTML tags for excerpt
+          const plainExcerpt = p.excerpt.replace(/<[^>]*>/g, '').substring(0, 200) + '…';
+          return `
+          <article class="post-card">
+            <div class="post-category">${p.category || 'Army Leader Tools'}</div>
+            <h2 class="post-title"><a href="/blog/${p.slug}">${p.title}</a></h2>
+            <p class="post-excerpt">${plainExcerpt}</p>
+            <div class="post-meta">${date}</div>
+            <a href="/blog/${p.slug}" class="read-more">Read Article →</a>
+          </article>`;
+        }).join('\n');
+
+    const html = blogPage({
+      title: 'Army Leader Resources & Guides | NCO Kit Blog',
+      metaDescription: 'Free guides for Army NCOs and leaders — how to write NCOER bullets, DA 4856 counseling, award citations, OER bullets, and more. From the team at ncokit.com.',
+      canonicalUrl: 'https://ncokit.com/blog',
+      schemaJson: `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Blog","name":"NCO Kit Blog","url":"https://ncokit.com/blog","description":"Army leader guides on NCOER writing, counseling, awards, and more."}</script>`,
+      bodyHtml: `
+        <h1 class="blog-heading">Army Leader Resources</h1>
+        <p class="blog-sub">Guides, examples, and tips for NCOs and leaders — from the team at NCO Kit</p>
+        <div class="post-list">${postCards}</div>`
+    });
+
+    res.type('text/html').send(html);
+  } catch (err) {
+    console.error('Blog index error:', err.message);
+    res.status(500).send('Error loading blog');
+  }
+});
+
+// GET /blog/:slug — individual post
+app.get('/blog/:slug', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM blog_posts WHERE slug = $1 LIMIT 1`,
+      [req.params.slug]
+    );
+    if (!rows.length) return res.status(404).send('Post not found');
+    const post = rows[0];
+    const date = new Date(post.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const canonicalUrl = `https://ncokit.com/blog/${post.slug}`;
+
+    const schema = `<script type="application/ld+json">${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": post.title,
+      "description": post.meta_description,
+      "url": canonicalUrl,
+      "datePublished": post.published_at,
+      "author": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com" },
+      "publisher": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com", "logo": { "@type": "ImageObject", "url": "https://ncokit.com/icons/icon-512.png" } }
+    })}</script>`;
+
+    const html = blogPage({
+      title: `${post.title} | NCO Kit`,
+      metaDescription: post.meta_description || '',
+      canonicalUrl,
+      schemaJson: schema,
+      bodyHtml: `
+        <a href="/blog" class="back-link">← All Articles</a>
+        <header class="post-header">
+          <div class="post-category">${post.category || 'Army Leader Tools'}</div>
+          <h1>${post.title}</h1>
+          <div class="post-meta">${date}</div>
+        </header>
+        <div class="post-body">${post.content}</div>
+        <div class="cta-box">
+          <h3>Try It Free on NCO Kit</h3>
+          <p>Save hours on Army paperwork. NCOER bullets, DA 4856 counseling, award citations, memos, and more — all AI-powered and free.</p>
+          <a href="/" class="cta-btn">Open NCO Kit →</a>
+        </div>`
+    });
+
+    res.type('text/html').send(html);
+  } catch (err) {
+    console.error('Blog post error:', err.message);
+    res.status(500).send('Error loading post');
+  }
+});
+
+// POST /api/admin/blog/create — create a blog post
+// Auth: Henry's session OR BLOG_ADMIN_KEY env var header
+app.post('/api/admin/blog/create', async (req, res) => {
+  try {
+    // Check auth — accept either admin session or BLOG_ADMIN_KEY header
+    const adminKey = process.env.BLOG_ADMIN_KEY;
+    const headerKey = req.headers['x-blog-admin-key'];
+    const isKeyAuth = adminKey && headerKey && headerKey === adminKey;
+
+    if (!isKeyAuth) {
+      const user = await getUserFromSession(req);
+      if (!user || user.email !== 'brighamwilsonjr@gmail.com') {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
+
+    const { title, slug, meta_description, category, content } = req.body;
+    if (!title || !slug || !content) {
+      return res.status(400).json({ error: 'title, slug, and content are required' });
+    }
+
+    // Sanitize slug — lowercase, hyphens only
+    const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    const { rows } = await pool.query(
+      `INSERT INTO blog_posts (title, slug, meta_description, category, content)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (slug) DO UPDATE SET title=$1, meta_description=$3, category=$4, content=$5, published_at=NOW()
+       RETURNING id, slug`,
+      [title, cleanSlug, meta_description || '', category || 'Army Leader Tools', content]
+    );
+
+    console.log(`Blog post created/updated: ${rows[0].slug}`);
+    res.json({ success: true, slug: rows[0].slug, url: `https://ncokit.com/blog/${rows[0].slug}` });
+  } catch (err) {
+    console.error('Blog create error:', err.message);
+    res.status(500).json({ error: 'Failed to create post' });
+  }
+});
 
 // 404 handler
 app.use((req, res) => {

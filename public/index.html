@@ -745,6 +745,7 @@
     </div>
   </div>
   <div class="header-right" style="gap:16px">
+    <a href="/blog" style="font-family:'Source Code Pro',monospace; font-size:11px; letter-spacing:1px; color:var(--tan); text-decoration:none; display:none;" id="blogNavLink" class="blog-nav-link">Blog</a>
     <div id="authButtons" style="display:flex; gap:8px; align-items:center;">
       <button class="btn btn-secondary btn-sm" onclick="showAuth('login')">Login</button>
       <button class="btn btn-primary btn-sm" onclick="showAuth('register')">Sign Up — Free</button>
@@ -4717,6 +4718,9 @@ async function completeOnboarding() {
 document.addEventListener('DOMContentLoaded', () => {
   // 1.5s delay gives the existing session restore time to initialize
   setTimeout(checkOnboardingStatus, 1500);
+  // Show blog nav link
+  const blogLink = document.getElementById('blogNavLink');
+  if (blogLink) blogLink.style.display = 'inline';
 });
 </script>
 
