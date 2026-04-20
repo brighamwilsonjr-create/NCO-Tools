@@ -2433,10 +2433,17 @@ app.get('/api/admin/usage-stats', async (req, res) => {
 // ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
-  const user = await getUserFromSession(req);
-  // Only allow admin (you) to access this endpoint
-  if (user?.email !== 'brighamwilsonjr@gmail.com') {
-    return res.status(403).json({ error: 'Admin only' });
+  // Allow access via admin session token OR the ADMIN_REPORT_KEY env variable (for scheduled reports)
+  const authHeader = req.headers['authorization'] || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const adminReportKey = process.env.ADMIN_REPORT_KEY;
+  const isReportKeyAuth = adminReportKey && bearerToken === adminReportKey;
+
+  if (!isReportKeyAuth) {
+    const user = await getUserFromSession(req);
+    if (user?.email !== 'brighamwilsonjr@gmail.com') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
   }
 
   try {
