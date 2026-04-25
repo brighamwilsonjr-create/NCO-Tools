@@ -2800,6 +2800,51 @@ app.get('/api/admin/user-lookup', async (req, res) => {
   }
 });
 
+// ── ADMIN: A/B TEST VARIANT PERFORMANCE ────────────────────────────────────
+app.get('/api/admin/variant-performance', async (req, res) => {
+  try {
+    const user = await getUserFromSession(req);
+    if (!user || user.email !== 'brighamwilsonjr@gmail.com') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+
+    const result = await pool.query(`
+      SELECT
+        upgrade_variant,
+        COUNT(*) as total_users,
+        SUM(CASE WHEN plan = 'premium' THEN 1 ELSE 0 END) as conversions,
+        ROUND(100.0 * SUM(CASE WHEN plan = 'premium' THEN 1 ELSE 0 END) / COUNT(*), 2) as conversion_rate_pct
+      FROM users
+      WHERE upgrade_variant IS NOT NULL
+      GROUP BY upgrade_variant
+      ORDER BY upgrade_variant
+    `);
+
+    const variantLabels = {
+      'A': 'Variant A: Save 20+ Hours (Value)',
+      'B': 'Variant B: 200+ Leaders (Social Proof)',
+      'C': 'Variant C: 50% Off (Urgency)'
+    };
+
+    const performance = result.rows.map(row => ({
+      variant: row.upgrade_variant,
+      label: variantLabels[row.upgrade_variant],
+      total_users: parseInt(row.total_users),
+      conversions: parseInt(row.conversions),
+      conversion_rate: parseFloat(row.conversion_rate_pct)
+    }));
+
+    res.json({
+      summary: `A/B Test Results: ${result.rows.length} variants tested`,
+      performance,
+      timestamp: new Date().toISOString()
+    });
+  } catch(err) {
+    console.error('Variant performance error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 // ── BLOG ────────────────────────────────────────────────────────────────────
 
