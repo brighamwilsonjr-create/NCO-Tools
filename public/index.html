@@ -361,6 +361,7 @@
     color: var(--tan);
     border-bottom-color: var(--tan);
     background: var(--od-dark);
+    transition: all 0.3s ease;
   }
 
   /* PANELS */
@@ -462,6 +463,8 @@
 
   input:focus, select:focus, textarea:focus {
     border-color: var(--tan);
+    box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+    transition: all 0.2s ease;
   }
 
   select option { background: var(--od-dark); }
@@ -696,15 +699,60 @@
     margin-top: 2px;
   }
 
-  @media (max-width: 700px) {
+  /* Tablet — 768px to 1024px */
+  @media (max-width: 1024px) {
+    .container { padding: 24px 16px; }
+    .form-grid { grid-template-columns: 1fr; }
+    .form-grid.three { grid-template-columns: 1fr 1fr; }
+    .stats-row { grid-template-columns: 1fr 1fr; }
+    .logo-sub { display: none; }
+    header { padding: 0 16px; }
+    .tab { padding: 10px 16px; font-size: 12px; }
+  }
+
+  /* Small tablet / large mobile — 700px to 767px */
+  @media (max-width: 767px) {
+    .container { padding: 20px 12px; }
     .form-grid { grid-template-columns: 1fr; }
     .form-grid.three { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: 1fr 1fr; }
-    .tabs { flex-wrap: wrap; }
+    .section-title { font-size: 24px; }
+    .tabs { flex-wrap: wrap; gap: 0; }
+    .tab { padding: 10px 12px; font-size: 11px; letter-spacing: 1px; }
     #userEmail { display: none !important; }
     .logo-sub { display: none; }
-    header { padding: 0 12px; height: auto; min-height: 56px; flex-wrap: wrap; gap: 8px; padding-top: 8px; padding-bottom: 8px; }
-    .header-right { flex-wrap: wrap; gap: 6px; }
+    header { padding: 0 12px; height: auto; min-height: 56px; flex-wrap: nowrap; gap: 8px; padding-top: 8px; padding-bottom: 8px; justify-content: space-between; }
+    .header-right { flex-wrap: wrap; gap: 6px; flex: 1; justify-content: flex-end; }
+    #authButtons { gap: 4px; }
+    .btn-sm { padding: 6px 12px; font-size: 10px; }
+    .btn-row { flex-wrap: wrap; gap: 8px; }
+    .roster-table { font-size: 12px; }
+    .roster-table th, .roster-table td { padding: 8px 10px; }
+  }
+
+  /* Mobile — max 699px */
+  @media (max-width: 699px) {
+    .container { max-width: 100%; padding: 16px 8px; }
+    .form-grid { grid-template-columns: 1fr; gap: 12px; }
+    .stats-row { grid-template-columns: 1fr; }
+    .stat-card { padding: 12px 16px; }
+    .stat-number { font-size: 28px; }
+    .section-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+    .section-title { font-size: 20px; letter-spacing: 2px; }
+    .tabs { gap: 0; margin-bottom: 20px; }
+    .tab { flex: 1; padding: 8px 8px; font-size: 10px; letter-spacing: 0; min-width: 60px; text-align: center; }
+    .card { padding: 16px; margin-bottom: 12px; }
+    .card-title { font-size: 11px; margin-bottom: 12px; }
+    .btn { padding: 10px 20px; font-size: 12px; }
+    .btn-primary, .btn-secondary { font-size: 11px; padding: 9px 16px; }
+    label { font-size: 9px; }
+    input, select, textarea { font-size: 13px; padding: 8px 10px; }
+    textarea { min-height: 60px; }
+    .output-box { font-size: 11px; padding: 16px; }
+    .bullet-output { font-size: 11px; padding: 12px 16px; }
+    .roster-table { font-size: 11px; }
+    .roster-table th { padding: 6px 8px; font-size: 9px; }
+    .roster-table td { padding: 6px 8px; }
   }
 </style>
 <!-- Google tag (gtag.js) -->
@@ -744,8 +792,11 @@
       <div class="logo-sub">Free Army Leader's Toolkit — ncokit.com</div>
     </div>
   </div>
+  <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">☀ LIGHT</button>
+  </div>
   <div class="header-right" style="gap:16px">
-    <a href="/blog" style="font-family:'Source Code Pro',monospace; font-size:11px; letter-spacing:1px; color:var(--tan); text-decoration:none; display:none;" id="blogNavLink" class="blog-nav-link">Blog</a>
+    <!-- Blog link moved to About section -->
     <div id="authButtons" style="display:flex; gap:8px; align-items:center;">
       <button class="btn btn-secondary btn-sm" onclick="showAuth('login')">Login</button>
       <button class="btn btn-primary btn-sm" onclick="showAuth('register')">Sign Up — Free</button>
@@ -795,7 +846,6 @@
     <div style="display:flex; align-items:center; gap:8px;">
       <div class="status-dot"></div>
       <span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">SYSTEM ONLINE</span>
-      <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()">☀ LIGHT</button>
     </div>
   </div>
 </header>
@@ -2202,6 +2252,16 @@
       <div style="flex:1; min-width:200px;">
         <div style="font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">BUILT BY AN NCO, FOR NCOs</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.7;">SFC Henry Wilson — 16 years and still serving, U.S. Army. Every tool on this site was built to solve a real problem I faced leading soldiers.</div>
+      </div>
+    </div>
+
+    <!-- Blog & Resources -->
+    <div class="card" style="margin-bottom:16px; display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+      <div style="font-size:28px;">📖</div>
+      <div style="flex:1; min-width:200px;">
+        <div style="font-family:'Oswald',sans-serif; font-size:13px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">ARMY LEADER INSIGHTS</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.7;">Read the NCO Kit Blog for tips, Army regulatory updates, leadership insights, and deep dives into NCOER writing, counseling best practices, and soldier development strategies.</div>
+        <a href="/blog" style="display:inline-block; margin-top:12px; padding:8px 16px; background:var(--tan); color:var(--od-dark); font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:2px; text-decoration:none; cursor:pointer; border:none; text-transform:uppercase; transition:all 0.2s;">→ Visit Blog</a>
       </div>
     </div>
 <div class="card" style="margin-bottom:16px;">
