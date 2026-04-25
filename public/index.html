@@ -3863,10 +3863,14 @@
   function copyShareMessage() {
     const code = currentUser.referralCode || currentUser.referral_code;
     const text = `Hey — check out NCO Kit: https://ncokit.com?ref=${code}\n\nIt's an AI-powered toolkit for Army NCOs — generates NCOER bullets by MOS, DA 4856 counseling forms, award citations, and AFT scores. That link has my referral code built in — you'll get 50% off your first month of Premium automatically when you sign up.`;
-    navigator.clipboard.writeText(text);
-    const btn = document.getElementById('copyShareBtn');
-    btn.textContent = '✓ COPIED';
-    setTimeout(() => btn.textContent = '📋 COPY SHARE MESSAGE', 2000);
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('✓ Share message copied', 'success');
+      const btn = document.getElementById('copyShareBtn');
+      if (btn) {
+        btn.textContent = '✓ COPIED';
+        setTimeout(() => btn.textContent = '📋 COPY SHARE MESSAGE', 2000);
+      }
+    });
   }
 
   document.getElementById('referralModal').addEventListener('click', function(e) {
