@@ -413,6 +413,131 @@ async function sendWelcomeEmail(email) {
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
 
+// ── TOOL PAGES (SEO) ────────────────────────────────────────────────────────
+
+const toolMetadata = {
+  bullets: {
+    title: 'NCOER Bullet Builder | Free AI Tool | NCO Kit',
+    description: 'Generate AR 623-3 compliant NCOER bullets instantly. Free AI tool to write Army-standard evaluation bullets by MOS. No installation required.',
+    ogTitle: 'NCOER Bullet Builder',
+    ogDescription: 'Free AI tool to generate AR 623-3 compliant NCOER bullets. Write evaluation bullets instantly by MOS for any rating category.'
+  },
+  oer: {
+    title: 'OER Bullet Builder | Free AI Tool | NCO Kit',
+    description: 'Generate Officer Evaluation Report (OER) bullets that meet Army standards. Free AI tool to write professional evaluation bullets instantly.',
+    ogTitle: 'OER Bullet Builder',
+    ogDescription: 'Free AI tool to generate OER (Officer Evaluation Report) bullets. Write evaluation bullets that meet Army standards instantly.'
+  },
+  counseling: {
+    title: 'DA 4856 Counseling Form Generator | Free | NCO Kit',
+    description: 'Create AR 623-3 DA Form 4856 developmental counseling forms instantly. Free counseling form generator for Army leaders.',
+    ogTitle: 'DA 4856 Counseling Form Generator',
+    ogDescription: 'Free AI tool to generate AR 623-3 DA Form 4856 counseling forms. Create developmental, monthly, and event-driven counseling forms instantly.'
+  },
+  roster: {
+    title: 'Soldier Roster Tracker | Free Tool | NCO Kit',
+    description: 'Track and manage your soldiers with NCO Kit\'s free roster tracker. Organize soldier data, notes, and performance records in one place.',
+    ogTitle: 'Soldier Roster Tracker',
+    ogDescription: 'Free tool to track and organize your soldier roster. Manage soldier data, performance notes, and key information all in one place.'
+  },
+  acft: {
+    title: 'Army Fitness Test (AFT) Score Calculator | Free | NCO Kit',
+    description: 'Calculate Army Fitness Test (AFT) scores instantly. Free AFT calculator with accurate age and gender scoring standards.',
+    ogTitle: 'Army Fitness Test Score Calculator',
+    ogDescription: 'Free AFT (Army Fitness Test) score calculator. Get instant pass/fail results and point totals for all six events.'
+  },
+  awards: {
+    title: 'Army Award Citation Generator | Free AI Tool | NCO Kit',
+    description: 'Generate AR 600-8-22 compliant award citations for AAM, ARCOM, MSM, and more. Free award recommendation writer for Army leaders.',
+    ogTitle: 'Army Award Citation Generator',
+    ogDescription: 'Free AI tool to write AR 600-8-22 compliant award citations. Generate professional recommendations for AAM, ARCOM, MSM awards.'
+  },
+  memo: {
+    title: 'AR 25-50 Army Memo Generator | Free | NCO Kit',
+    description: 'Create AR 25-50 compliant Army memos instantly. Free memo generator following Army memo format standards.',
+    ogTitle: 'Army Memo Generator',
+    ogDescription: 'Free AI tool to generate AR 25-50 compliant Army memos. Create professional memos that meet Army format standards instantly.'
+  },
+  narrative: {
+    title: 'Senior Rater Narrative Generator | Free AI Tool | NCO Kit',
+    description: 'Generate professional senior rater narratives for NCOER and OER. Free AI-powered narrative writer for Army evaluation reports.',
+    ogTitle: 'Senior Rater Narrative Generator',
+    ogDescription: 'Free AI tool to write senior rater narratives for NCOER and OER. Generate professional, impact-focused evaluation narratives instantly.'
+  }
+};
+
+app.get('/:tool', async (req, res, next) => {
+  const tool = req.params.tool;
+  const validTools = ['bullets', 'oer', 'counseling', 'roster', 'acft', 'awards', 'memo', 'narrative'];
+
+  // Only handle known tools; pass others to next handler
+  if (!validTools.includes(tool)) {
+    return next();
+  }
+
+  const meta = toolMetadata[tool];
+  if (!meta) {
+    return res.status(404).json({ error: 'Tool not found' });
+  }
+
+  try {
+    // Read the base index.html
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    let html = require('fs').readFileSync(indexPath, 'utf8');
+
+    // Replace meta tags
+    html = html.replace(
+      /<title>.*?<\/title>/,
+      `<title>${meta.title}</title>`
+    );
+    html = html.replace(
+      /<meta name="description" content=".*?">/,
+      `<meta name="description" content="${meta.description}">`
+    );
+    html = html.replace(
+      /<meta property="og:title" content=".*?">/,
+      `<meta property="og:title" content="${meta.ogTitle}">`
+    );
+    html = html.replace(
+      /<meta property="og:description" content=".*?">/,
+      `<meta property="og:description" content="${meta.ogDescription}">`
+    );
+    html = html.replace(
+      /<meta name="twitter:title" content=".*?">/,
+      `<meta name="twitter:title" content="${meta.ogTitle}">`
+    );
+    html = html.replace(
+      /<meta name="twitter:description" content=".*?">/,
+      `<meta name="twitter:description" content="${meta.ogDescription}">`
+    );
+
+    // Update canonical and og:url
+    const canonicalUrl = `https://ncokit.com/${tool}`;
+    html = html.replace(
+      /<link rel="canonical" href=".*?">/,
+      `<link rel="canonical" href="${canonicalUrl}">`
+    );
+    html = html.replace(
+      /<meta property="og:url" content=".*?">/,
+      `<meta property="og:url" content="${canonicalUrl}">`
+    );
+    html = html.replace(
+      /<meta name="twitter:url" content=".*?">/,
+      `<meta name="twitter:url" content="${canonicalUrl}">`
+    );
+
+    // Inject script to load the correct tool (hash route)
+    const hashRoute = tool === 'counseling' ? 'counseling' : tool;
+    const toolScript = `<script>window.__NCOKIT_TOOL__='${hashRoute}';</script>`;
+    html = html.replace('</head>', `${toolScript}</head>`);
+
+    res.type('text/html').send(html);
+  } catch (err) {
+    console.error(`Tool page error for ${tool}:`, err.message);
+    res.status(500).send('Error loading tool');
+  }
+});
+
 // SEO
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain');

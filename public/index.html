@@ -4776,6 +4776,43 @@ async function completeOnboarding() {
 
 // Run on page load for already-logged-in users (token already in storage)
 document.addEventListener('DOMContentLoaded', () => {
+  // Check if this page was loaded via a tool URL (e.g., /bullets, /awards)
+  // These pages set window.__NCOKIT_TOOL__ to indicate which tool to load
+  if (window.__NCOKIT_TOOL__) {
+    const toolMap = {
+      'bullets': 'bullets',
+      'oer': 'oer',
+      'counseling': 'counseling',
+      'roster': 'roster',
+      'acft': 'aft',
+      'awards': 'awards',
+      'memo': 'memo',
+      'narrative': 'senior-rater'
+    };
+    const tabName = toolMap[window.__NCOKIT_TOOL__];
+    if (tabName) {
+      setTimeout(() => {
+        // Find the tab button for this tool
+        let tab = null;
+        if (tabName === 'oer') {
+          tab = document.getElementById('oerTab');
+        } else {
+          // Search for tab with matching onclick
+          const tabs = document.querySelectorAll('.tab');
+          for (let t of tabs) {
+            if (t.onclick && t.onclick.toString().includes(`'${tabName}'`)) {
+              tab = t;
+              break;
+            }
+          }
+        }
+        if (typeof switchTab === 'function' && tab) {
+          switchTab(tabName, tab);
+        }
+      }, 100);
+    }
+  }
+
   // 1.5s delay gives the existing session restore time to initialize
   setTimeout(checkOnboardingStatus, 1500);
   // Show blog nav link
