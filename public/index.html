@@ -673,6 +673,54 @@
 
   .copy-confirm.visible { display: inline; }
 
+  /* COLLAPSIBLE SECTIONS */
+  .collapse-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--od-dark);
+    border: 1px solid var(--border);
+    padding: 12px 16px;
+    margin: 20px 0 0 0;
+    cursor: pointer;
+    width: 100%;
+    font-family: 'Oswald', sans-serif;
+    font-size: 12px;
+    letter-spacing: 2px;
+    color: var(--tan);
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    border-radius: 0;
+  }
+
+  .collapse-toggle:hover {
+    background: var(--od);
+    border-color: var(--tan);
+  }
+
+  .collapse-toggle .toggle-icon {
+    display: inline-block;
+    transition: transform 0.3s ease;
+  }
+
+  .collapse-toggle.active .toggle-icon {
+    transform: rotate(180deg);
+  }
+
+  .collapse-section {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+    padding: 0;
+  }
+
+  .collapse-section.active {
+    max-height: 1000px;
+    opacity: 1;
+    padding: 16px 0 0 0;
+  }
+
   /* PREMIUM BANNER */
   .premium-banner {
     background: linear-gradient(135deg, var(--od-dark), var(--od));
@@ -1163,24 +1211,33 @@
           <input type="date" id="c_date">
         </div>
       </div>
-      <div class="form-grid three" style="margin-top:16px">
-        <div class="field">
-          <label>Organization / Unit</label>
-          <input type="text" id="c_unit" placeholder="HHC, 1-12 IN, 4ID">
-        </div>
-        <div class="field">
-          <label>Name of Counselor</label>
-          <input type="text" id="c_counselor" placeholder="SSG JONES, Marcus T.">
-        </div>
-        <div class="field">
-          <label>Counselor Rank</label>
-          <select id="c_counselorRank">
-            <option value="">-- Select --</option>
-            <option>SGT / E-5</option><option>SSG / E-6</option><option>SFC / E-7</option>
-            <option>MSG / E-8</option><option>1SG / E-8</option><option>SGM / E-9</option>
-            <option>CSM / E-9</option><option>2LT / O-1</option><option>1LT / O-2</option>
-            <option>CPT / O-3</option><option>MAJ / O-4</option><option>LTC / O-5</option><option>COL / O-6</option>
-          </select>
+
+      <!-- COLLAPSIBLE HEADER DETAILS -->
+      <button class="collapse-toggle" id="counselHeaderToggle" onclick="toggleCollapse('counselHeaderToggle', 'counselHeaderSection')">
+        <span class="toggle-icon">▼</span>
+        + Additional Details (Unit, Counselor)
+      </button>
+
+      <div class="collapse-section" id="counselHeaderSection">
+        <div class="form-grid three" style="margin-top:0">
+          <div class="field">
+            <label>Organization / Unit</label>
+            <input type="text" id="c_unit" placeholder="HHC, 1-12 IN, 4ID">
+          </div>
+          <div class="field">
+            <label>Name of Counselor</label>
+            <input type="text" id="c_counselor" placeholder="SSG JONES, Marcus T.">
+          </div>
+          <div class="field">
+            <label>Counselor Rank</label>
+            <select id="c_counselorRank">
+              <option value="">-- Select --</option>
+              <option>SGT / E-5</option><option>SSG / E-6</option><option>SFC / E-7</option>
+              <option>MSG / E-8</option><option>1SG / E-8</option><option>SGM / E-9</option>
+              <option>CSM / E-9</option><option>2LT / O-1</option><option>1LT / O-2</option>
+              <option>CPT / O-3</option><option>MAJ / O-4</option><option>LTC / O-5</option><option>COL / O-6</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -1223,40 +1280,48 @@
         </div>
       </div>
 
-      <div class="form-grid" style="margin-top:16px">
-        <div class="field">
-          <label>Strengths / Positives (optional)</label>
-          <textarea id="c_strengths" rows="3" placeholder="e.g. Good soldier overall, strong at PT, knows his job well..."></textarea>
-          <div class="btn-row" style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_strengths', 'strengths', 'copyCounselingConfirm')">⚡ AI Enhance</button>
-            <span class="ai-loading" id="load_c_strengths" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
-          </div>
-        </div>
-        <div class="field">
-          <label>Areas Requiring Improvement (optional)</label>
-          <textarea id="c_improve" rows="3" placeholder="e.g. Needs to be on time, needs to communicate better with chain of command..."></textarea>
-          <div class="btn-row" style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_improve', 'improvement', 'copyCounselingConfirm')">⚡ AI Enhance</button>
-            <span class="ai-loading" id="load_c_improve" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
-          </div>
-        </div>
-      </div>
+      <!-- COLLAPSIBLE OPTIONAL FIELDS -->
+      <button class="collapse-toggle" id="counselOptToggle" onclick="toggleCollapse('counselOptToggle', 'counselOptSection')">
+        <span class="toggle-icon">▼</span>
+        + Additional Observations &amp; Action Items
+      </button>
 
-      <div class="form-grid" style="margin-top:16px">
-        <div class="field">
-          <label>Plan of Action / Expected Outcomes</label>
-          <textarea id="c_poa" rows="3" placeholder="e.g. He needs to show up on time and tell someone if he can't make it..."></textarea>
-          <div class="btn-row" style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_poa', 'plan_of_action', 'copyCounselingConfirm')">⚡ AI Enhance</button>
-            <span class="ai-loading" id="load_c_poa" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+      <div class="collapse-section" id="counselOptSection">
+        <div class="form-grid" style="margin-top:0">
+          <div class="field">
+            <label>Strengths / Positives (optional)</label>
+            <textarea id="c_strengths" rows="3" placeholder="e.g. Good soldier overall, strong at PT, knows his job well..."></textarea>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_strengths', 'strengths', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+              <span class="ai-loading" id="load_c_strengths" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Areas Requiring Improvement (optional)</label>
+            <textarea id="c_improve" rows="3" placeholder="e.g. Needs to be on time, needs to communicate better with chain of command..."></textarea>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_improve', 'improvement', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+              <span class="ai-loading" id="load_c_improve" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+            </div>
           </div>
         </div>
-        <div class="field">
-          <label>Leader Responsibilities</label>
-          <textarea id="c_leader" rows="3" placeholder="e.g. I'll check in with him every week and follow up next counseling..."></textarea>
-          <div class="btn-row" style="margin-top:8px">
-            <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_leader', 'leader_responsibilities', 'copyCounselingConfirm')">⚡ AI Enhance</button>
-            <span class="ai-loading" id="load_c_leader" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+
+        <div class="form-grid" style="margin-top:16px">
+          <div class="field">
+            <label>Plan of Action / Expected Outcomes</label>
+            <textarea id="c_poa" rows="3" placeholder="e.g. He needs to show up on time and tell someone if he can't make it..."></textarea>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_poa', 'plan_of_action', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+              <span class="ai-loading" id="load_c_poa" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Leader Responsibilities</label>
+            <textarea id="c_leader" rows="3" placeholder="e.g. I'll check in with him every week and follow up next counseling..."></textarea>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn btn-secondary btn-sm" onclick="enhanceField('c_leader', 'leader_responsibilities', 'copyCounselingConfirm')">⚡ AI Enhance</button>
+              <span class="ai-loading" id="load_c_leader" style="display:none; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan); letter-spacing:2px;">REWRITING...</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1563,18 +1628,27 @@
           <textarea id="b_action" rows="4" placeholder="e.g. John Smith did good during the field exercise... or SGT Smith led the team through a live fire and everyone passed..."></textarea>
         </div>
       </div>
-      <div class="form-grid" style="margin-top:16px">
-        <div class="field">
-          <label>Any numbers / metrics to include? (optional)</label>
-          <input type="text" id="b_impact" placeholder="e.g. 12 soldiers, 100% pass rate, 3 weeks ahead of schedule">
-        </div>
-        <div class="field">
-          <label>Bullet Count</label>
-          <select id="b_count">
-            <option value="3">3 bullets</option>
-            <option value="5">5 bullets</option>
-            <option value="1">1 bullet (single best)</option>
-          </select>
+
+      <!-- COLLAPSIBLE ADVANCED OPTIONS -->
+      <button class="collapse-toggle" id="bulletAdvToggle" onclick="toggleCollapse('bulletAdvToggle', 'bulletAdvSection')">
+        <span class="toggle-icon">▼</span>
+        + Advanced Options
+      </button>
+
+      <div class="collapse-section" id="bulletAdvSection">
+        <div class="form-grid" style="margin-top:0">
+          <div class="field">
+            <label>Any numbers / metrics to include? (optional)</label>
+            <input type="text" id="b_impact" placeholder="e.g. 12 soldiers, 100% pass rate, 3 weeks ahead of schedule">
+          </div>
+          <div class="field">
+            <label>Bullet Count</label>
+            <select id="b_count">
+              <option value="3">3 bullets</option>
+              <option value="5">5 bullets</option>
+              <option value="1">1 bullet (single best)</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -2454,6 +2528,14 @@
   let bulletCount = 0;
   let awardCount = 0;
   let oerBulletCount = 0;
+
+  // PROGRESSIVE DISCLOSURE — Toggle collapse sections
+  function toggleCollapse(toggleId, sectionId) {
+    const toggle = document.getElementById(toggleId);
+    const section = document.getElementById(sectionId);
+    toggle.classList.toggle('active');
+    section.classList.toggle('active');
+  }
 
   // TAB SWITCHING
   function switchTab(name, el) {
@@ -3905,10 +3987,14 @@
   function copyShareMessage() {
     const code = currentUser.referralCode || currentUser.referral_code;
     const text = `Hey — check out NCO Kit: https://ncokit.com?ref=${code}\n\nIt's an AI-powered toolkit for Army NCOs — generates NCOER bullets by MOS, DA 4856 counseling forms, award citations, and AFT scores. That link has my referral code built in — you'll get 50% off your first month of Premium automatically when you sign up.`;
-    navigator.clipboard.writeText(text);
-    const btn = document.getElementById('copyShareBtn');
-    btn.textContent = '✓ COPIED';
-    setTimeout(() => btn.textContent = '📋 COPY SHARE MESSAGE', 2000);
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('✓ Share message copied', 'success');
+      const btn = document.getElementById('copyShareBtn');
+      if (btn) {
+        btn.textContent = '✓ COPIED';
+        setTimeout(() => btn.textContent = '📋 COPY SHARE MESSAGE', 2000);
+      }
+    });
   }
 
   document.getElementById('referralModal').addEventListener('click', function(e) {

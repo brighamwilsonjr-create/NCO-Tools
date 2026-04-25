@@ -102,6 +102,8 @@ app.use((req, res, next) => {
     "object-src 'none'; " +
     "base-uri 'self';"
   );
+  // NOTE: 'unsafe-inline' required for scripts because app is single-page with inline JavaScript.
+  // TODO: Extract scripts to separate files and use nonces for better CSP enforcement.
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (process.env.NODE_ENV === 'production') {
@@ -126,30 +128,54 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       const userId = session.metadata?.userId;
       const customerId = session.customer;
       const subscriptionId = session.subscription;
-      if (userId) {
-        await pool.query(
-          'UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW() WHERE id = $4',
-          ['premium', customerId, subscriptionId, userId]
-        );
-        const userResult = await pool.query('SELECT referred_by FROM users WHERE id = $1', [userId]);
-        const referredBy = userResult.rows[0]?.referred_by;
-        if (referredBy) {
-          await pool.query(
-            'UPDATE users SET free_months_earned = free_months_earned + 1 WHERE referral_code = $1',
-            [referredBy]
-          );
-        }
-        console.log(`User ${userId} upgraded to premium`);
-        // Unsubscribe from marketing emails in Resend when user upgrades to premium
-        const premiumUser = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
-        if (premiumUser.rows[0]?.email) {
-          fetch(`https://api.resend.com/audiences/${process.env.RESEND_AUDIENCE_ID}/contacts`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
-            body: JSON.stringify({ email: premiumUser.rows[0].email, unsubscribed: true })
-          }).catch(err => console.error('Resend premium update failed:', err.message));
-        }
+
+      if (!userId) {
+        console.error('Stripe webhook: missing userId in metadata');
+        return res.status(400).json({ error: 'Invalid metadata' });
       }
+
+      // SECURITY FIX: Validate that userId is a valid number and exists in database
+      if (!/^\d+$/.test(userId)) {
+        console.error(`Stripe webhook: invalid userId format: ${userId}`);
+        return res.status(400).json({ error: 'Invalid userId format' });
+      }
+
+      // Verify user exists and doesn't already have a Stripe customer ID
+      const userCheck = await pool.query(
+        'SELECT id, email FROM users WHERE id = $1 AND stripe_customer_id IS NULL',
+        [parseInt(userId)]
+      );
+
+      if (userCheck.rows.length === 0) {
+        console.error(`Stripe webhook: userId ${userId} not found or already has customer ID`);
+        return res.status(400).json({ error: 'User not found or already upgraded' });
+      }
+
+      const user = userCheck.rows[0];
+
+      // Now safely update the user
+      await pool.query(
+        'UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW() WHERE id = $4',
+        ['premium', customerId, subscriptionId, user.id]
+      );
+
+      const userResult = await pool.query('SELECT referred_by FROM users WHERE id = $1', [user.id]);
+      const referredBy = userResult.rows[0]?.referred_by;
+      if (referredBy) {
+        await pool.query(
+          'UPDATE users SET free_months_earned = free_months_earned + 1 WHERE referral_code = $1',
+          [referredBy]
+        );
+      }
+
+      console.log(`User ${user.id} (${user.email}) upgraded to premium`);
+
+      // Unsubscribe from marketing emails in Resend when user upgrades to premium
+      fetch(`https://api.resend.com/audiences/${process.env.RESEND_AUDIENCE_ID}/contacts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
+        body: JSON.stringify({ email: user.email, unsubscribed: true })
+      }).catch(err => console.error('Resend premium update failed:', err.message));
     }
     if (event.type === 'customer.subscription.deleted') {
       const subscription = event.data.object;
@@ -246,6 +272,20 @@ async function logAIRequest(userId, endpoint, inputLength, success, errorMessage
     );
   } catch (err) {
     console.error('Failed to log AI request:', err.message);
+    // Don't throw — logging failures shouldn't break the API
+  }
+}
+
+// Log admin actions for audit trail and security monitoring
+async function logAdminAction(adminUserId, action, details = {}) {
+  try {
+    await pool.query(
+      `INSERT INTO admin_audit_log (admin_user_id, action, details, timestamp)
+       VALUES ($1, $2, $3, NOW())`,
+      [adminUserId, action, JSON.stringify(details)]
+    );
+  } catch (err) {
+    console.error('Failed to log admin action:', err.message);
     // Don't throw — logging failures shouldn't break the API
   }
 }
@@ -2214,9 +2254,16 @@ app.post('/api/contact', authLimiter, async (req, res) => {
 
 // Admin route to gift premium access
 app.post('/api/admin/gift-premium', async (req, res) => {
-  const { secret, email } = req.body;
-  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
+  const user = await getUserFromSession(req);
+  if (!isAdmin(user)) return res.status(403).json({ error: 'Admin only' });
+
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email required' });
+
   try {
+    // Log admin action for audit trail
+    await logAdminAction(user.id, 'gift-premium', { targetEmail: email.toLowerCase() });
+
     const result = await pool.query(
       'UPDATE users SET plan = $1, updated_at = NOW() WHERE email = $2 RETURNING email',
       ['premium', email.toLowerCase()]
@@ -2224,7 +2271,8 @@ app.post('/api/admin/gift-premium', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, message: `${email} granted premium access` });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Gift premium error:', err);
+    res.status(500).json({ error: 'Failed to grant premium access' });
   }
 });
 
@@ -2555,12 +2603,18 @@ app.get('/api/admin/usage-stats', async (req, res) => {
   }
 });
 
+// Helper to check if user is admin
+function isAdmin(user) {
+  const adminEmails = (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase());
+  return user && adminEmails.includes(user.email.toLowerCase());
+}
+
 // ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
   const user = await getUserFromSession(req);
-  // Only allow admin (you) to access this endpoint
-  if (user?.email !== 'brighamwilsonjr@gmail.com') {
+  // Only allow admin to access this endpoint
+  if (!isAdmin(user)) {
     return res.status(403).json({ error: 'Admin only' });
   }
 
