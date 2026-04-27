@@ -127,10 +127,23 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       const customerId = session.customer;
       const subscriptionId = session.subscription;
       if (userId) {
-        await pool.query(
-          'UPDATE users SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW() WHERE id = $4',
-          ['premium', customerId, subscriptionId, userId]
+        // Check if user received a nudge email within last 7 days (conversion tracking)
+        const nudgeResult = await pool.query(
+          `SELECT usage_nudge_sent_at, usage_nudge_template FROM users
+           WHERE id = $1 AND usage_nudge_sent_at > NOW() - INTERVAL '7 days'`,
+          [userId]
         );
+        const converted = nudgeResult.rows.length > 0;
+        const template = nudgeResult.rows[0]?.usage_nudge_template || null;
+
+        await pool.query(
+          `UPDATE users
+           SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW(),
+               usage_nudge_converted = $4
+           WHERE id = $5`,
+          ['premium', customerId, subscriptionId, converted, userId]
+        );
+
         const userResult = await pool.query('SELECT referred_by FROM users WHERE id = $1', [userId]);
         const referredBy = userResult.rows[0]?.referred_by;
         if (referredBy) {
@@ -139,7 +152,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             [referredBy]
           );
         }
-        console.log(`User ${userId} upgraded to premium`);
+        const conversionMsg = converted ? ` (CONVERTED from template ${template})` : '';
+        console.log(`User ${userId} upgraded to premium${conversionMsg}`);
         // Unsubscribe from marketing emails in Resend when user upgrades to premium
         const premiumUser = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
         if (premiumUser.rows[0]?.email) {
@@ -409,134 +423,127 @@ async function sendWelcomeEmail(email) {
   await sendEmail(email, "You're verified — welcome to NCO Kit", html);
 }
 
+// 80% Usage Nudge Email Templates (A/B Testing)
+const STRIPE_CHECKOUT_URL = 'https://checkout.stripe.com/g/pay/cs_live_a1epNff5MMFb0497WYNLOSdhoU4F6SPy8meWFxwnmOwT7krLNtDv5bgV2G#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8ncXdgZHFoYGtxWjcnKSdkdWxOYHwnPyd1blppbHNgWjA0UUFHV3ZHRDBPQUFyR2ZnYW5sX3NyTlE2aU9RQlNzPEdJTGNKNDZEckY9cW90V0tfY2lNZHUyM2lwazFwd3VvVVQzbkM2QjxXdEkyXUB9TlVJTk49MU02NTVLNlVjZn9wRCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl';
+
+async function sendUsageNudgeEmail(email, templateType) {
+  const baseStyle = 'font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;';
+  const headerStyle = 'color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;';
+  const ctaStyle = 'display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;border-radius:4px;';
+
+  let subject, heading, mainMessage, cta;
+
+  if (templateType === 'A') {
+    // Template A: Urgency/FOMO
+    subject = '🚨 You\'re running out of monthly uses';
+    heading = 'You\'re Almost Out of Uses';
+    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">You've used 80% of your monthly allotment. Once you hit 10, you won't be able to generate more NCOER bullets, counseling forms, or awards recommendations until next month.</p>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Unlock unlimited access today with Premium.</strong></p>`;
+    cta = 'Upgrade to Premium Now';
+  } else if (templateType === 'B') {
+    // Template B: Value/Unlimited
+    subject = '✓ Go Unlimited — Upgrade to Premium';
+    heading = 'Unlimited Bullets, Unlimited Possibilities';
+    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">Every month you're capped at 10 free AI uses. But with <strong>Premium, you get unlimited access</strong> to all NCO Kit tools:</p>
+      <ul style="color:#a08e65;font-size:14px;line-height:1.8;">
+        <li>Unlimited NCOER & OER bullets</li>
+        <li>Unlimited DA 4856 counselings</li>
+        <li>Unlimited awards recommendations</li>
+        <li>Priority support</li>
+      </ul>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;">Stop counting your uses. Start building.</p>`;
+    cta = 'Go Premium Today';
+  } else {
+    // Template C: Social Proof/Community
+    subject = '🎖️ Join 500+ Army Leaders — Go Premium';
+    heading = 'Join the Premium Community';
+    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">Over 500 Army leaders and NCOs are already using Premium to save hours on their monthly evaluations, counselings, and awards.</p>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Stop waiting for monthly resets. Get unlimited access and join the ranks of leaders who are working smarter.</strong></p>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;margin-top:20px;">Premium includes unlimited access to every tool — no monthly limits, no waiting.</p>`;
+    cta = 'Upgrade to Premium';
+  }
+
+  const html = `<div style="${baseStyle}">
+    <h1 style="${headerStyle}">NCO Kit</h1>
+    <h2 style="color:#F4F1EA;font-size:20px;margin:20px 0;">${heading}</h2>
+    ${mainMessage}
+    <a href="${STRIPE_CHECKOUT_URL}" style="${ctaStyle}">${cta}</a>
+    <p style="color:#666;font-size:11px;line-height:1.6;margin-top:32px;">
+      You're receiving this because you've reached 80% of your monthly free uses. If you have questions, reply to this email.<br><br>
+      © 2026 NCO Kit. All rights reserved.
+    </p>
+  </div>`;
+
+  await sendEmail(email, subject, html);
+}
+
+// Check for 80% usage and send nudge emails
+async function checkAndSendUsageNudges() {
+  try {
+    // Find free users with >= 8 uses out of 10 (80%)
+    const freeUsers = await pool.query(`
+      SELECT u.id, u.email, u.bullets_used_this_month
+      FROM users u
+      WHERE u.plan = 'free'
+        AND u.email != 'brighamwilsonjr@gmail.com'
+        AND u.bullets_used_this_month >= 8
+        AND u.verified = true
+        AND (u.usage_nudge_sent_at IS NULL OR u.usage_nudge_sent_at < NOW() - INTERVAL '30 days')
+      LIMIT 100
+    `);
+
+    for (const user of freeUsers.rows) {
+      const templates = ['A', 'B', 'C'];
+      const randomTemplate = templates[Math.floor(Math.random() * templates.length)];
+
+      try {
+        await sendUsageNudgeEmail(user.email, randomTemplate);
+
+        // Record that we sent the email
+        await pool.query(`
+          UPDATE users
+          SET usage_nudge_sent_at = NOW(),
+              usage_nudge_template = $1,
+              usage_nudge_sent_date = NOW()
+          WHERE id = $2
+        `, [randomTemplate, user.id]);
+
+        console.log(`Sent ${randomTemplate} nudge to ${user.email}`);
+      } catch (emailErr) {
+        console.error(`Failed to send nudge email to ${user.email}:`, emailErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('Error in checkAndSendUsageNudges:', err.message);
+  }
+}
+
+// Run usage nudge check daily at 9 AM
+const scheduleUsageNudgeCheck = () => {
+  const checkTime = () => {
+    const now = new Date();
+    const targetTime = new Date();
+    targetTime.setHours(9, 0, 0, 0);
+
+    if (now >= targetTime) targetTime.setDate(targetTime.getDate() + 1);
+    return targetTime.getTime() - now.getTime();
+  };
+
+  const scheduleNext = () => {
+    const delay = checkTime();
+    setTimeout(() => {
+      console.log('Running daily usage nudge check...');
+      checkAndSendUsageNudges();
+      scheduleNext();
+    }, delay);
+  };
+
+  scheduleNext();
+};
+
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
-
-// ── TOOL PAGES (SEO) ────────────────────────────────────────────────────────
-
-const toolMetadata = {
-  bullets: {
-    title: 'NCOER Bullet Builder | Free AI Tool | NCO Kit',
-    description: 'Generate AR 623-3 compliant NCOER bullets instantly. Free AI tool to write Army-standard evaluation bullets by MOS. No installation required.',
-    ogTitle: 'NCOER Bullet Builder',
-    ogDescription: 'Free AI tool to generate AR 623-3 compliant NCOER bullets. Write evaluation bullets instantly by MOS for any rating category.'
-  },
-  oer: {
-    title: 'OER Bullet Builder | Free AI Tool | NCO Kit',
-    description: 'Generate Officer Evaluation Report (OER) bullets that meet Army standards. Free AI tool to write professional evaluation bullets instantly.',
-    ogTitle: 'OER Bullet Builder',
-    ogDescription: 'Free AI tool to generate OER (Officer Evaluation Report) bullets. Write evaluation bullets that meet Army standards instantly.'
-  },
-  counseling: {
-    title: 'DA 4856 Counseling Form Generator | Free | NCO Kit',
-    description: 'Create AR 623-3 DA Form 4856 developmental counseling forms instantly. Free counseling form generator for Army leaders.',
-    ogTitle: 'DA 4856 Counseling Form Generator',
-    ogDescription: 'Free AI tool to generate AR 623-3 DA Form 4856 counseling forms. Create developmental, monthly, and event-driven counseling forms instantly.'
-  },
-  roster: {
-    title: 'Soldier Roster Tracker | Free Tool | NCO Kit',
-    description: 'Track and manage your soldiers with NCO Kit\'s free roster tracker. Organize soldier data, notes, and performance records in one place.',
-    ogTitle: 'Soldier Roster Tracker',
-    ogDescription: 'Free tool to track and organize your soldier roster. Manage soldier data, performance notes, and key information all in one place.'
-  },
-  acft: {
-    title: 'Army Fitness Test (AFT) Score Calculator | Free | NCO Kit',
-    description: 'Calculate Army Fitness Test (AFT) scores instantly. Free AFT calculator with accurate age and gender scoring standards.',
-    ogTitle: 'Army Fitness Test Score Calculator',
-    ogDescription: 'Free AFT (Army Fitness Test) score calculator. Get instant pass/fail results and point totals for all six events.'
-  },
-  awards: {
-    title: 'Army Award Citation Generator | Free AI Tool | NCO Kit',
-    description: 'Generate AR 600-8-22 compliant award citations for AAM, ARCOM, MSM, and more. Free award recommendation writer for Army leaders.',
-    ogTitle: 'Army Award Citation Generator',
-    ogDescription: 'Free AI tool to write AR 600-8-22 compliant award citations. Generate professional recommendations for AAM, ARCOM, MSM awards.'
-  },
-  memo: {
-    title: 'AR 25-50 Army Memo Generator | Free | NCO Kit',
-    description: 'Create AR 25-50 compliant Army memos instantly. Free memo generator following Army memo format standards.',
-    ogTitle: 'Army Memo Generator',
-    ogDescription: 'Free AI tool to generate AR 25-50 compliant Army memos. Create professional memos that meet Army format standards instantly.'
-  },
-  narrative: {
-    title: 'Senior Rater Narrative Generator | Free AI Tool | NCO Kit',
-    description: 'Generate professional senior rater narratives for NCOER and OER. Free AI-powered narrative writer for Army evaluation reports.',
-    ogTitle: 'Senior Rater Narrative Generator',
-    ogDescription: 'Free AI tool to write senior rater narratives for NCOER and OER. Generate professional, impact-focused evaluation narratives instantly.'
-  }
-};
-
-app.get('/:tool', async (req, res, next) => {
-  const tool = req.params.tool;
-  const validTools = ['bullets', 'oer', 'counseling', 'roster', 'acft', 'awards', 'memo', 'narrative'];
-
-  // Only handle known tools; pass others to next handler
-  if (!validTools.includes(tool)) {
-    return next();
-  }
-
-  const meta = toolMetadata[tool];
-  if (!meta) {
-    return res.status(404).json({ error: 'Tool not found' });
-  }
-
-  try {
-    // Read the base index.html
-    const indexPath = path.join(__dirname, 'public', 'index.html');
-    let html = require('fs').readFileSync(indexPath, 'utf8');
-
-    // Replace meta tags
-    html = html.replace(
-      /<title>.*?<\/title>/,
-      `<title>${meta.title}</title>`
-    );
-    html = html.replace(
-      /<meta name="description" content=".*?">/,
-      `<meta name="description" content="${meta.description}">`
-    );
-    html = html.replace(
-      /<meta property="og:title" content=".*?">/,
-      `<meta property="og:title" content="${meta.ogTitle}">`
-    );
-    html = html.replace(
-      /<meta property="og:description" content=".*?">/,
-      `<meta property="og:description" content="${meta.ogDescription}">`
-    );
-    html = html.replace(
-      /<meta name="twitter:title" content=".*?">/,
-      `<meta name="twitter:title" content="${meta.ogTitle}">`
-    );
-    html = html.replace(
-      /<meta name="twitter:description" content=".*?">/,
-      `<meta name="twitter:description" content="${meta.ogDescription}">`
-    );
-
-    // Update canonical and og:url
-    const canonicalUrl = `https://ncokit.com/${tool}`;
-    html = html.replace(
-      /<link rel="canonical" href=".*?">/,
-      `<link rel="canonical" href="${canonicalUrl}">`
-    );
-    html = html.replace(
-      /<meta property="og:url" content=".*?">/,
-      `<meta property="og:url" content="${canonicalUrl}">`
-    );
-    html = html.replace(
-      /<meta name="twitter:url" content=".*?">/,
-      `<meta name="twitter:url" content="${canonicalUrl}">`
-    );
-
-    // Inject script to load the correct tool (hash route)
-    const hashRoute = tool === 'counseling' ? 'counseling' : tool;
-    const toolScript = `<script>window.__NCOKIT_TOOL__='${hashRoute}';</script>`;
-    html = html.replace('</head>', `${toolScript}</head>`);
-
-    res.type('text/html').send(html);
-  } catch (err) {
-    console.error(`Tool page error for ${tool}:`, err.message);
-    res.status(500).send('Error loading tool');
-  }
-});
 
 // SEO
 app.get('/robots.txt', (req, res) => {
@@ -751,33 +758,6 @@ app.get('/api/auth/me', async (req, res) => {
     res.json({ id: user.id, email: user.email, plan: user.plan, referralCode: user.referral_code, bulletsUsed: user.bullets_used_this_month, verified: user.verified });
   } catch (err) {
     res.status(500).json({ error: 'Failed to get user' });
-  }
-});
-
-// Get or assign upgrade modal variant (A/B test)
-app.post('/api/auth/get-upgrade-variant', async (req, res) => {
-  try {
-    const user = await getUserFromSession(req);
-    if (!user) return res.status(401).json({ error: 'Not authenticated' });
-
-    // If user already has a variant, return it
-    if (user.upgrade_variant) {
-      return res.json({ variant: user.upgrade_variant });
-    }
-
-    // Assign a random variant (A, B, or C)
-    const variants = ['A', 'B', 'C'];
-    const assignedVariant = variants[Math.floor(Math.random() * variants.length)];
-
-    await pool.query(
-      'UPDATE users SET upgrade_variant = $1 WHERE id = $2',
-      [assignedVariant, user.id]
-    );
-
-    res.json({ variant: assignedVariant });
-  } catch (err) {
-    console.error('Get upgrade variant error:', err);
-    res.status(500).json({ error: 'Failed to get variant' });
   }
 });
 
@@ -2036,8 +2016,12 @@ async function initDB() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMPTZ`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_onboarding_completed ON users(onboarding_completed)`);
 
-    // A/B testing variant assignment (auto-migration)
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS upgrade_variant VARCHAR(1)`);
+    // Usage nudge email tracking (A/B testing for conversion)
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_nudge_sent_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_nudge_template VARCHAR(1)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_nudge_sent_date TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_nudge_converted BOOLEAN DEFAULT FALSE`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_usage_nudge_sent ON users(usage_nudge_sent_at)`);
 
     // Audit logging table for AI usage tracking (Security Fix #3)
     await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_log (
@@ -2674,6 +2658,66 @@ app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
   }
 });
 
+// ── ADMIN: USAGE NUDGE EMAIL CONVERSION ANALYTICS ─────────────────────────────
+app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+
+  try {
+    // Get all users who received a nudge email
+    const nudgeData = await pool.query(`
+      SELECT
+        id,
+        email,
+        plan,
+        bullets_used_this_month,
+        usage_nudge_sent_at,
+        usage_nudge_template,
+        usage_nudge_converted,
+        created_at
+      FROM users
+      WHERE usage_nudge_sent_at IS NOT NULL
+      ORDER BY usage_nudge_sent_at DESC
+    `);
+
+    // Calculate conversion rates by template
+    const templateStats = { A: { sent: 0, converted: 0 }, B: { sent: 0, converted: 0 }, C: { sent: 0, converted: 0 } };
+    let totalConverted = 0;
+
+    nudgeData.rows.forEach(user => {
+      const template = user.usage_nudge_template;
+      if (template && templateStats[template]) {
+        templateStats[template].sent++;
+        if (user.usage_nudge_converted) {
+          templateStats[template].converted++;
+          totalConverted++;
+        }
+      }
+    });
+
+    // Calculate conversion rates
+    Object.keys(templateStats).forEach(template => {
+      const stats = templateStats[template];
+      stats.rate = stats.sent > 0 ? ((stats.converted / stats.sent) * 100).toFixed(2) : 0;
+    });
+
+    res.json({
+      summary: {
+        total_emails_sent: nudgeData.rows.length,
+        total_conversions: totalConverted,
+        overall_conversion_rate: nudgeData.rows.length > 0 ? ((totalConverted / nudgeData.rows.length) * 100).toFixed(2) : 0
+      },
+      template_performance: templateStats,
+      detailed_results: nudgeData.rows
+    });
+  } catch (err) {
+    console.error('Usage nudge analytics error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: RE-ENGAGEMENT BATCH SEND ──────────────────────────────────────────
 // Sends 48 emails per batch to inactive free users (signed up >72h ago, 0 usage)
 // Call with { batch: 0 } for first 48, { batch: 1 } for next 48, { batch: 2 } for last batch
@@ -2800,48 +2844,124 @@ app.get('/api/admin/user-lookup', async (req, res) => {
   }
 });
 
-// ── ADMIN: A/B TEST VARIANT PERFORMANCE ────────────────────────────────────
-app.get('/api/admin/variant-performance', async (req, res) => {
+
+// ── TOOL PAGES (SEO) ────────────────────────────────────────────────────────
+// Serve each tool with its own meta tags for better SEO
+
+const toolMetadata = {
+  bullets: {
+    title: 'NCOER Bullet Builder | Free AI Tool | NCO Kit',
+    description: 'Generate AR 623-3 compliant NCOER bullets instantly. Free AI tool to write Army-standard evaluation bullets by MOS. No installation required.',
+    ogTitle: 'NCOER Bullet Builder',
+    ogDescription: 'Free AI tool to generate AR 623-3 compliant NCOER bullets. Write evaluation bullets instantly by MOS for any rating category.'
+  },
+  oer: {
+    title: 'OER Bullet Builder | Free AI Tool | NCO Kit',
+    description: 'Generate Officer Evaluation Report (OER) bullets that meet Army standards. Free AI tool to write professional evaluation bullets instantly.',
+    ogTitle: 'OER Bullet Builder',
+    ogDescription: 'Free AI tool to generate OER (Officer Evaluation Report) bullets. Write evaluation bullets that meet Army standards instantly.'
+  },
+  counseling: {
+    title: 'DA 4856 Counseling Form Generator | Free | NCO Kit',
+    description: 'Create AR 623-3 DA Form 4856 developmental counseling forms instantly. Free counseling form generator for Army leaders.',
+    ogTitle: 'DA 4856 Counseling Form Generator',
+    ogDescription: 'Free AI tool to generate AR 623-3 DA Form 4856 counseling forms. Create developmental, monthly, and event-driven counseling forms instantly.'
+  },
+  roster: {
+    title: 'Soldier Roster Tracker | Free Tool | NCO Kit',
+    description: 'Track and manage your soldiers with NCO Kit\'s free roster tracker. Organize soldier data, notes, and performance records in one place.',
+    ogTitle: 'Soldier Roster Tracker',
+    ogDescription: 'Free tool to track and organize your soldier roster. Manage soldier data, performance notes, and key information all in one place.'
+  },
+  acft: {
+    title: 'Army Fitness Test (AFT) Score Calculator | Free | NCO Kit',
+    description: 'Calculate Army Fitness Test (AFT) scores instantly. Free AFT calculator with accurate age and gender scoring standards.',
+    ogTitle: 'Army Fitness Test Score Calculator',
+    ogDescription: 'Free AFT (Army Fitness Test) score calculator. Get instant pass/fail results and point totals for all six events.'
+  },
+  awards: {
+    title: 'Army Award Citation Generator | Free AI Tool | NCO Kit',
+    description: 'Generate AR 600-8-22 compliant award citations for AAM, ARCOM, MSM, and more. Free award recommendation writer for Army leaders.',
+    ogTitle: 'Army Award Citation Generator',
+    ogDescription: 'Free AI tool to write AR 600-8-22 compliant award citations. Generate professional recommendations for AAM, ARCOM, MSM awards.'
+  },
+  memo: {
+    title: 'AR 25-50 Army Memo Generator | Free | NCO Kit',
+    description: 'Create AR 25-50 compliant Army memos instantly. Free memo generator following Army memo format standards.',
+    ogTitle: 'Army Memo Generator',
+    ogDescription: 'Free AI tool to generate AR 25-50 compliant Army memos. Create professional memos that meet Army format standards instantly.'
+  },
+  narrative: {
+    title: 'Senior Rater Narrative Generator | Free AI Tool | NCO Kit',
+    description: 'Generate professional senior rater narratives for NCOER and OER. Free AI-powered narrative writer for Army evaluation reports.',
+    ogTitle: 'Senior Rater Narrative Generator',
+    ogDescription: 'Free AI tool to write senior rater narratives for NCOER and OER. Generate professional, impact-focused evaluation narratives instantly.'
+  }
+};
+
+app.get('/:tool(bullets|oer|counseling|roster|acft|awards|memo|narrative)', async (req, res) => {
+  const tool = req.params.tool;
+  const meta = toolMetadata[tool];
+
+  if (!meta) {
+    return res.status(404).json({ error: 'Tool not found' });
+  }
+
   try {
-    const user = await getUserFromSession(req);
-    if (!user || user.email !== 'brighamwilsonjr@gmail.com') {
-      return res.status(403).json({ error: 'Admin only' });
-    }
+    // Read the base index.html
+    const indexPath = path.join(__dirname, 'public', 'index.html');
+    let html = require('fs').readFileSync(indexPath, 'utf8');
 
-    const result = await pool.query(`
-      SELECT
-        upgrade_variant,
-        COUNT(*) as total_users,
-        SUM(CASE WHEN plan = 'premium' THEN 1 ELSE 0 END) as conversions,
-        ROUND(100.0 * SUM(CASE WHEN plan = 'premium' THEN 1 ELSE 0 END) / COUNT(*), 2) as conversion_rate_pct
-      FROM users
-      WHERE upgrade_variant IS NOT NULL
-      GROUP BY upgrade_variant
-      ORDER BY upgrade_variant
-    `);
+    // Replace meta tags
+    html = html.replace(
+      /<title>.*?<\/title>/,
+      `<title>${meta.title}</title>`
+    );
+    html = html.replace(
+      /<meta name="description" content=".*?">/,
+      `<meta name="description" content="${meta.description}">`
+    );
+    html = html.replace(
+      /<meta property="og:title" content=".*?">/,
+      `<meta property="og:title" content="${meta.ogTitle}">`
+    );
+    html = html.replace(
+      /<meta property="og:description" content=".*?">/,
+      `<meta property="og:description" content="${meta.ogDescription}">`
+    );
+    html = html.replace(
+      /<meta name="twitter:title" content=".*?">/,
+      `<meta name="twitter:title" content="${meta.ogTitle}">`
+    );
+    html = html.replace(
+      /<meta name="twitter:description" content=".*?">/,
+      `<meta name="twitter:description" content="${meta.ogDescription}">`
+    );
 
-    const variantLabels = {
-      'A': 'Variant A: Save 20+ Hours (Value)',
-      'B': 'Variant B: 200+ Leaders (Social Proof)',
-      'C': 'Variant C: 50% Off (Urgency)'
-    };
+    // Update canonical and og:url
+    const canonicalUrl = `https://ncokit.com/${tool}`;
+    html = html.replace(
+      /<link rel="canonical" href=".*?">/,
+      `<link rel="canonical" href="${canonicalUrl}">`
+    );
+    html = html.replace(
+      /<meta property="og:url" content=".*?">/,
+      `<meta property="og:url" content="${canonicalUrl}">`
+    );
+    html = html.replace(
+      /<meta name="twitter:url" content=".*?">/,
+      `<meta name="twitter:url" content="${canonicalUrl}">`
+    );
 
-    const performance = result.rows.map(row => ({
-      variant: row.upgrade_variant,
-      label: variantLabels[row.upgrade_variant],
-      total_users: parseInt(row.total_users),
-      conversions: parseInt(row.conversions),
-      conversion_rate: parseFloat(row.conversion_rate_pct)
-    }));
+    // Inject script to load the correct tool (hash route)
+    const hashRoute = tool === 'counseling' ? 'counseling' : tool;
+    const toolScript = `<script>window.__NCOKIT_TOOL__='${hashRoute}';</script>`;
+    html = html.replace('</head>', `${toolScript}</head>`);
 
-    res.json({
-      summary: `A/B Test Results: ${result.rows.length} variants tested`,
-      performance,
-      timestamp: new Date().toISOString()
-    });
-  } catch(err) {
-    console.error('Variant performance error:', err);
-    res.status(500).json({ error: err.message });
+    res.type('text/html').send(html);
+  } catch (err) {
+    console.error(`Tool page error for ${tool}:`, err.message);
+    res.status(500).send('Error loading tool');
   }
 });
 
@@ -3093,4 +3213,7 @@ app.listen(PORT, async () => {
   // Clean up expired sessions on start, then every 6 hours
   await cleanupSessions();
   setInterval(cleanupSessions, 6 * 60 * 60 * 1000);
+  // Start daily usage nudge email check at 9 AM
+  scheduleUsageNudgeCheck();
+  console.log('Usage nudge scheduler initialized');
 });
