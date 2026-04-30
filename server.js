@@ -2594,6 +2594,28 @@ app.get('/api/admin/user-status', async (req, res) => {
   }
 });
 
+// ── ADMIN: SEND SUPPORT EMAIL ───────────────────────────────────────────────────
+app.post('/api/admin/send-support-email', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+  const { to, subject, message } = req.body;
+  if (!to || !subject || !message) return res.status(400).json({ error: 'to, subject, and message required' });
+  try {
+    await sendEmail(to, subject, `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+        <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
+        <p style="color:#F4F1EA;font-size:15px;line-height:1.7;">${message.replace(/\n/g, '<br>')}</p>
+        <p style="color:#a08e65;font-size:13px;margin-top:32px;">— Henry<br>NCO Kit Support</p>
+      </div>
+    `);
+    res.json({ success: true, sent_to: to });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
