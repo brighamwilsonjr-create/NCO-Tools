@@ -2569,6 +2569,31 @@ app.get('/api/admin/usage-stats', async (req, res) => {
   }
 });
 
+// ── ADMIN: CHECK SPECIFIC USER STATUS ──────────────────────────────────────────
+app.get('/api/admin/user-status', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: 'email query param required' });
+  try {
+    const result = await pool.query(`
+      SELECT id, email, plan, verified, created_at,
+        CASE WHEN reset_token IS NULL THEN 'no_pending_reset' ELSE 'has_pending_reset' END AS reset_status,
+        reset_expires,
+        bullets_used_this_month
+      FROM users WHERE email = $1
+    `, [email.toLowerCase()]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const u = result.rows[0];
+    const sessions = await pool.query('SELECT count(*) FROM sessions WHERE user_id = $1', [u.id]);
+    res.json({ ...u, active_sessions: parseInt(sessions.rows[0].count) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
