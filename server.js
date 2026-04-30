@@ -2603,13 +2603,24 @@ app.post('/api/admin/send-support-email', async (req, res) => {
   const { to, subject, message } = req.body;
   if (!to || !subject || !message) return res.status(400).json({ error: 'to, subject, and message required' });
   try {
-    await sendEmail(to, subject, `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
-        <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
-        <p style="color:#F4F1EA;font-size:15px;line-height:1.7;">${message.replace(/\n/g, '<br>')}</p>
-        <p style="color:#a08e65;font-size:13px;margin-top:32px;">— Henry<br>NCO Kit Support</p>
-      </div>
-    `);
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
+      body: JSON.stringify({
+        from: 'NCO Kit <noreply@ncokit.com>',
+        to,
+        reply_to: 'brighamwilsonjr@gmail.com',
+        subject,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+            <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;">NCO Kit</h1>
+            <p style="color:#F4F1EA;font-size:15px;line-height:1.7;">${message.replace(/\n/g, '<br>')}</p>
+            <p style="color:#a08e65;font-size:13px;margin-top:32px;">— Henry<br>NCO Kit Support</p>
+          </div>
+        `
+      })
+    });
+    if (!response.ok) throw new Error(await response.text());
     res.json({ success: true, sent_to: to });
   } catch (err) {
     res.status(500).json({ error: err.message });
