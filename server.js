@@ -2023,6 +2023,9 @@ async function initDB() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS usage_nudge_converted BOOLEAN DEFAULT FALSE`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_usage_nudge_sent ON users(usage_nudge_sent_at)`);
 
+    // Re-engagement email tracking
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reengagement_email_sent_at TIMESTAMPTZ`);
+
     // Audit logging table for AI usage tracking (Security Fix #3)
     await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_log (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -2777,8 +2780,9 @@ app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
 });
 
 // ── ADMIN: RE-ENGAGEMENT BATCH SEND ──────────────────────────────────────────
-// Sends 48 emails per batch to inactive free users (signed up >72h ago, 0 usage)
-// Call with { batch: 0 } for first 48, { batch: 1 } for next 48, { batch: 2 } for last batch
+// Targets verified free users with zero AI uses ever (checked via ai_usage_log)
+// Each sent user is stamped with reengagement_email_sent_at to prevent duplicates
+// Call with { batch: 0 } for first 48, { batch: 1 } for next 48, etc.
 app.post('/api/admin/send-reengagement', async (req, res) => {
   const secret = req.headers['x-report-secret'];
   if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
@@ -2786,20 +2790,24 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
   const batchSize = 48;
   const batchNum  = parseInt(req.body.batch ?? 0);
   const offset    = batchNum * batchSize;
-  const cutoff    = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
 
   try {
     const result = await pool.query(`
-      SELECT email, referral_code FROM users
-      WHERE plan = 'free' AND bullets_used_this_month = 0 AND created_at < $1
-      ORDER BY created_at DESC
-      LIMIT $2 OFFSET $3
-    `, [cutoff, batchSize, offset]);
+      SELECT u.id, u.email, u.referral_code
+      FROM users u
+      WHERE u.verified = true
+        AND u.plan = 'free'
+        AND u.email != 'brighamwilsonjr@gmail.com'
+        AND NOT EXISTS (SELECT 1 FROM ai_usage_log a WHERE a.user_id = u.id)
+        AND u.reengagement_email_sent_at IS NULL
+      ORDER BY u.created_at DESC
+      LIMIT $1 OFFSET $2
+    `, [batchSize, offset]);
 
-    const recipients = result.rows.map(r => ({ email: r.email, refCode: r.referral_code || '' }));
-    if (recipients.length === 0) return res.json({ sent: 0, message: 'No recipients in this batch' });
+    const recipients = result.rows;
+    if (recipients.length === 0) return res.json({ sent: 0, batch: batchNum, message: 'No recipients in this batch — campaign complete' });
 
-    const htmlBody = `<!DOCTYPE html>
+    const htmlTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -2820,23 +2828,23 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
         <!-- Body -->
         <tr><td style="background:#242018;padding:36px 40px;">
           <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c8b88a;">
-            You set up an NCO Kit account a little while back but haven't had a chance to use it yet.
-            No problem — we know the battle rhythm doesn't slow down.
+            You created an NCO Kit account but haven't tried any of the AI tools yet.
+            No pressure — we know the battle rhythm doesn't slow down.
           </p>
           <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c8b88a;">
-            When you get a free five minutes, here's the fastest way to see what it can do:
-            pick a category, type in what your Soldier did, and get three ready-to-use NCOER bullets
-            back in seconds — formatted to Army writing standards, calibrated to their MOS.
+            When you get a free five minutes, here's what to try first: open the <strong style="color:#e8d4a0;">NCOER Bullet Builder</strong>,
+            pick a rating category, type in what your Soldier did in plain language, and get three
+            regulation-formatted bullets back in seconds — calibrated to their MOS and AR 623-3 standards.
           </p>
           <p style="margin:0 0 32px;font-size:15px;line-height:1.7;color:#c8b88a;">
-            NCO Kit also handles DA 4856 counselings, awards write-ups, OER bullets, and AFT scores.
-            Everything you hate typing, done in one place.
+            NCO Kit also handles DA 4856 counselings, awards write-ups, OER bullets, senior rater narratives,
+            and AFT scores. Everything you hate typing, done in one place. Free, no installation, works on any device.
           </p>
 
           <!-- CTA Button -->
           <table cellpadding="0" cellspacing="0"><tr><td>
-            <a href="${refLink}" style="display:inline-block;background:#a08e65;color:#1a1a1a;font-family:'Georgia',serif;font-size:15px;font-weight:bold;letter-spacing:1px;text-decoration:none;padding:14px 36px;border-radius:4px;text-transform:uppercase;">
-              Open NCO Kit →
+            <a href="{{refLink}}" style="display:inline-block;background:#a08e65;color:#1a1a1a;font-family:'Georgia',serif;font-size:15px;font-weight:bold;letter-spacing:1px;text-decoration:none;padding:14px 36px;border-radius:4px;text-transform:uppercase;">
+              Try Your First Bullet →
             </a>
           </td></tr></table>
         </td></tr>
@@ -2859,26 +2867,36 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 
     let sent = 0;
     const errors = [];
-    for (const { email, refCode } of recipients) {
+
+    for (const user of recipients) {
       try {
-        const refLink = refCode ? `https://ncokit.com?ref=${refCode}` : 'https://ncokit.com';
-        const personalizedHtml = htmlBody.replace('${refLink}', refLink);
+        const refLink = user.referral_code ? `https://ncokit.com?ref=${user.referral_code}` : 'https://ncokit.com/#bullets';
+        const html = htmlTemplate.replace('{{refLink}}', refLink);
+
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             from: 'Henry @ NCO Kit <noreply@ncokit.com>',
-            to: email,
-            subject: "You've got an NCO Kit account — here's where to start",
-            html: personalizedHtml
+            to: user.email,
+            subject: "You've got 10 free NCOER bullets waiting",
+            html
           })
         });
+
+        await pool.query(
+          `UPDATE users SET reengagement_email_sent_at = NOW() WHERE id = $1`,
+          [user.id]
+        );
+
         sent++;
-      } catch(e) { errors.push({ email, error: e.message }); }
+      } catch (e) {
+        errors.push({ email: user.email, error: e.message });
+      }
     }
 
     res.json({ batch: batchNum, sent, total: recipients.length, errors });
-  } catch(err) {
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
