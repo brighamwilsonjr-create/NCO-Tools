@@ -551,9 +551,30 @@ app.get('/robots.txt', (req, res) => {
   res.send(`User-agent: *\nAllow: /\nSitemap: https://ncokit.com/sitemap.xml`);
 });
 
-app.get('/sitemap.xml', (req, res) => {
+app.get('/sitemap.xml', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   res.type('application/xml');
+
+  let blogUrls = '';
+  try {
+    const { rows } = await pool.query(
+      `SELECT slug, published_at FROM blog_posts ORDER BY published_at DESC`
+    );
+    blogUrls = rows.map(({ slug, published_at }) => {
+      const lastmod = published_at
+        ? new Date(published_at).toISOString().split('T')[0]
+        : today;
+      return `  <url>
+    <loc>https://ncokit.com/blog/${slug}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>`;
+    }).join('\n');
+  } catch (err) {
+    console.error('sitemap blog query error:', err);
+  }
+
   res.send(`<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -563,28 +584,10 @@ app.get('/sitemap.xml', (req, res) => {
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://ncokit.com/#bullets</loc>
+    <loc>https://ncokit.com/blog</loc>
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/#counseling</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/#awards</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/#acft</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://ncokit.com/privacy</loc>
@@ -592,6 +595,7 @@ app.get('/sitemap.xml', (req, res) => {
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
+${blogUrls}
 </urlset>`);
 });
 
