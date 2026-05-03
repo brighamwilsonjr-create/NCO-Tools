@@ -453,7 +453,7 @@ async function sendUsageNudgeEmail(email, templateType) {
       </ul>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;">Stop counting your uses. Start building.</p>`;
     cta = 'Go Premium Today';
-  } else {
+  } else if (templateType === 'C') {
     // Template C: Social Proof/Community
     subject = '🎖️ Join 500+ Army Leaders — Go Premium';
     heading = 'Join the Premium Community';
@@ -461,6 +461,14 @@ async function sendUsageNudgeEmail(email, templateType) {
       <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Stop waiting for monthly resets. Get unlimited access and join the ranks of leaders who are working smarter.</strong></p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;margin-top:20px;">Premium includes unlimited access to every tool — no monthly limits, no waiting.</p>`;
     cta = 'Upgrade to Premium';
+  } else {
+    // Template D: Price Anchor / Shopette
+    subject = '💰 Less than a shopette run — Go Premium';
+    heading = 'Less Than 2 Monsters and a Tornado';
+    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">$8 a month. That's less than 2 Monsters and a Tornado at the shopette.</p>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;">In return you get <strong>unlimited</strong> NCOER bullets, DA 4856 counselings, award citations, OER support, and your whole Soldier roster in one place — no monthly limits, no waiting for a reset.</p>
+      <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Your career is worth more than an energy drink run.</strong></p>`;
+    cta = 'Go Premium for $8/month';
   }
 
   const html = `<div style="${baseStyle}">
@@ -493,7 +501,7 @@ async function checkAndSendUsageNudges() {
     `);
 
     for (const user of freeUsers.rows) {
-      const templates = ['A', 'B', 'C'];
+      const templates = ['A', 'B', 'C', 'D'];
       const randomTemplate = templates[Math.floor(Math.random() * templates.length)];
 
       try {
