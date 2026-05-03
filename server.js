@@ -2710,6 +2710,13 @@ app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
       ORDER BY date DESC, endpoint
     `);
 
+    const premiumQuery = await pool.query(`
+      SELECT COUNT(*) AS total_premium FROM users WHERE plan = 'premium'
+    `);
+    const totalPremium = parseInt(premiumQuery.rows[0].total_premium);
+    summary.total_premium_users = totalPremium;
+    summary.total_users = summary.total_free_users + totalPremium;
+
     res.json({
       summary,
       users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
