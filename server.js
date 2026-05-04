@@ -549,6 +549,56 @@ const scheduleUsageNudgeCheck = () => {
   scheduleNext();
 };
 
+// ── WEEKLY REPORT AUTO-SCHEDULE ───────────────────────────────────────────────
+// Calls POST /api/admin/weekly-report internally every Monday at 08:00 UTC.
+// No external cron service or npm package needed — mirrors scheduleUsageNudgeCheck.
+const scheduleWeeklyReport = () => {
+  const msUntilNextMonday8am = () => {
+    const now = new Date();
+    const next = new Date();
+    next.setUTCHours(8, 0, 0, 0); // target: 8:00:00 AM UTC today
+    const day = now.getUTCDay();   // 0=Sun 1=Mon … 6=Sat
+    let daysUntil = (1 - day + 7) % 7; // 0 if today is Monday, else days until next Monday
+    if (daysUntil === 0 && now >= next) daysUntil = 7; // already past 8 AM on Monday → next week
+    next.setUTCDate(next.getUTCDate() + daysUntil);
+    return next.getTime() - now.getTime();
+  };
+
+  const scheduleNext = () => {
+    const delay = msUntilNextMonday8am();
+    const hours = Math.round(delay / 1000 / 60 / 60);
+    console.log(`[WeeklyReport] Next report in ~${hours}h (Monday 08:00 UTC)`);
+    setTimeout(() => {
+      console.log('[WeeklyReport] Firing weekly report email...');
+      if (!process.env.WEEKLY_REPORT_SECRET) {
+        console.warn('[WeeklyReport] WEEKLY_REPORT_SECRET not set — skipping');
+        return scheduleNext();
+      }
+      const http = require('http');
+      const port = parseInt(process.env.PORT || '3000', 10);
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: '/api/admin/weekly-report',
+          method: 'POST',
+          headers: { 'x-report-secret': process.env.WEEKLY_REPORT_SECRET }
+        },
+        res => {
+          let body = '';
+          res.on('data', chunk => { body += chunk; });
+          res.on('end', () => console.log(`[WeeklyReport] Done — HTTP ${res.statusCode}`, body.slice(0, 150)));
+        }
+      );
+      req.on('error', e => console.error('[WeeklyReport] Internal request failed:', e.message));
+      req.end();
+      scheduleNext(); // schedule the following week immediately after firing
+    }, delay);
+  };
+
+  scheduleNext();
+};
+
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
@@ -3311,4 +3361,7 @@ app.listen(PORT, async () => {
   // Start daily usage nudge email check at 9 AM
   scheduleUsageNudgeCheck();
   console.log('Usage nudge scheduler initialized');
+  // Start weekly report — fires every Monday at 08:00 UTC via internal HTTP call
+  scheduleWeeklyReport();
+  console.log('Weekly report scheduler initialized');
 });
