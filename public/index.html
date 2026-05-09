@@ -4781,6 +4781,9 @@ async function checkOnboardingStatus() {
   const token = safeStorage.getItem('ncokit_token');
   if (!token) return; // Not logged in — don't show onboarding to anonymous users
 
+  // Fast local check — if already marked done on this device, skip the API call
+  if (localStorage.getItem('ncokit_onboarding_done') === '1') return;
+
   try {
     const response = await fetch('/api/auth/onboarding-status', {
       headers: { 'Authorization': 'Bearer ' + token }
@@ -4788,6 +4791,9 @@ async function checkOnboardingStatus() {
     const data = await response.json();
     if (!data.hasCompleted) {
       showOnboardingFlow();
+    } else {
+      // Sync DB state to localStorage so future checks are instant
+      localStorage.setItem('ncokit_onboarding_done', '1');
     }
   } catch (err) {
     console.error('Failed to check onboarding status:', err);
@@ -4800,6 +4806,8 @@ async function completeOnboarding() {
   if (!token) return;
 
   hideOnboardingFlow();
+  // Immediately lock it locally so it never shows again on this device
+  localStorage.setItem('ncokit_onboarding_done', '1');
 
   try {
     await fetch('/api/auth/complete-onboarding', {
