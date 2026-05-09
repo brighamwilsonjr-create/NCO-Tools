@@ -969,18 +969,30 @@
       <button onclick="closeUpgradeModal()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer;">✕</button>
     </div>
     <div style="padding:24px;">
-      <div style="font-family:'Oswald',sans-serif; font-size:36px; color:var(--tan); text-align:center; margin-bottom:4px;">$8<span style="font-size:16px; color:var(--tan-dark);">/month</span></div>
-      <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); text-align:center; margin-bottom:20px; letter-spacing:1px;">CANCEL ANYTIME</div>
       <div style="border:1px solid var(--border); padding:16px; margin-bottom:20px;">
         <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); margin-bottom:10px; letter-spacing:2px;">PREMIUM INCLUDES:</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Unlimited AI generations across all tools</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Unlimited saves across all tools</div>
-        
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Awards Recommendation Writer</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Promotion Board Prep Tool (coming soon)</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0; border-bottom:1px solid var(--border);">✓ Priority AI response speed</div>
         <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); padding:4px 0;">✓ Early access to new features</div>
       </div>
-      <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $8/month</button>
+      <!-- Plan selection -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+        <div id="planMonthly" onclick="selectUpgradePlan('monthly')" style="border:2px solid var(--tan); padding:16px; cursor:pointer; text-align:center; background:var(--od-dark);">
+          <div style="font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:2px; color:var(--tan); margin-bottom:6px;">MONTHLY</div>
+          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan);">$12<span style="font-size:12px; color:var(--tan-dark);">/mo</span></div>
+          <div style="font-family:'Source Code Pro',monospace; font-size:9px; color:var(--tan-dark); margin-top:4px; letter-spacing:1px;">CANCEL ANYTIME</div>
+        </div>
+        <div id="planAnnual" onclick="selectUpgradePlan('annual')" style="border:2px solid var(--border); padding:16px; cursor:pointer; text-align:center; position:relative;">
+          <div style="position:absolute; top:-10px; left:50%; transform:translateX(-50%); background:var(--tan); color:var(--od-dark); font-family:'Source Code Pro',monospace; font-size:9px; padding:2px 8px; letter-spacing:1px; white-space:nowrap; font-weight:bold;">BEST VALUE</div>
+          <div style="font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:2px; color:var(--tan); margin-bottom:6px;">ANNUAL</div>
+          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan);">$97<span style="font-size:12px; color:var(--tan-dark);">/yr</span></div>
+          <div style="font-family:'Source Code Pro',monospace; font-size:9px; color:var(--tan-dark); margin-top:4px; letter-spacing:1px;">~$8.08/MO · SAVE 33%</div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $12/month</button>
       <div style="text-align:center; margin-top:12px; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark);">Secured by Stripe · Cancel anytime from your account</div>
     </div>
   </div>
@@ -2232,7 +2244,8 @@
         </div>
         <div style="border:1px solid var(--tan); padding:20px; background:var(--od-dark);">
           <div style="font-family:'Oswald',sans-serif; font-size:18px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">PREMIUM</div>
-          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan); margin-bottom:8px;">$8<span style="font-size:14px; color:var(--tan-dark);">/month</span></div>
+          <div style="font-family:'Oswald',sans-serif; font-size:26px; color:var(--tan); margin-bottom:2px;">$12<span style="font-size:13px; color:var(--tan-dark);">/month</span></div>
+          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-bottom:10px; letter-spacing:1px;">OR $97/YEAR (~$8.08/MO · SAVE 33%)</div>
           <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
             ✓ Everything in Basic<br>
             ✓ Unlimited AI generations<br>
@@ -2267,7 +2280,7 @@
 <div class="card" style="margin-bottom:16px;">
       <div class="card-title">Frequently Asked Questions</div>
       <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
-        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit free?</strong><br>Yes. The core tools — DA 4856 generator, NCOER bullet builder, AFT scorer, and soldier roster — are free with up to 10 AI generations per month. Premium ($8/month) unlocks unlimited AI, Awards Writer, and Promotion Board Prep Tool.</p>
+        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit free?</strong><br>Yes. The core tools — DA 4856 generator, NCOER bullet builder, AFT scorer, and soldier roster — are free with up to 10 AI generations per month. Premium ($12/month or $97/year) unlocks unlimited AI, Awards Writer, and Promotion Board Prep Tool.</p>
         <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is my data secure? Will the Army see it?</strong><br>NCO Kit is not connected to Army systems, IPPS-A, EES, or any official Army network. Your data is stored securely and is only accessible by your account. Do not enter classified or CUI information.</p>
         <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Can I use this on my phone?</strong><br>Yes — NCO Kit works on any device with a browser. You can also install it to your home screen like a native app using the "Install NCO Kit" prompt at the bottom of the page.</p>
         <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit endorsed by the Army?</strong><br>No. NCO Kit is an independent tool built by an NCO for NCOs. It is not affiliated with, endorsed by, or connected to the Department of the Army. All generated documents should be reviewed by the responsible leader before official use.</p>
@@ -3744,19 +3757,46 @@
     document.getElementById('upgradeModal').style.display = 'none';
   }
 
+  let selectedUpgradePlan = 'monthly';
+
+  function selectUpgradePlan(plan) {
+    selectedUpgradePlan = plan;
+    const monthlyEl = document.getElementById('planMonthly');
+    const annualEl = document.getElementById('planAnnual');
+    const btn = document.getElementById('upgradeBtn');
+    if (plan === 'annual') {
+      monthlyEl.style.border = '2px solid var(--border)';
+      monthlyEl.style.background = '';
+      annualEl.style.border = '2px solid var(--tan)';
+      annualEl.style.background = 'var(--od-dark)';
+      btn.textContent = 'Upgrade to Premium — $97/year';
+    } else {
+      monthlyEl.style.border = '2px solid var(--tan)';
+      monthlyEl.style.background = 'var(--od-dark)';
+      annualEl.style.border = '2px solid var(--border)';
+      annualEl.style.background = '';
+      btn.textContent = 'Upgrade to Premium — $12/month';
+    }
+  }
+
   async function startUpgrade() {
     if (!currentUser) { showAuth('login'); return; }
     const btn = document.getElementById('upgradeBtn');
+    const planLabel = selectedUpgradePlan === 'annual' ? '$97/year' : '$12/month';
     btn.textContent = 'Redirecting...';
     btn.disabled = true;
     try {
-      const res = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: authHeader() });
+      const res = await fetch('/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { ...authHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: selectedUpgradePlan })
+      });
       const data = await res.json();
       if (data.url) window.location.href = data.url;
-      else { alert(data.error || 'Failed to start checkout.'); btn.textContent = 'Upgrade to Premium'; btn.disabled = false; }
+      else { alert(data.error || 'Failed to start checkout.'); btn.textContent = `Upgrade to Premium — ${planLabel}`; btn.disabled = false; }
     } catch (e) {
       alert('Failed to start checkout. Please try again.');
-      btn.textContent = 'Upgrade to Premium';
+      btn.textContent = `Upgrade to Premium — ${planLabel}`;
       btn.disabled = false;
     }
   }
@@ -3964,46 +4004,17 @@
     const title = document.getElementById('limitModalTitle');
     const msg = document.getElementById('limitModalMsg');
     const btn = document.getElementById('limitModalBtn');
-
     if (type === 'anonymous') {
       title.textContent = "You've Used Your 3 Free Generations";
       msg.textContent = "Create a free account to get 10 AI generations per month — no credit card required.";
       btn.textContent = "Create Free Account";
-      document.getElementById('limitModalType').dataset.type = type;
-      modal.style.display = 'flex';
     } else {
-      // For free users, fetch their assigned A/B test variant
-      fetch('/api/auth/get-upgrade-variant', { method: 'POST', headers: { 'Authorization': 'Bearer ' + safeStorage.getItem('ncokit_token') } })
-        .then(r => r.json())
-        .then(data => {
-          const variant = data.variant;
-          document.getElementById('limitModalType').dataset.type = type;
-          document.getElementById('limitModalType').dataset.variant = variant;
-
-          if (variant === 'A') {
-            title.textContent = "Save 20+ Hours This Month";
-            msg.textContent = "Premium users generate unlimited bullets, memos, and evals in seconds. That's 20+ hours saved every month. Just $8/month.";
-            btn.textContent = "Upgrade to Premium";
-          } else if (variant === 'B') {
-            title.textContent = "Join 200+ Army Leaders Using Premium";
-            msg.textContent = "Free users get 10 generations. Premium members? Unlimited. See what 200+ NCOs and officers are doing — $8/month.";
-            btn.textContent = "Upgrade Now";
-          } else if (variant === 'C') {
-            title.textContent = "Limited Time: 50% Off First Month";
-            msg.textContent = "Unlock unlimited generations, bulk operations, and saved templates. Premium members save 20+ hours monthly. First month 50% off — ends this week.";
-            btn.textContent = "Claim 50% Off";
-          }
-          modal.style.display = 'flex';
-        })
-        .catch(err => {
-          console.error('Failed to get variant:', err);
-          title.textContent = "Monthly Limit Reached";
-          msg.textContent = "You've used all 10 of your free AI generations this month. Upgrade to Premium for unlimited access.";
-          btn.textContent = "Upgrade to Premium — $8/month";
-          document.getElementById('limitModalType').dataset.type = type;
-          modal.style.display = 'flex';
-        });
+      title.textContent = "Monthly Limit Reached";
+      msg.textContent = "You've used all 10 of your free AI generations this month. Upgrade to Premium for unlimited access.";
+      btn.textContent = "Upgrade to Premium";
     }
+    document.getElementById('limitModalType').dataset.type = type;
+    modal.style.display = 'flex';
   }
 
   function closeLimitModal() {
@@ -4805,43 +4816,6 @@ async function completeOnboarding() {
 
 // Run on page load for already-logged-in users (token already in storage)
 document.addEventListener('DOMContentLoaded', () => {
-  // Check if this page was loaded via a tool URL (e.g., /bullets, /awards)
-  // These pages set window.__NCOKIT_TOOL__ to indicate which tool to load
-  if (window.__NCOKIT_TOOL__) {
-    const toolMap = {
-      'bullets': 'bullets',
-      'oer': 'oer',
-      'counseling': 'counseling',
-      'roster': 'roster',
-      'acft': 'aft',
-      'awards': 'awards',
-      'memo': 'memo',
-      'narrative': 'senior-rater'
-    };
-    const tabName = toolMap[window.__NCOKIT_TOOL__];
-    if (tabName) {
-      setTimeout(() => {
-        // Find the tab button for this tool
-        let tab = null;
-        if (tabName === 'oer') {
-          tab = document.getElementById('oerTab');
-        } else {
-          // Search for tab with matching onclick
-          const tabs = document.querySelectorAll('.tab');
-          for (let t of tabs) {
-            if (t.onclick && t.onclick.toString().includes(`'${tabName}'`)) {
-              tab = t;
-              break;
-            }
-          }
-        }
-        if (typeof switchTab === 'function' && tab) {
-          switchTab(tabName, tab);
-        }
-      }, 100);
-    }
-  }
-
   // 1.5s delay gives the existing session restore time to initialize
   setTimeout(checkOnboardingStatus, 1500);
   // Show blog nav link

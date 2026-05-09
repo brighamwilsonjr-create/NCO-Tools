@@ -424,7 +424,7 @@ async function sendWelcomeEmail(email) {
 }
 
 // 80% Usage Nudge Email Templates (A/B Testing)
-const STRIPE_CHECKOUT_URL = 'https://checkout.stripe.com/g/pay/cs_live_a1epNff5MMFb0497WYNLOSdhoU4F6SPy8meWFxwnmOwT7krLNtDv5bgV2G#fidnandhYHdWcXxpYCc%2FJ2FgY2RwaXEnKSdicGRmZGhqaWBTZHdsZGtxJz8ncXdgZHFoYGtxWjcnKSdkdWxOYHwnPyd1blppbHNgWjA0UUFHV3ZHRDBPQUFyR2ZnYW5sX3NyTlE2aU9RQlNzPEdJTGNKNDZEckY9cW90V0tfY2lNZHUyM2lwazFwd3VvVVQzbkM2QjxXdEkyXUB9TlVJTk49MU02NTVLNlVjZn9wRCcpJ2N3amhWYHdzYHcnP3F3cGApJ2dkZm5id2pwa2FGamlqdyc%2FJyZjY2NjY2MnKSdpZHxqcHFRfHVgJz8ndmxrYmlgWmxxYGgnKSdga2RnaWBVaWRmYG1qaWFgd3YnP3F3cGB4JSUl';
+const STRIPE_CHECKOUT_URL = 'https://ncokit.com';
 
 async function sendUsageNudgeEmail(email, templateType) {
   const baseStyle = 'font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;';
@@ -468,7 +468,7 @@ async function sendUsageNudgeEmail(email, templateType) {
     mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">$8 a month. That's less than 2 Monsters and a Tornado at the shopette.</p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;">In return you get <strong>unlimited</strong> NCOER bullets, DA 4856 counselings, award citations, OER support, and your whole Soldier roster in one place — no monthly limits, no waiting for a reset.</p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Your career is worth more than an energy drink run.</strong></p>`;
-    cta = 'Go Premium for $8/month';
+    cta = 'Go Unlimited — Starting at $12/month';
   }
 
   const html = `<div style="${baseStyle}">
@@ -543,56 +543,6 @@ const scheduleUsageNudgeCheck = () => {
       console.log('Running daily usage nudge check...');
       checkAndSendUsageNudges();
       scheduleNext();
-    }, delay);
-  };
-
-  scheduleNext();
-};
-
-// ── WEEKLY REPORT AUTO-SCHEDULE ───────────────────────────────────────────────
-// Calls POST /api/admin/weekly-report internally every Monday at 08:00 UTC.
-// No external cron service or npm package needed — mirrors scheduleUsageNudgeCheck.
-const scheduleWeeklyReport = () => {
-  const msUntilNextMonday8am = () => {
-    const now = new Date();
-    const next = new Date();
-    next.setUTCHours(8, 0, 0, 0); // target: 8:00:00 AM UTC today
-    const day = now.getUTCDay();   // 0=Sun 1=Mon … 6=Sat
-    let daysUntil = (1 - day + 7) % 7; // 0 if today is Monday, else days until next Monday
-    if (daysUntil === 0 && now >= next) daysUntil = 7; // already past 8 AM on Monday → next week
-    next.setUTCDate(next.getUTCDate() + daysUntil);
-    return next.getTime() - now.getTime();
-  };
-
-  const scheduleNext = () => {
-    const delay = msUntilNextMonday8am();
-    const hours = Math.round(delay / 1000 / 60 / 60);
-    console.log(`[WeeklyReport] Next report in ~${hours}h (Monday 08:00 UTC)`);
-    setTimeout(() => {
-      console.log('[WeeklyReport] Firing weekly report email...');
-      if (!process.env.WEEKLY_REPORT_SECRET) {
-        console.warn('[WeeklyReport] WEEKLY_REPORT_SECRET not set — skipping');
-        return scheduleNext();
-      }
-      const http = require('http');
-      const port = parseInt(process.env.PORT || '3000', 10);
-      const req = http.request(
-        {
-          hostname: '127.0.0.1',
-          port,
-          path: '/api/admin/weekly-report',
-          method: 'POST',
-          headers: { 'x-report-secret': process.env.WEEKLY_REPORT_SECRET }
-        },
-        res => {
-          let body = '';
-          res.on('data', chunk => { body += chunk; });
-          res.on('end', () => console.log(`[WeeklyReport] Done — HTTP ${res.statusCode}`, body.slice(0, 150)));
-        }
-      );
-      req.on('error', e => console.error('[WeeklyReport] Internal request failed:', e.message));
-      req.end();
-      scheduleNext(); // schedule the following week immediately after firing
     }, delay);
   };
 
@@ -1135,6 +1085,13 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   if (user.plan === 'premium') return res.status(400).json({ error: 'Already premium' });
 
+  const { plan } = req.body || {};
+  const priceId = plan === 'annual'
+    ? process.env.STRIPE_PRICE_ID_ANNUAL
+    : process.env.STRIPE_PRICE_ID_MONTHLY;
+
+  if (!priceId) return res.status(500).json({ error: 'Pricing not configured' });
+
   try {
     let discounts = [];
     if (user.referred_by && !user.stripe_customer_id) {
@@ -1146,7 +1103,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       payment_method_types: ['card'],
       mode: 'subscription',
       customer_email: user.email,
-      line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
+      line_items: [{ price: priceId, quantity: 1 }],
       discounts,
       metadata: { userId: user.id },
       success_url: 'https://ncokit.com/?upgraded=true',
@@ -3361,7 +3318,4 @@ app.listen(PORT, async () => {
   // Start daily usage nudge email check at 9 AM
   scheduleUsageNudgeCheck();
   console.log('Usage nudge scheduler initialized');
-  // Start weekly report — fires every Monday at 08:00 UTC via internal HTTP call
-  scheduleWeeklyReport();
-  console.log('Weekly report scheduler initialized');
 });
