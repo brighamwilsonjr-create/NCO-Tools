@@ -330,7 +330,7 @@ async function sendReferralRewardPendingEmail(email) {
       <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;margin:0 0 8px;">NCO Kit</h1>
       <h2 style="color:#F4F1EA;font-size:20px;margin:0 0 20px;">You Earned a Free Month ⭐</h2>
       <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 16px;">Someone you referred just subscribed to NCO Kit Premium — so you've earned a <strong style="color:#C8B48A;">free month of Premium</strong> on your account.</p>
-      <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 24px;">Your first month of Premium is on us. When you upgrade, your free month will be applied automatically at checkout — no code needed.</p>
+      <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 24px;"><strong style="color:#C8B48A;">No code needed.</strong> Just click the button below and upgrade — your free month is already tied to your account and will apply automatically at checkout. You'll see $0 due for the first month.</p>
       <div style="background:#1a2a1a;border:1px solid #3d5440;padding:20px;margin-bottom:24px;">
         <div style="font-size:13px;color:#C8B48A;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">What you get with Premium</div>
         <p style="color:#a08e65;font-size:14px;line-height:1.8;margin:0;">✓ Unlimited AI generations across all tools<br>✓ Awards Recommendation Writer<br>✓ Unlimited saves<br>✓ Priority AI response speed</p>
