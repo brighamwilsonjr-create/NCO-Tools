@@ -1094,7 +1094,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
 
   try {
     let discounts = [];
-    if (user.referred_by && !user.stripe_customer_id) {
+    if (user.referred_by && !user.stripe_customer_id && plan !== 'annual') {
       const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
       discounts = [{ coupon: coupon.id }];
     }
