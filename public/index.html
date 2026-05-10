@@ -1022,7 +1022,7 @@
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
         <div id="planMonthly" onclick="selectUpgradePlan('monthly')" style="border:2px solid var(--tan); padding:16px; cursor:pointer; text-align:center; background:var(--od-dark);">
           <div style="font-family:'Oswald',sans-serif; font-size:12px; letter-spacing:2px; color:var(--tan); margin-bottom:6px;">MONTHLY</div>
-          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan);">$12<span style="font-size:12px; color:var(--tan-dark);">/mo</span></div>
+          <div style="font-family:'Oswald',sans-serif; font-size:28px; color:var(--tan);">$10<span style="font-size:12px; color:var(--tan-dark);">/mo</span></div>
           <div style="font-family:'Source Code Pro',monospace; font-size:9px; color:var(--tan-dark); margin-top:4px; letter-spacing:1px;">CANCEL ANYTIME</div>
         </div>
         <div id="planAnnual" onclick="selectUpgradePlan('annual')" style="border:2px solid var(--border); padding:16px; cursor:pointer; text-align:center; position:relative;">
@@ -1032,7 +1032,7 @@
           <div style="font-family:'Source Code Pro',monospace; font-size:9px; color:var(--tan-dark); margin-top:4px; letter-spacing:1px;">~$8.08/MO · SAVE 33%</div>
         </div>
       </div>
-      <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $12/month</button>
+      <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $10/month</button>
       <div style="text-align:center; margin-top:12px; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark);">Secured by Stripe · Cancel anytime from your account</div>
     </div>
   </div>
@@ -2284,8 +2284,8 @@
         </div>
         <div style="border:1px solid var(--tan); padding:20px; background:var(--od-dark);">
           <div style="font-family:'Oswald',sans-serif; font-size:18px; letter-spacing:2px; color:var(--tan); margin-bottom:4px;">PREMIUM</div>
-          <div style="font-family:'Oswald',sans-serif; font-size:26px; color:var(--tan); margin-bottom:2px;">$12<span style="font-size:13px; color:var(--tan-dark);">/month</span></div>
-          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-bottom:10px; letter-spacing:1px;">OR $97/YEAR (~$8.08/MO · SAVE 33%)</div>
+          <div style="font-family:'Oswald',sans-serif; font-size:26px; color:var(--tan); margin-bottom:2px;">$10<span style="font-size:13px; color:var(--tan-dark);">/month</span></div>
+          <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-bottom:10px; letter-spacing:1px;">OR $97/YEAR (~$8.08/MO · SAVE 19%)</div>
           <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
             ✓ Everything in Basic<br>
             ✓ Unlimited AI generations<br>
@@ -2320,7 +2320,7 @@
 <div class="card" style="margin-bottom:16px;">
       <div class="card-title">Frequently Asked Questions</div>
       <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8;">
-        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit free?</strong><br>Yes. The core tools — DA 4856 generator, NCOER bullet builder, AFT scorer, and soldier roster — are free with up to 10 AI generations per month. Premium ($12/month or $97/year) unlocks unlimited AI, Awards Writer, and Promotion Board Prep Tool.</p>
+        <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit free?</strong><br>Yes. The core tools — DA 4856 generator, NCOER bullet builder, AFT scorer, and soldier roster — are free with up to 10 AI generations per month. Premium ($10/month or $97/year) unlocks unlimited AI, Awards Writer, and Promotion Board Prep Tool.</p>
         <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is my data secure? Will the Army see it?</strong><br>NCO Kit is not connected to Army systems, IPPS-A, EES, or any official Army network. Your data is stored securely and is only accessible by your account. Do not enter classified or CUI information.</p>
         <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Can I use this on my phone?</strong><br>Yes — NCO Kit works on any device with a browser. You can also install it to your home screen like a native app using the "Install NCO Kit" prompt at the bottom of the page.</p>
         <p style="margin:0 0 14px 0;"><strong style="color:var(--tan);">Is NCO Kit endorsed by the Army?</strong><br>No. NCO Kit is an independent tool built by an NCO for NCOs. It is not affiliated with, endorsed by, or connected to the Department of the Army. All generated documents should be reviewed by the responsible leader before official use.</p>
@@ -3815,14 +3815,14 @@
       monthlyEl.style.background = 'var(--od-dark)';
       annualEl.style.border = '2px solid var(--border)';
       annualEl.style.background = '';
-      btn.textContent = 'Upgrade to Premium — $12/month';
+      btn.textContent = 'Upgrade to Premium — $10/month';
     }
   }
 
   async function startUpgrade() {
     if (!currentUser) { showAuth('login'); return; }
     const btn = document.getElementById('upgradeBtn');
-    const planLabel = selectedUpgradePlan === 'annual' ? '$97/year' : '$12/month';
+    const planLabel = selectedUpgradePlan === 'annual' ? '$97/year' : '$10/month';
     btn.textContent = 'Redirecting...';
     btn.disabled = true;
     try {

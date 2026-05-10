@@ -465,10 +465,10 @@ async function sendUsageNudgeEmail(email, templateType) {
     // Template D: Price Anchor / Shopette
     subject = '💰 Less than a shopette run — Go Premium';
     heading = 'Less Than 2 Monsters and a Tornado';
-    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">$12 a month. That's less than 2 Monsters and a Tornado at the shopette — or go annual for $97 and save 33%.</p>
+    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">$10 a month. That's less than 2 Monsters and a Tornado at the shopette — or go annual for $97 and save 19%.</p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;">In return you get <strong>unlimited</strong> NCOER bullets, DA 4856 counselings, award citations, OER support, and your whole Soldier roster in one place — no monthly limits, no waiting for a reset.</p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Your career is worth more than an energy drink run.</strong></p>`;
-    cta = 'Go Unlimited — Starting at $12/month';
+    cta = 'Go Unlimited — Starting at $10/month';
   }
 
   const html = `<div style="${baseStyle}">
