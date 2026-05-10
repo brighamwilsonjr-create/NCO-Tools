@@ -144,6 +144,14 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           ['premium', customerId, subscriptionId, converted, userId]
         );
 
+        // Decrement free_months_earned if a free month coupon was used at checkout
+        if (session.metadata?.freeMontUsed === 'true') {
+          await pool.query(
+            'UPDATE users SET free_months_earned = GREATEST(free_months_earned - 1, 0), free_months_used = free_months_used + 1 WHERE id = $1',
+            [userId]
+          );
+        }
+
         const userResult = await pool.query('SELECT referred_by FROM users WHERE id = $1', [userId]);
         const referredBy = userResult.rows[0]?.referred_by;
         if (referredBy) {
@@ -151,6 +159,41 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             'UPDATE users SET free_months_earned = free_months_earned + 1 WHERE referral_code = $1',
             [referredBy]
           );
+
+          // Apply Stripe credit to referrer if they are a premium subscriber
+          const referrerResult = await pool.query(
+            'SELECT id, email, stripe_customer_id, stripe_subscription_id FROM users WHERE referral_code = $1',
+            [referredBy]
+          );
+          const referrer = referrerResult.rows[0];
+          if (referrer?.stripe_customer_id && referrer?.stripe_subscription_id) {
+            // Referrer is premium — apply Stripe credit immediately
+            try {
+              const subscription = await stripe.subscriptions.retrieve(referrer.stripe_subscription_id);
+              const price = subscription.items.data[0].price;
+              const interval = price.recurring?.interval;
+              const creditAmount = interval === 'year'
+                ? Math.round(price.unit_amount / 12)
+                : price.unit_amount;
+              await stripe.customers.createBalanceTransaction(referrer.stripe_customer_id, {
+                amount: -creditAmount,
+                currency: 'usd',
+                description: 'Free month earned — referral bonus'
+              });
+              await sendReferralRewardEmail(referrer.email, creditAmount / 100);
+              console.log(`Applied $${(creditAmount / 100).toFixed(2)} referral credit to ${referrer.email}`);
+            } catch (err) {
+              console.error('Failed to apply referral credit:', err.message);
+            }
+          } else if (referrer?.email) {
+            // Referrer is on free plan — notify them a free month is waiting when they upgrade
+            try {
+              await sendReferralRewardPendingEmail(referrer.email);
+              console.log(`Sent pending referral reward notification to ${referrer.email}`);
+            } catch (err) {
+              console.error('Failed to send pending referral email:', err.message);
+            }
+          }
         }
         const conversionMsg = converted ? ` (CONVERTED from template ${template})` : '';
         console.log(`User ${userId} upgraded to premium${conversionMsg}`);
@@ -262,6 +305,40 @@ async function logAIRequest(userId, endpoint, inputLength, success, errorMessage
     console.error('Failed to log AI request:', err.message);
     // Don't throw — logging failures shouldn't break the API
   }
+}
+
+async function sendReferralRewardEmail(email, creditDollars) {
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+      <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;margin:0 0 8px;">NCO Kit</h1>
+      <h2 style="color:#F4F1EA;font-size:20px;margin:0 0 20px;">You Earned a Free Month ⭐</h2>
+      <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 16px;">Someone you referred just subscribed to NCO Kit Premium — so we've applied a <strong style="color:#C8B48A;">$${creditDollars.toFixed(2)} credit</strong> to your account.</p>
+      <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 24px;">It will automatically apply to your next billing cycle — no action needed on your end.</p>
+      <div style="background:#1a2a1a;border:1px solid #3d5440;padding:20px;margin-bottom:24px;">
+        <div style="font-size:13px;color:#C8B48A;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Keep the referrals coming</div>
+        <p style="color:#a08e65;font-size:14px;line-height:1.6;margin:0;">Every NCO who subscribes with your link earns you another free month. Share it in your unit, your team chat, anywhere NCOs are dealing with admin.</p>
+      </div>
+      <a href="https://ncokit.com" style="display:inline-block;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Go to NCO Kit</a>
+      <p style="color:#555;font-size:11px;line-height:1.6;margin-top:32px;">You're receiving this because you earned a referral reward on your NCO Kit account.</p>
+    </div>`;
+  await sendEmail(email, 'You earned a free month of NCO Kit Premium ⭐', html);
+}
+
+async function sendReferralRewardPendingEmail(email) {
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
+      <h1 style="color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;margin:0 0 8px;">NCO Kit</h1>
+      <h2 style="color:#F4F1EA;font-size:20px;margin:0 0 20px;">You Earned a Free Month ⭐</h2>
+      <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 16px;">Someone you referred just subscribed to NCO Kit Premium — so you've earned a <strong style="color:#C8B48A;">free month of Premium</strong> on your account.</p>
+      <p style="color:#a08e65;font-size:15px;line-height:1.7;margin:0 0 24px;">Your first month of Premium is on us. When you upgrade, your free month will be applied automatically at checkout — no code needed.</p>
+      <div style="background:#1a2a1a;border:1px solid #3d5440;padding:20px;margin-bottom:24px;">
+        <div style="font-size:13px;color:#C8B48A;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">What you get with Premium</div>
+        <p style="color:#a08e65;font-size:14px;line-height:1.8;margin:0;">✓ Unlimited AI generations across all tools<br>✓ Awards Recommendation Writer<br>✓ Unlimited saves<br>✓ Priority AI response speed</p>
+      </div>
+      <a href="https://ncokit.com" style="display:inline-block;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;">Claim Your Free Month</a>
+      <p style="color:#555;font-size:11px;line-height:1.6;margin-top:32px;">You're receiving this because you earned a referral reward on your NCO Kit account.</p>
+    </div>`;
+  await sendEmail(email, 'You earned a free month of NCO Kit Premium ⭐', html);
 }
 
 async function sendVerificationEmail(email, token) {
@@ -1094,7 +1171,15 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
 
   try {
     let discounts = [];
-    if (user.referred_by && !user.stripe_customer_id && plan !== 'annual') {
+    let freeMontUsed = false;
+
+    if (user.free_months_earned > 0) {
+      // Earned free month takes priority — 100% off first payment
+      const coupon = await stripe.coupons.create({ percent_off: 100, duration: 'once' });
+      discounts = [{ coupon: coupon.id }];
+      freeMontUsed = true;
+    } else if (user.referred_by && !user.stripe_customer_id && plan !== 'annual') {
+      // Referred user gets 50% off first month
       const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
       discounts = [{ coupon: coupon.id }];
     }
@@ -1105,7 +1190,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       customer_email: user.email,
       line_items: [{ price: priceId, quantity: 1 }],
       discounts,
-      metadata: { userId: user.id },
+      metadata: { userId: user.id, freeMontUsed: freeMontUsed ? 'true' : 'false' },
       success_url: 'https://ncokit.com/?upgraded=true',
       cancel_url: 'https://ncokit.com/?upgrade=cancelled',
     });
