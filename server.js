@@ -2853,12 +2853,12 @@ async function getDetailedUsageAnalytics() {
 
   return {
     summary,
-    users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
+    tool_summary: labelToolRows(toolAllTimeQuery.rows),
+    tool_trend_30d: labelToolRows(toolTrendQuery.rows),
     users_at_limit: allUsers.filter(u => u.usage_category === 'at_limit'),
     all_users_by_usage: allUsers,
     audit_log_summary: auditSummary.rows,
-    tool_summary: labelToolRows(toolAllTimeQuery.rows),
-    tool_trend_30d: labelToolRows(toolTrendQuery.rows)
+    users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
   };
 }
 
