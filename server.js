@@ -2804,12 +2804,61 @@ async function getDetailedUsageAnalytics() {
   summary.total_premium_users = totalPremium;
   summary.total_users = summary.total_free_users + totalPremium;
 
+  // All-time tool breakdown
+  const toolAllTimeQuery = await pool.query(`
+    SELECT
+      endpoint,
+      COUNT(*) AS total_requests,
+      COUNT(*) FILTER (WHERE success = true) AS success_count,
+      COUNT(*) FILTER (WHERE success = false) AS error_count
+    FROM ai_usage_log
+    GROUP BY endpoint
+    ORDER BY total_requests DESC
+  `);
+
+  // 30-day tool trend
+  const toolTrendQuery = await pool.query(`
+    SELECT
+      endpoint,
+      COUNT(*) AS total_requests,
+      COUNT(*) FILTER (WHERE success = true) AS success_count,
+      COUNT(*) FILTER (WHERE success = false) AS error_count
+    FROM ai_usage_log
+    WHERE timestamp > NOW() - INTERVAL '30 days'
+    GROUP BY endpoint
+    ORDER BY total_requests DESC
+  `);
+
+  const ENDPOINT_LABELS = {
+    '/api/bullets/generate': 'NCOER Bullet Builder',
+    '/api/oer/generate': 'OER Bullet Builder',
+    '/api/counseling/generate': 'DA 4856 Generator',
+    '/api/awards/generate': 'Awards Writer',
+    '/api/memo/generate': 'Memo Generator',
+    '/api/senior-rater/generate': 'Senior Rater Narrative',
+  };
+
+  function labelToolRows(rows) {
+    return rows.map(r => ({
+      endpoint: r.endpoint,
+      tool: ENDPOINT_LABELS[r.endpoint] || r.endpoint,
+      total_requests: parseInt(r.total_requests),
+      success_count: parseInt(r.success_count),
+      error_count: parseInt(r.error_count),
+      error_rate: r.total_requests > 0
+        ? ((parseInt(r.error_count) / parseInt(r.total_requests)) * 100).toFixed(1) + '%'
+        : '0.0%'
+    }));
+  }
+
   return {
     summary,
     users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
     users_at_limit: allUsers.filter(u => u.usage_category === 'at_limit'),
     all_users_by_usage: allUsers,
-    audit_log_summary: auditSummary.rows
+    audit_log_summary: auditSummary.rows,
+    tool_summary: labelToolRows(toolAllTimeQuery.rows),
+    tool_trend_30d: labelToolRows(toolTrendQuery.rows)
   };
 }
 
