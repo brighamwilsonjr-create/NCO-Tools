@@ -2734,6 +2734,85 @@ app.post('/api/admin/send-support-email', async (req, res) => {
   }
 });
 
+async function getDetailedUsageAnalytics() {
+  const usageQuery = await pool.query(`
+    SELECT
+      id,
+      email,
+      plan,
+      bullets_used_this_month,
+      bullets_reset_date,
+      verified,
+      created_at,
+      ROUND(100.0 * bullets_used_this_month / 10, 1) AS usage_percentage,
+      CASE
+        WHEN bullets_used_this_month >= 10 THEN 'at_limit'
+        WHEN bullets_used_this_month >= 5 THEN '50_percent_or_more'
+        WHEN bullets_used_this_month > 0 THEN 'under_50_percent'
+        ELSE 'zero_usage'
+      END AS usage_category
+    FROM users
+    WHERE plan = 'free'
+    ORDER BY bullets_used_this_month DESC
+  `);
+
+  const summary = {
+    total_free_users: 0,
+    users_at_limit: 0,
+    users_50_percent_or_more: 0,
+    users_under_50_percent: 0,
+    users_zero_usage: 0,
+    average_usage: 0,
+    median_usage: 0,
+    max_usage: 0
+  };
+
+  const allUsers = usageQuery.rows;
+  const usages = allUsers.map(u => u.bullets_used_this_month);
+
+  summary.total_free_users = allUsers.length;
+  summary.users_at_limit = allUsers.filter(u => u.usage_category === 'at_limit').length;
+  summary.users_50_percent_or_more = allUsers.filter(u => u.usage_category === '50_percent_or_more').length;
+  summary.users_under_50_percent = allUsers.filter(u => u.usage_category === 'under_50_percent').length;
+  summary.users_zero_usage = allUsers.filter(u => u.usage_category === 'zero_usage').length;
+  summary.average_usage = usages.length > 0 ? (usages.reduce((a, b) => a + b, 0) / usages.length).toFixed(2) : 0;
+  summary.max_usage = usages.length > 0 ? Math.max(...usages) : 0;
+
+  if (usages.length > 0) {
+    const sorted = [...usages].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    summary.median_usage = sorted.length % 2 ? sorted[mid] : ((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2);
+  }
+
+  const auditSummary = await pool.query(`
+    SELECT
+      DATE(timestamp) as date,
+      endpoint,
+      COUNT(*) as request_count,
+      CASE WHEN success THEN 'success' ELSE 'error' END as status,
+      COUNT(*) FILTER (WHERE error_message IS NOT NULL) as error_count
+    FROM ai_usage_log
+    WHERE timestamp > NOW() - INTERVAL '30 days'
+    GROUP BY DATE(timestamp), endpoint, success
+    ORDER BY date DESC, endpoint
+  `);
+
+  const premiumQuery = await pool.query(`
+    SELECT COUNT(*) AS total_premium FROM users WHERE plan = 'premium'
+  `);
+  const totalPremium = parseInt(premiumQuery.rows[0].total_premium);
+  summary.total_premium_users = totalPremium;
+  summary.total_users = summary.total_free_users + totalPremium;
+
+  return {
+    summary,
+    users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
+    users_at_limit: allUsers.filter(u => u.usage_category === 'at_limit'),
+    all_users_by_usage: allUsers,
+    audit_log_summary: auditSummary.rows
+  };
+}
+
 // ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
@@ -2746,88 +2825,30 @@ app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
   }
 
   try {
-    // Get all free users with their usage percentages
-    const usageQuery = await pool.query(`
-      SELECT
-        id,
-        email,
-        plan,
-        bullets_used_this_month,
-        bullets_reset_date,
-        verified,
-        created_at,
-        ROUND(100.0 * bullets_used_this_month / 10, 1) AS usage_percentage,
-        CASE
-          WHEN bullets_used_this_month >= 10 THEN 'at_limit'
-          WHEN bullets_used_this_month >= 5 THEN '50_percent_or_more'
-          WHEN bullets_used_this_month > 0 THEN 'under_50_percent'
-          ELSE 'zero_usage'
-        END AS usage_category
-      FROM users
-      WHERE plan = 'free'
-      ORDER BY bullets_used_this_month DESC
-    `);
-
-    // Summarize by category
-    const summary = {
-      total_free_users: 0,
-      users_at_limit: 0,
-      users_50_percent_or_more: 0,
-      users_under_50_percent: 0,
-      users_zero_usage: 0,
-      average_usage: 0,
-      median_usage: 0,
-      max_usage: 0
-    };
-
-    const allUsers = usageQuery.rows;
-    const usages = allUsers.map(u => u.bullets_used_this_month);
-
-    summary.total_free_users = allUsers.length;
-    summary.users_at_limit = allUsers.filter(u => u.usage_category === 'at_limit').length;
-    summary.users_50_percent_or_more = allUsers.filter(u => u.usage_category === '50_percent_or_more').length;
-    summary.users_under_50_percent = allUsers.filter(u => u.usage_category === 'under_50_percent').length;
-    summary.users_zero_usage = allUsers.filter(u => u.usage_category === 'zero_usage').length;
-    summary.average_usage = usages.length > 0 ? (usages.reduce((a, b) => a + b, 0) / usages.length).toFixed(2) : 0;
-    summary.max_usage = usages.length > 0 ? Math.max(...usages) : 0;
-
-    // Calculate median
-    if (usages.length > 0) {
-      const sorted = [...usages].sort((a, b) => a - b);
-      const mid = Math.floor(sorted.length / 2);
-      summary.median_usage = sorted.length % 2 ? sorted[mid] : ((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2);
-    }
-
-    // AI request audit log summary
-    const auditSummary = await pool.query(`
-      SELECT
-        DATE(timestamp) as date,
-        endpoint,
-        COUNT(*) as request_count,
-        CASE WHEN success THEN 'success' ELSE 'error' END as status,
-        COUNT(*) FILTER (WHERE error_message IS NOT NULL) as error_count
-      FROM ai_usage_log
-      WHERE timestamp > NOW() - INTERVAL '30 days'
-      GROUP BY DATE(timestamp), endpoint, success
-      ORDER BY date DESC, endpoint
-    `);
-
-    const premiumQuery = await pool.query(`
-      SELECT COUNT(*) AS total_premium FROM users WHERE plan = 'premium'
-    `);
-    const totalPremium = parseInt(premiumQuery.rows[0].total_premium);
-    summary.total_premium_users = totalPremium;
-    summary.total_users = summary.total_free_users + totalPremium;
-
-    res.json({
-      summary,
-      users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
-      users_at_limit: allUsers.filter(u => u.usage_category === 'at_limit'),
-      all_users_by_usage: allUsers,
-      audit_log_summary: auditSummary.rows
-    });
+    const data = await getDetailedUsageAnalytics();
+    res.json(data);
   } catch(err) {
     console.error('Analytics error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ADMIN: WEEKLY REPORT HTML VIEW ────────────────────────────────────────────
+app.get('/api/admin/weekly-report-html', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || (req.headers['authorization'] || '').replace('Bearer ', '') || req.query.api_key;
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    const user = await getUserFromSession(req);
+    if (user?.email !== 'brighamwilsonjr@gmail.com') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+  }
+
+  try {
+    const data = await getDetailedUsageAnalytics();
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`<html><body><pre id="data">${JSON.stringify(data, null, 2)}</pre></body></html>`);
+  } catch(err) {
+    console.error('Weekly report HTML error:', err);
     res.status(500).json({ error: err.message });
   }
 });
