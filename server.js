@@ -2737,10 +2737,12 @@ app.post('/api/admin/send-support-email', async (req, res) => {
 // ── ADMIN: COMPREHENSIVE USAGE ANALYTICS (Security Fix #4) ──────────────────────
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
-  const user = await getUserFromSession(req);
-  // Only allow admin (you) to access this endpoint
-  if (user?.email !== 'brighamwilsonjr@gmail.com') {
-    return res.status(403).json({ error: 'Admin only' });
+  const apiKey = req.headers['x-api-key'] || (req.headers['authorization'] || '').replace('Bearer ', '');
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    const user = await getUserFromSession(req);
+    if (user?.email !== 'brighamwilsonjr@gmail.com') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
   }
 
   try {
