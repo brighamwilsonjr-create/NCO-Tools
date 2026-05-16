@@ -2858,7 +2858,9 @@ async function getDetailedUsageAnalytics() {
     users_at_limit: allUsers.filter(u => u.usage_category === 'at_limit'),
     all_users_by_usage: allUsers,
     audit_log_summary: auditSummary.rows,
-    users_50_percent_or_more: allUsers.filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit'),
+    users_50_percent_or_more: allUsers
+      .filter(u => u.usage_category === '50_percent_or_more' || u.usage_category === 'at_limit')
+      .map(({ email, bullets_used_this_month, usage_percentage, usage_category }) => ({ email, bullets_used_this_month, usage_percentage, usage_category })),
   };
 }
 
