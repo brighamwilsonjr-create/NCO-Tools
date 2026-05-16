@@ -2904,6 +2904,78 @@ app.get('/api/admin/weekly-report-html', async (req, res) => {
   }
 });
 
+// ── ADMIN: TOOL STATS HTML VIEW ───────────────────────────────────────────────
+app.get('/api/admin/tool-stats-html', async (req, res) => {
+  const apiKey = req.headers['x-api-key'] || (req.headers['authorization'] || '').replace('Bearer ', '') || req.query.api_key;
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    const user = await getUserFromSession(req);
+    if (user?.email !== 'brighamwilsonjr@gmail.com') {
+      return res.status(403).json({ error: 'Admin only' });
+    }
+  }
+
+  try {
+    const LABELS = {
+      '/api/bullets/generate': 'NCOER Bullet Builder',
+      '/api/oer/generate': 'OER Bullet Builder',
+      '/api/counseling/generate': 'DA 4856 Generator',
+      '/api/awards/generate': 'Awards Writer',
+      '/api/memo/generate': 'Memo Generator',
+      '/api/senior-rater/generate': 'Senior Rater Narrative',
+    };
+
+    const [allTimeResult, last7Result] = await Promise.all([
+      pool.query(`
+        SELECT
+          endpoint,
+          COUNT(*) AS total_calls,
+          COUNT(*) FILTER (WHERE success = true) AS successes,
+          COUNT(*) FILTER (WHERE success = false) AS errors
+        FROM ai_usage_log
+        GROUP BY endpoint
+        ORDER BY total_calls DESC
+      `),
+      pool.query(`
+        SELECT endpoint, COUNT(*) AS calls_7d
+        FROM ai_usage_log
+        WHERE timestamp > NOW() - INTERVAL '7 days'
+        GROUP BY endpoint
+      `)
+    ]);
+
+    const trend = {};
+    for (const r of last7Result.rows) trend[r.endpoint] = parseInt(r.calls_7d);
+
+    const tools = allTimeResult.rows.map(r => {
+      const total = parseInt(r.total_calls);
+      const errors = parseInt(r.errors);
+      return {
+        label: LABELS[r.endpoint] || r.endpoint,
+        endpoint: r.endpoint,
+        total_calls: total,
+        successes: parseInt(r.successes),
+        errors,
+        error_rate: total > 0 ? ((errors / total) * 100).toFixed(1) + '%' : '0.0%',
+        last_7_days: trend[r.endpoint] || 0
+      };
+    });
+
+    const total_ai_requests_all_time = tools.reduce((sum, t) => sum + t.total_calls, 0);
+
+    const data = {
+      generated_at: new Date().toISOString(),
+      total_ai_requests_all_time,
+      tools
+    };
+
+    res.setHeader('Content-Type', 'text/html');
+    res.send(`<html><body><pre id="data">${JSON.stringify(data, null, 2)}</pre></body></html>`);
+  } catch(err) {
+    console.error('Tool stats HTML error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: USAGE NUDGE EMAIL CONVERSION ANALYTICS ─────────────────────────────
 app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
   const user = await getUserFromSession(req);
