@@ -3551,26 +3551,39 @@ function parseRssItems(xml, maxItems = 8) {
   return items;
 }
 
-async function fetchSlickDeals(query) {
-  const url = `https://slickdeals.net/newsearch.php?mode=frontpage&q=${encodeURIComponent(query)}&searcharea=deals&searchin=first&rss=1`;
+// Filters out results that don't look like actual price deals
+const DEAL_PATTERN = /\$[\d.]+|%\s*off|\d+%\s*off|clearance|sale|deal|free\b|discount|rebate|coupon|rollback|price drop|markdown|savings|save\b/i;
+
+function isDealItem(item) {
+  return DEAL_PATTERN.test(item.title) || DEAL_PATTERN.test(item.desc);
+}
+
+async function fetchSlickDeals(storeSlug) {
+  // Store-specific deal pages list only actual deals at that store (not just mentions)
+  const url = `https://slickdeals.net/deals/${storeSlug}/?rss=1`;
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NCOKit/1.0)' } });
     if (!res.ok) return [];
-    return parseRssItems(await res.text());
+    const items = parseRssItems(await res.text(), 12);
+    return items.filter(isDealItem).slice(0, 8);
   } catch { return []; }
 }
 
 async function fetchRedditPennyItems(subreddit) {
-  const url = `https://www.reddit.com/r/${subreddit}/search.json?q=penny&sort=new&t=week&limit=5`;
+  // Search for exact phrase "penny item" to avoid unrelated posts
+  const url = `https://www.reddit.com/r/${subreddit}/search.json?q=%22penny+item%22&sort=new&t=week&limit=10`;
   try {
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NCOKit/1.0)' } });
     if (!res.ok) return [];
     const json = await res.json();
-    return (json?.data?.children || []).map(c => ({
-      title: c.data.title,
-      link:  `https://reddit.com${c.data.permalink}`,
-      desc:  (c.data.selftext || '').slice(0, 200)
-    }));
+    return (json?.data?.children || [])
+      .map(c => ({
+        title: c.data.title,
+        link:  `https://reddit.com${c.data.permalink}`,
+        desc:  (c.data.selftext || '').slice(0, 200)
+      }))
+      .filter(item => /penny item|penny find|\$0\.01|0\.01/i.test(item.title + ' ' + item.desc))
+      .slice(0, 5);
   } catch { return []; }
 }
 
