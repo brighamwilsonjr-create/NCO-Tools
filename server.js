@@ -3531,6 +3531,127 @@ app.post('/api/admin/blog/create', async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// DEAL REPORT — Weekly Friday email with big box store deals
+// Trigger: POST /api/admin/deal-report with x-report-secret header
+// Sources: SlickDeals RSS + Reddit penny item community posts
+// ═══════════════════════════════════════════════════════════════════
+
+function parseRssItems(xml, maxItems = 8) {
+  const items = [];
+  const itemRegex = /<item>([\s\S]*?)<\/item>/g;
+  let match;
+  while ((match = itemRegex.exec(xml)) !== null && items.length < maxItems) {
+    const block = match[1];
+    const title = (/<title><!\[CDATA\[(.*?)\]\]><\/title>/.exec(block) || /<title>(.*?)<\/title>/.exec(block) || [])[1] || '';
+    const link  = (/<link>(.*?)<\/link>/.exec(block) || [])[1] || '';
+    const desc  = (/<description><!\[CDATA\[(.*?)\]\]><\/description>/.exec(block) || /<description>(.*?)<\/description>/.exec(block) || [])[1] || '';
+    if (title) items.push({ title: title.trim(), link: link.trim(), desc: desc.trim() });
+  }
+  return items;
+}
+
+async function fetchSlickDeals(query) {
+  const url = `https://slickdeals.net/newsearch.php?mode=frontpage&q=${encodeURIComponent(query)}&searcharea=deals&searchin=first&rss=1`;
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NCOKit/1.0)' } });
+    if (!res.ok) return [];
+    return parseRssItems(await res.text());
+  } catch { return []; }
+}
+
+async function fetchRedditPennyItems(subreddit) {
+  const url = `https://www.reddit.com/r/${subreddit}/search.json?q=penny&sort=new&t=week&limit=5`;
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NCOKit/1.0)' } });
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json?.data?.children || []).map(c => ({
+      title: c.data.title,
+      link:  `https://reddit.com${c.data.permalink}`,
+      desc:  (c.data.selftext || '').slice(0, 200)
+    }));
+  } catch { return []; }
+}
+
+function dealReportRow(item) {
+  const cleanDesc = item.desc.replace(/<[^>]+>/g, '').slice(0, 180);
+  return `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid #f0f0f0;">
+        <a href="${item.link}" style="color:#d4380d;font-weight:600;text-decoration:none;font-size:14px;">${item.title}</a>
+        ${cleanDesc ? `<div style="color:#666;font-size:12px;margin-top:4px;">${cleanDesc}…</div>` : ''}
+      </td>
+    </tr>`;
+}
+
+function dealSection(items, fallbackLabel) {
+  if (!items.length) return `<tr><td style="padding:8px 0;color:#999;font-size:13px;">No ${fallbackLabel} found this week.</td></tr>`;
+  return items.map(dealReportRow).join('');
+}
+
+app.post('/api/admin/deal-report', async (req, res) => {
+  const secret = req.headers['x-report-secret'] || req.query.secret;
+  if (!secret || secret !== process.env.WEEKLY_REPORT_SECRET) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  try {
+    const [lowesDeals, hdDeals, walmartDeals, hdPenny, lowesPenny] = await Promise.all([
+      fetchSlickDeals('lowes'),
+      fetchSlickDeals('home depot'),
+      fetchSlickDeals('walmart'),
+      fetchRedditPennyItems('HomeDepot'),
+      fetchRedditPennyItems('Lowes'),
+    ]);
+
+    const today = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Weekly Deal Report</title></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+<div style="max-width:600px;margin:20px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.1);">
+
+  <div style="background:#1a1a2e;padding:24px;text-align:center;">
+    <div style="font-size:28px;margin-bottom:4px;">&#x1F6D2;</div>
+    <h1 style="color:#fff;margin:0;font-size:22px;">Weekly Deal Report</h1>
+    <div style="color:#aaa;font-size:13px;margin-top:6px;">${today} &mdash; ZIP 40160 area</div>
+  </div>
+
+  <div style="padding:20px 24px;">
+
+    <h2 style="color:#1a1a2e;font-size:16px;border-bottom:2px solid #f96302;padding-bottom:6px;margin-bottom:0;">&#x1FA99; Penny Item Alerts &mdash; Home Depot</h2>
+    <table style="width:100%;border-collapse:collapse;">${dealSection(hdPenny, 'Home Depot penny items')}</table>
+
+    <h2 style="color:#1a1a2e;font-size:16px;border-bottom:2px solid #0072ce;padding-bottom:6px;margin-bottom:0;margin-top:24px;">&#x1FA99; Penny Item Alerts &mdash; Lowe's</h2>
+    <table style="width:100%;border-collapse:collapse;">${dealSection(lowesPenny, "Lowe's penny items")}</table>
+
+    <h2 style="color:#1a1a2e;font-size:16px;border-bottom:2px solid #0072ce;padding-bottom:6px;margin-bottom:0;margin-top:24px;">&#x1F535; Lowe's Deals</h2>
+    <table style="width:100%;border-collapse:collapse;">${dealSection(lowesDeals, "Lowe's deals")}</table>
+
+    <h2 style="color:#1a1a2e;font-size:16px;border-bottom:2px solid #f96302;padding-bottom:6px;margin-bottom:0;margin-top:24px;">&#x1F7E0; Home Depot Deals</h2>
+    <table style="width:100%;border-collapse:collapse;">${dealSection(hdDeals, 'Home Depot deals')}</table>
+
+    <h2 style="color:#1a1a2e;font-size:16px;border-bottom:2px solid #0071ce;padding-bottom:6px;margin-bottom:0;margin-top:24px;">&#x1F7E1; Walmart Deals</h2>
+    <table style="width:100%;border-collapse:collapse;">${dealSection(walmartDeals, 'Walmart deals')}</table>
+
+  </div>
+
+  <div style="background:#f8f8f8;padding:16px 24px;text-align:center;font-size:12px;color:#999;border-top:1px solid #eee;">
+    Weekly Deal Report &mdash; Personal &mdash; Deals sourced from SlickDeals &amp; Reddit community posts
+  </div>
+</div>
+</body></html>`;
+
+    await sendEmail('brighamwilsonjr@gmail.com', `Weekly Deal Report — ${today}`, html);
+    console.log(`Deal report sent: lowes=${lowesDeals.length} hd=${hdDeals.length} walmart=${walmartDeals.length} hdPenny=${hdPenny.length} lowesPenny=${lowesPenny.length}`);
+    res.json({ success: true, counts: { lowes: lowesDeals.length, homeDepot: hdDeals.length, walmart: walmartDeals.length, hdPenny: hdPenny.length, lowesPenny: lowesPenny.length } });
+  } catch (err) {
+    console.error('Deal report error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
