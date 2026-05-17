@@ -542,10 +542,10 @@ async function sendUsageNudgeEmail(email, templateType) {
     // Template D: Price Anchor / Shopette
     subject = '💰 Less than a shopette run — Go Premium';
     heading = 'Less Than 2 Monsters and a Tornado';
-    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">$10 a month. That's less than 2 Monsters and a Tornado at the shopette — or go annual for $97 and save 19%.</p>
+    mainMessage = `<p style="color:#a08e65;font-size:14px;line-height:1.6;">$8 a month. That's less than 2 Monsters and a Tornado at the shopette.</p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;">In return you get <strong>unlimited</strong> NCOER bullets, DA 4856 counselings, award citations, OER support, and your whole Soldier roster in one place — no monthly limits, no waiting for a reset.</p>
       <p style="color:#a08e65;font-size:14px;line-height:1.6;"><strong>Your career is worth more than an energy drink run.</strong></p>`;
-    cta = 'Go Unlimited — Starting at $10/month';
+    cta = 'Go Unlimited — $8/month';
   }
 
   const html = `<div style="${baseStyle}">
@@ -1162,10 +1162,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'Not authenticated' });
   if (user.plan === 'premium') return res.status(400).json({ error: 'Already premium' });
 
-  const { plan } = req.body || {};
-  const priceId = plan === 'annual'
-    ? process.env.STRIPE_PRICE_ID_ANNUAL
-    : process.env.STRIPE_PRICE_ID_MONTHLY;
+  const priceId = process.env.STRIPE_PRICE_ID_MONTHLY;
 
   if (!priceId) return res.status(500).json({ error: 'Pricing not configured' });
 
@@ -1178,7 +1175,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       const coupon = await stripe.coupons.create({ percent_off: 100, duration: 'once' });
       discounts = [{ coupon: coupon.id }];
       freeMontUsed = true;
-    } else if (user.referred_by && !user.stripe_customer_id && plan !== 'annual') {
+    } else if (user.referred_by && !user.stripe_customer_id) {
       // Referred user gets 50% off first month
       const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
       discounts = [{ coupon: coupon.id }];
