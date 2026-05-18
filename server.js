@@ -246,14 +246,14 @@ async function cleanupSessions() {
 
 
 // Email via Resend REST API - no SDK needed
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, html, from = 'NCO Kit <noreply@ncokit.com>') {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${process.env.RESEND_API_KEY}`
     },
-    body: JSON.stringify({ from: 'NCO Kit <noreply@ncokit.com>', to, subject, html })
+    body: JSON.stringify({ from, to, subject, html })
   });
   const data = await response.json();
   console.log('Resend response:', JSON.stringify(data));
@@ -559,7 +559,7 @@ async function sendUsageNudgeEmail(email, templateType) {
     </p>
   </div>`;
 
-  await sendEmail(email, subject, html);
+  await sendEmail(email, subject, html, 'Henry @ NCO Kit <henry@ncokit.com>');
 }
 
 // Check for 80% usage and send nudge emails
@@ -2711,9 +2711,9 @@ app.post('/api/admin/send-support-email', async (req, res) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
       body: JSON.stringify({
-        from: 'NCO Kit <noreply@ncokit.com>',
+        from: 'Henry @ NCO Kit <henry@ncokit.com>',
         to,
-        reply_to: 'brighamwilsonjr@gmail.com',
+        reply_to: 'henry@ncokit.com',
         subject,
         html: `
           <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;">
@@ -3131,7 +3131,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            from: 'Henry @ NCO Kit <noreply@ncokit.com>',
+            from: 'Henry @ NCO Kit <henry@ncokit.com>',
             to: user.email,
             subject: "You've got 10 free NCOER bullets waiting",
             html
