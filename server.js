@@ -2698,6 +2698,24 @@ app.get('/api/admin/user-status', async (req, res) => {
   }
 });
 
+// ── ADMIN: MANUALLY SET USER TO PREMIUM ────────────────────────────────────────
+app.post('/api/admin/set-user-premium', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') return res.status(403).json({ error: 'Admin only' });
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId required' });
+  try {
+    const result = await pool.query(
+      `UPDATE users SET plan = 'premium', updated_at = NOW() WHERE id = $1 RETURNING id, email, plan`,
+      [userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ success: true, user: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: SEND SUPPORT EMAIL ───────────────────────────────────────────────────
 app.post('/api/admin/send-support-email', async (req, res) => {
   const user = await getUserFromSession(req);
