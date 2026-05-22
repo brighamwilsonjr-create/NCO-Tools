@@ -675,6 +675,54 @@ app.get('/sitemap.xml', async (req, res) => {
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://ncokit.com/bullets</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/counseling</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/awards</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/acft</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/memo</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/oer</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/narrative</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/roster</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://ncokit.com/privacy</loc>
     <lastmod>${today}</lastmod>
     <changefreq>yearly</changefreq>
@@ -3478,6 +3526,8 @@ app.get('/blog/:slug', async (req, res) => {
       "description": post.meta_description,
       "url": canonicalUrl,
       "datePublished": post.published_at,
+      "dateModified": post.updated_at || post.published_at,
+      "image": "https://ncokit.com/og-image.png",
       "author": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com" },
       "publisher": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com", "logo": { "@type": "ImageObject", "url": "https://ncokit.com/icons/icon-512.png" } }
     })}</script>`;
