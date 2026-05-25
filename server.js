@@ -3103,6 +3103,7 @@ app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
 // Targets verified free users with zero AI uses ever (checked via ai_usage_log)
 // Each sent user is stamped with reengagement_email_sent_at to prevent duplicates
 // Call with { batch: 0 } for first 48, { batch: 1 } for next 48, etc.
+// Test mode: pass { test: "you@example.com" } to send one preview without touching DB
 app.post('/api/admin/send-reengagement', async (req, res) => {
   const secret = req.headers['x-report-secret'];
   if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
@@ -3110,21 +3111,27 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
   const batchSize = 48;
   const batchNum  = parseInt(req.body.batch ?? 0);
   const offset    = batchNum * batchSize;
+  const testEmail = req.body.test || req.query.test;
 
   try {
-    const result = await pool.query(`
-      SELECT u.id, u.email, u.referral_code
-      FROM users u
-      WHERE u.verified = true
-        AND u.plan = 'free'
-        AND u.email != 'brighamwilsonjr@gmail.com'
-        AND NOT EXISTS (SELECT 1 FROM ai_usage_log a WHERE a.user_id = u.id)
-        AND u.reengagement_email_sent_at IS NULL
-      ORDER BY u.created_at DESC
-      LIMIT $1 OFFSET $2
-    `, [batchSize, offset]);
+    let recipients;
+    if (testEmail) {
+      recipients = [{ id: null, email: testEmail, referral_code: null }];
+    } else {
+      const result = await pool.query(`
+        SELECT u.id, u.email, u.referral_code
+        FROM users u
+        WHERE u.verified = true
+          AND u.plan = 'free'
+          AND u.email != 'brighamwilsonjr@gmail.com'
+          AND NOT EXISTS (SELECT 1 FROM ai_usage_log a WHERE a.user_id = u.id)
+          AND u.reengagement_email_sent_at IS NULL
+        ORDER BY u.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, [batchSize, offset]);
+      recipients = result.rows;
+    }
 
-    const recipients = result.rows;
     if (recipients.length === 0) return res.json({ sent: 0, batch: batchNum, message: 'No recipients in this batch — campaign complete' });
 
     const htmlTemplate = `<!DOCTYPE html>
@@ -3149,7 +3156,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
         <tr><td style="background:#242018;padding:36px 40px;">
           <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c8b88a;">
             You created an NCO Kit account but haven't tried any of the AI tools yet.
-            No pressure — we know the battle rhythm doesn't slow down.
+            It only takes about 60 seconds to see if it'll actually save you time — worth a look before your next NCOER is due.
           </p>
           <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#c8b88a;">
             When you get a free five minutes, here's what to try first: open the <strong style="color:#e8d4a0;">NCOER Bullet Builder</strong>,
@@ -3204,10 +3211,12 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
           })
         });
 
-        await pool.query(
-          `UPDATE users SET reengagement_email_sent_at = NOW() WHERE id = $1`,
-          [user.id]
-        );
+        if (user.id) {
+          await pool.query(
+            `UPDATE users SET reengagement_email_sent_at = NOW() WHERE id = $1`,
+            [user.id]
+          );
+        }
 
         sent++;
       } catch (e) {
