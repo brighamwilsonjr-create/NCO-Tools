@@ -3262,6 +3262,38 @@ app.get('/api/admin/reengagement-stats', async (req, res) => {
 });
 
 
+// ── ADMIN: RE-ENGAGEMENT MISTAKE CHECK ───────────────────────────────────────
+// Checks if today's re-engagement send hit users who actually use the tool
+// (bullets_used_this_month > 0 but zero ai_usage_log rows = NCOER Bullet Builder users)
+app.get('/api/admin/reengagement-mistake-check', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const q = await pool.query(`
+      SELECT
+        COUNT(*)::int AS emailed_today_with_real_usage,
+        COUNT(*) FILTER (WHERE bullets_used_this_month >= 5)::int AS heavy_users_emailed,
+        COUNT(*) FILTER (WHERE bullets_used_this_month = 10)::int AS maxed_out_users_emailed
+      FROM users
+      WHERE reengagement_email_sent_at > NOW() - INTERVAL '24 hours'
+        AND bullets_used_this_month > 0
+    `);
+    const sample = await pool.query(`
+      SELECT email, bullets_used_this_month, reengagement_email_sent_at
+      FROM users
+      WHERE reengagement_email_sent_at > NOW() - INTERVAL '24 hours'
+        AND bullets_used_this_month > 0
+      ORDER BY bullets_used_this_month DESC
+      LIMIT 10
+    `);
+    res.json({ counts: q.rows[0], sample: sample.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // ── ADMIN: USER LOOKUP ────────────────────────────────────────────────────────
 app.get('/api/admin/user-lookup', async (req, res) => {
   const secret = req.headers['x-report-secret'];
