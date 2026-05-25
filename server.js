@@ -1091,6 +1091,7 @@ app.post('/api/generate-4856', (req, res) => {
 });
 
 app.post('/api/bullets', aiLimiter, checkUsageLimit('bullets'), async (req, res) => {
+  const user = await getUserFromSession(req);
   const { name, category, action, impact, count, mos } = req.body;
   if (!action) return res.status(400).json({ error: 'Action field is required.' });
   const safeName = sanitizeInput(name, 100);
@@ -1161,10 +1162,15 @@ Respond with ONLY the bullets, one per line, nothing else.`;
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1000, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    if (data.error) {
+      await logAIRequest(user?.id, '/api/bullets', safeAction.length, false, data.error.message);
+      return res.status(500).json({ error: data.error.message });
+    }
     const bullets = data.content.map(i=>i.text||'').join('').trim().split('\n').map(b=>b.trim()).filter(b=>b.length>0);
+    await logAIRequest(user?.id, '/api/bullets', safeAction.length, true);
     res.json({ bullets });
   } catch (err) {
+    await logAIRequest(user?.id, '/api/bullets', safeAction.length, false, err.message);
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
@@ -1172,6 +1178,7 @@ Respond with ONLY the bullets, one per line, nothing else.`;
 
 // OER Bullet Builder
 app.post('/api/oer-bullets', aiLimiter, checkUsageLimit('bullets'), async (req, res) => {
+  const user = await getUserFromSession(req);
   const { officerName, rank, unit, attribute, accomplishments, count } = req.body;
   if (!attribute || !accomplishments) return res.status(400).json({ error: 'Attribute and accomplishments required.' });
   const attributeGuidance = {
@@ -1191,8 +1198,12 @@ app.post('/api/oer-bullets', aiLimiter, checkUsageLimit('bullets'), async (req, 
   try {
     const data = await anthropic.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 600, messages: [{ role: 'user', content: prompt }] });
     const bullets = data.content.map(i=>i.text||'').join('').trim().split('\n').map(b=>b.trim()).filter(b=>b.length>0);
+    await logAIRequest(user?.id, '/api/oer-bullets', safeAccomplishments.length, true);
     res.json({ bullets });
-  } catch(e) { res.status(500).json({ error: 'Generation failed' }); }
+  } catch(e) {
+    await logAIRequest(user?.id, '/api/oer-bullets', safeAccomplishments.length, false, e.message);
+    res.status(500).json({ error: 'Generation failed' });
+  }
 });
 
 app.post('/api/aft-score', (req, res) => {
@@ -1266,6 +1277,7 @@ app.post('/api/stripe/portal', async (req, res) => {
 
 // Awards Recommendation Writer
 app.post('/api/awards', aiLimiter, checkUsageLimit(1), async (req, res) => {
+  const user = await getUserFromSession(req);
   const { soldierName, rank, unit, awardLevel, period, accomplishments } = req.body;
   if (!accomplishments || !awardLevel) return res.status(400).json({ error: 'Award level and accomplishments are required.' });
   const safeSoldierName = sanitizeInput(soldierName, 100);
@@ -1363,7 +1375,10 @@ ADVISORY:
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    if (data.error) {
+      await logAIRequest(user?.id, '/api/awards', safeAccomplishments.length, false, data.error.message);
+      return res.status(500).json({ error: data.error.message });
+    }
 
     const text = data.content.map(i => i.text || '').join('').trim();
 
@@ -1389,14 +1404,17 @@ ADVISORY:
     const charCount = citation.length;
     const charLimit = award.charLimit;
 
+    await logAIRequest(user?.id, '/api/awards', safeAccomplishments.length, true);
     res.json({ bullets, citation, score, advisory, charCount, charLimit, awardName: award.name });
   } catch (err) {
+    await logAIRequest(user?.id, '/api/awards', safeAccomplishments.length, false, err.message);
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
 
 // Senior Rater Narrative
 app.post('/api/senior-rater', aiLimiter, checkUsageLimit(1), async (req, res) => {
+  const user = await getUserFromSession(req);
   const { evalType, name, rank, promotion, schooling, enumeration, nextLevel } = req.body;
   if (!enumeration) return res.status(400).json({ error: 'Peer ranking (Enumeration) is required.' });
 
@@ -1484,16 +1502,22 @@ HARD RULES:
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 450, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    if (data.error) {
+      await logAIRequest(user?.id, '/api/senior-rater', safeEnum.length, false, data.error.message);
+      return res.status(500).json({ error: data.error.message });
+    }
     const narrative = data.content.map(i => i.text || '').join('').trim();
+    await logAIRequest(user?.id, '/api/senior-rater', safeEnum.length, true);
     res.json({ narrative });
   } catch (err) {
+    await logAIRequest(user?.id, '/api/senior-rater', safeEnum.length, false, err.message);
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
 
 // Memo AI Enhancement
 app.post('/api/memo-enhance', aiLimiter, checkUsageLimit(1), async (req, res) => {
+  const user = await getUserFromSession(req);
   const { body, subject, type } = req.body;
   if (!body) return res.status(400).json({ error: 'Body is required.' });
 
@@ -1528,10 +1552,15 @@ Rules for Army memo body:
       body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1500, messages: [{ role: 'user', content: prompt }] })
     });
     const data = await response.json();
-    if (data.error) return res.status(500).json({ error: data.error.message });
+    if (data.error) {
+      await logAIRequest(user?.id, '/api/memo-enhance', safeBody.length, false, data.error.message);
+      return res.status(500).json({ error: data.error.message });
+    }
     const enhanced = data.content.map(i => i.text || '').join('').trim();
+    await logAIRequest(user?.id, '/api/memo-enhance', safeBody.length, true);
     res.json({ enhanced });
   } catch (err) {
+    await logAIRequest(user?.id, '/api/memo-enhance', safeBody.length, false, err.message);
     res.status(500).json({ error: 'Failed to reach AI service.' });
   }
 });
