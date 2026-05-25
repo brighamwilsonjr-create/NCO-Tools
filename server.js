@@ -3231,6 +3231,37 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 });
 
 
+// ── ADMIN: RE-ENGAGEMENT POOL BREAKDOWN ──────────────────────────────────────
+// Returns counts of zero-usage signups bucketed by verification + email status
+app.get('/api/admin/reengagement-stats', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const q = await pool.query(`
+      WITH zero_use AS (
+        SELECT u.id, u.verified, u.plan, u.reengagement_email_sent_at, u.created_at
+        FROM users u
+        WHERE u.email != 'brighamwilsonjr@gmail.com'
+          AND NOT EXISTS (SELECT 1 FROM ai_usage_log a WHERE a.user_id = u.id)
+      )
+      SELECT
+        COUNT(*)::int AS total_zero_use,
+        COUNT(*) FILTER (WHERE NOT verified)::int AS unverified,
+        COUNT(*) FILTER (WHERE verified AND plan = 'free' AND reengagement_email_sent_at IS NOT NULL)::int AS verified_free_emailed,
+        COUNT(*) FILTER (WHERE verified AND plan = 'free' AND reengagement_email_sent_at IS NULL)::int AS verified_free_pending,
+        COUNT(*) FILTER (WHERE verified AND plan = 'premium')::int AS verified_premium,
+        COUNT(*) FILTER (WHERE NOT verified AND created_at < NOW() - INTERVAL '7 days')::int AS unverified_older_than_7d,
+        COUNT(*) FILTER (WHERE NOT verified AND created_at < NOW() - INTERVAL '30 days')::int AS unverified_older_than_30d
+      FROM zero_use
+    `);
+    res.json(q.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // ── ADMIN: USER LOOKUP ────────────────────────────────────────────────────────
 app.get('/api/admin/user-lookup', async (req, res) => {
   const secret = req.headers['x-report-secret'];
