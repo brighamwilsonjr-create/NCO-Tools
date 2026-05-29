@@ -244,6 +244,25 @@ async function cleanupSessions() {
   }
 }
 
+// Proactively reset monthly bullet counters for users whose reset window has
+// elapsed. The per-request lazy reset in checkUsageLimit only fires when a
+// user hits an AI endpoint, so dormant users keep stale counters indefinitely
+// — which poisoned the 2026-05-29 usage-nudge campaign (84 sends, including
+// users who had been inactive for 70+ days). Running this daily keeps
+// bullets_used_this_month meaningful for targeting queries.
+async function resetStaleBulletCounters() {
+  try {
+    const result = await pool.query(
+      `UPDATE users
+       SET bullets_used_this_month = 0, bullets_reset_date = CURRENT_DATE
+       WHERE bullets_reset_date < CURRENT_DATE - INTERVAL '30 days'`
+    );
+    if (result.rowCount > 0) console.log(`Reset stale bullet counters for ${result.rowCount} users`);
+  } catch (err) {
+    console.error('Stale counter reset error:', err.message);
+  }
+}
+
 
 // Email via Resend REST API - no SDK needed
 async function sendEmail(to, subject, html, from = 'NCO Kit <noreply@ncokit.com>') {
@@ -3846,6 +3865,10 @@ app.listen(PORT, async () => {
   // Clean up expired sessions on start, then every 6 hours
   await cleanupSessions();
   setInterval(cleanupSessions, 6 * 60 * 60 * 1000);
+  // Reset stale per-user monthly bullet counters on start, then daily.
+  // Must run before scheduleUsageNudgeCheck so the first nudge pass sees fresh data.
+  await resetStaleBulletCounters();
+  setInterval(resetStaleBulletCounters, 24 * 60 * 60 * 1000);
   // Start daily usage nudge email check at 9 AM
   scheduleUsageNudgeCheck();
   console.log('Usage nudge scheduler initialized');
