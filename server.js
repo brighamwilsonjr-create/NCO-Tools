@@ -585,12 +585,16 @@ async function sendUsageNudgeEmail(email, templateType) {
 async function checkAndSendUsageNudges() {
   try {
     // Find free users with >= 8 uses out of 10 (80%)
+    // Freshness filter on bullets_reset_date is belt-and-suspenders against
+    // the daily resetStaleBulletCounters job silently failing — see
+    // feedback_audit_log_targeting memory.
     const freeUsers = await pool.query(`
       SELECT u.id, u.email, u.bullets_used_this_month
       FROM users u
       WHERE u.plan = 'free'
         AND u.email != 'brighamwilsonjr@gmail.com'
         AND u.bullets_used_this_month >= 8
+        AND u.bullets_reset_date > NOW() - INTERVAL '30 days'
         AND u.verified = true
         AND (u.usage_nudge_sent_at IS NULL OR u.usage_nudge_sent_at < NOW() - INTERVAL '30 days')
       LIMIT 100
@@ -2725,25 +2729,32 @@ app.get('/api/admin/usage-stats', async (req, res) => {
   try {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    // Users who have hit or are near the 10/month limit
+    // Users who have hit or are near the 10/month limit.
+    // bullets_reset_date freshness filter excludes stale dormants whose
+    // counters froze before the daily reset job catches them — see
+    // feedback_audit_log_targeting memory.
     const atLimit = await pool.query(`
       SELECT email, plan, bullets_used_this_month, bullets_reset_date, verified, created_at
       FROM users
       WHERE plan = 'free' AND bullets_used_this_month >= 10
+        AND bullets_reset_date > NOW() - INTERVAL '30 days'
       ORDER BY bullets_used_this_month DESC
     `);
     const nearLimit = await pool.query(`
       SELECT email, plan, bullets_used_this_month, bullets_reset_date, verified, created_at
       FROM users
       WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10
+        AND bullets_reset_date > NOW() - INTERVAL '30 days'
       ORDER BY bullets_used_this_month DESC
     `);
+    // not_used and total_* deliberately omit the freshness filter — they're
+    // population counts, not "in this cycle" counts.
     const allFree = await pool.query(`
       SELECT
         COUNT(*) FILTER (WHERE plan = 'free') AS total_free,
-        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 10) AS at_limit,
-        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10) AS near_limit,
-        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month > 0 AND bullets_used_this_month < 7) AS active_under_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 10 AND bullets_reset_date > NOW() - INTERVAL '30 days') AS at_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10 AND bullets_reset_date > NOW() - INTERVAL '30 days') AS near_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month > 0 AND bullets_used_this_month < 7 AND bullets_reset_date > NOW() - INTERVAL '30 days') AS active_under_limit,
         COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month = 0) AS not_used,
         COUNT(*) FILTER (WHERE plan = 'premium') AS total_premium
       FROM users
