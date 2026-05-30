@@ -2805,6 +2805,103 @@ app.get('/api/admin/user-status', async (req, res) => {
   }
 });
 
+// ── ADMIN: FULL USER USAGE (everything for one email) ──────────────────────────
+// Returns plan, subscription, counters, AI usage breakdown, saved items, etc.
+// NOTE: bullets_used_this_month is 0 for premium users (counter middleware skips
+// premium — see checkUsageLimit). Use ai_usage_breakdown for real premium usage.
+app.get('/api/admin/user-full-usage', async (req, res) => {
+  const admin = await getUserFromSession(req);
+  if (admin?.email !== 'brighamwilsonjr@gmail.com') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+  const { email } = req.query;
+  if (!email) return res.status(400).json({ error: 'email query param required' });
+  try {
+    const userQ = await pool.query(`
+      SELECT id, email, plan, verified, created_at, updated_at,
+             onboarding_completed, onboarding_completed_at,
+             bullets_used_this_month, bullets_reset_date,
+             stripe_customer_id, stripe_subscription_id,
+             referral_code, referred_by,
+             usage_nudge_sent_at, usage_nudge_template, usage_nudge_converted,
+             reengagement_email_sent_at,
+             CASE WHEN reset_token IS NULL THEN 'no_pending_reset' ELSE 'has_pending_reset' END AS reset_status,
+             reset_expires
+      FROM users WHERE email = $1
+    `, [email.toLowerCase()]);
+    if (userQ.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const u = userQ.rows[0];
+
+    const [sessions, totals, byEndpoint, last7, last30, recent,
+           bullets, counselings, awards, oerBullets] = await Promise.all([
+      pool.query('SELECT count(*)::int AS c FROM sessions WHERE user_id = $1', [u.id]),
+      pool.query(`
+        SELECT
+          COUNT(*)::int AS total_calls,
+          COUNT(*) FILTER (WHERE success)::int AS successful,
+          COUNT(*) FILTER (WHERE NOT success)::int AS failed,
+          MIN(timestamp) AS first_call,
+          MAX(timestamp) AS last_call
+        FROM ai_usage_log WHERE user_id = $1
+      `, [u.id]),
+      pool.query(`
+        SELECT endpoint,
+               COUNT(*)::int AS calls,
+               COUNT(*) FILTER (WHERE success)::int AS successful,
+               MAX(timestamp) AS last_used
+        FROM ai_usage_log
+        WHERE user_id = $1
+        GROUP BY endpoint
+        ORDER BY calls DESC
+      `, [u.id]),
+      pool.query(`
+        SELECT COUNT(*)::int AS c FROM ai_usage_log
+        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '7 days'
+      `, [u.id]),
+      pool.query(`
+        SELECT COUNT(*)::int AS c FROM ai_usage_log
+        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
+      `, [u.id]),
+      pool.query(`
+        SELECT endpoint, success, error_message, input_length, timestamp
+        FROM ai_usage_log
+        WHERE user_id = $1
+        ORDER BY timestamp DESC
+        LIMIT 10
+      `, [u.id]),
+      pool.query('SELECT count(*)::int AS c FROM saved_bullets WHERE user_id = $1', [u.id]),
+      pool.query('SELECT count(*)::int AS c FROM saved_counselings WHERE user_id = $1', [u.id]),
+      pool.query('SELECT count(*)::int AS c FROM saved_awards WHERE user_id = $1', [u.id]),
+      pool.query('SELECT count(*)::int AS c FROM saved_oer_bullets WHERE user_id = $1', [u.id]),
+    ]);
+
+    res.json({
+      user: u,
+      active_sessions: sessions.rows[0].c,
+      ai_usage_totals: {
+        ...totals.rows[0],
+        last_7_days: last7.rows[0].c,
+        last_30_days: last30.rows[0].c,
+      },
+      ai_usage_by_endpoint: byEndpoint.rows,
+      ai_usage_recent_10: recent.rows,
+      saved_items: {
+        bullets: bullets.rows[0].c,
+        counselings: counselings.rows[0].c,
+        awards: awards.rows[0].c,
+        oer_bullets: oerBullets.rows[0].c,
+      },
+      notes: {
+        bullets_counter: u.plan === 'premium'
+          ? 'Premium plan — bullets_used_this_month is NOT incremented for premium users. Use ai_usage_totals for actual usage.'
+          : 'Free plan — bullets_used_this_month reflects AI calls in current 30-day window from bullets_reset_date.',
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: MANUALLY SET USER TO PREMIUM ────────────────────────────────────────
 app.post('/api/admin/set-user-premium', async (req, res) => {
   const user = await getUserFromSession(req);
