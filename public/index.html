@@ -759,14 +759,14 @@
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-VV26RCZYJ0"></script>
 <script>
-  // ── Safe Storage — government/restricted computers block safeStorage ──────
-  // Falls back: safeStorage → sessionStorage → in-memory. Fully transparent.
+  // ── Safe Storage — government/restricted computers block localStorage ──────
+  // Falls back: localStorage → sessionStorage → in-memory. Fully transparent.
   const safeStorage = (function() {
     function test(s) {
       try { s.setItem('__t__', '1'); s.removeItem('__t__'); return true; }
       catch(e) { return false; }
     }
-    if (test(window.safeStorage))  return window.safeStorage;
+    if (test(window.localStorage))  return window.localStorage;
     if (test(window.sessionStorage)) return window.sessionStorage;
     // In-memory fallback (session only, no persistence — but app stays functional)
     const _m = {};
