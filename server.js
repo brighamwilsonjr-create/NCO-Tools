@@ -2902,6 +2902,76 @@ app.get('/api/admin/user-full-usage', async (req, res) => {
   }
 });
 
+// ── ADMIN: PREMIUM ENGAGEMENT BREAKDOWN ────────────────────────────────────────
+// How many premium users actually use the product? Answers the question:
+// "Of my paying customers, how many have made zero AI calls?"
+app.get('/api/admin/premium-engagement', async (req, res) => {
+  const admin = await getUserFromSession(req);
+  if (admin?.email !== 'brighamwilsonjr@gmail.com') {
+    return res.status(403).json({ error: 'Admin only' });
+  }
+  try {
+    const result = await pool.query(`
+      WITH premium_users AS (
+        SELECT id, email, created_at, onboarding_completed_at, stripe_customer_id
+        FROM users WHERE plan = 'premium'
+      ),
+      user_calls AS (
+        SELECT
+          pu.id, pu.email, pu.created_at, pu.onboarding_completed_at, pu.stripe_customer_id,
+          COALESCE(COUNT(a.id), 0)::int AS total_calls,
+          COALESCE(COUNT(a.id) FILTER (WHERE a.timestamp > NOW() - INTERVAL '7 days'), 0)::int AS calls_7d,
+          COALESCE(COUNT(a.id) FILTER (WHERE a.timestamp > NOW() - INTERVAL '30 days'), 0)::int AS calls_30d,
+          MAX(a.timestamp) AS last_call
+        FROM premium_users pu
+        LEFT JOIN ai_usage_log a ON a.user_id = pu.id
+        GROUP BY pu.id, pu.email, pu.created_at, pu.onboarding_completed_at, pu.stripe_customer_id
+      )
+      SELECT * FROM user_calls ORDER BY total_calls DESC, created_at ASC
+    `);
+    const rows = result.rows;
+    const total = rows.length;
+    const zero = rows.filter(r => r.total_calls === 0).length;
+    const oneToFive = rows.filter(r => r.total_calls >= 1 && r.total_calls <= 5).length;
+    const moreThanFive = rows.filter(r => r.total_calls > 5).length;
+    const active7d = rows.filter(r => r.calls_7d > 0).length;
+    const active30d = rows.filter(r => r.calls_30d > 0).length;
+    const noStripe = rows.filter(r => !r.stripe_customer_id).length; // gifted/manual premium
+
+    res.json({
+      summary: {
+        total_premium: total,
+        zero_calls_ever: zero,
+        zero_calls_pct: total > 0 ? Math.round((zero / total) * 100) : 0,
+        one_to_five_calls: oneToFive,
+        more_than_five_calls: moreThanFive,
+        active_last_7d: active7d,
+        active_last_30d: active30d,
+        no_stripe_customer_id: noStripe,
+      },
+      dormant_premium: rows
+        .filter(r => r.total_calls === 0)
+        .map(r => ({
+          email: r.email,
+          signed_up: r.created_at,
+          onboarded_at: r.onboarding_completed_at,
+          has_stripe: !!r.stripe_customer_id,
+        })),
+      all_premium_by_usage: rows.map(r => ({
+        email: r.email,
+        total_calls: r.total_calls,
+        calls_30d: r.calls_30d,
+        calls_7d: r.calls_7d,
+        last_call: r.last_call,
+        signed_up: r.created_at,
+        has_stripe: !!r.stripe_customer_id,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: MANUALLY SET USER TO PREMIUM ────────────────────────────────────────
 app.post('/api/admin/set-user-premium', async (req, res) => {
   const user = await getUserFromSession(req);
