@@ -2599,7 +2599,7 @@
     empty.style.display = 'none';
     list.innerHTML = items.map(function(item) {
       const bullets = Array.isArray(item.bullets) ? item.bullets : [];
-      return '<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><strong>' + (item.rank || '') + ' ' + (item.officer_name || 'Unknown Officer') + '</strong><span style="color:var(--tan);font-size:12px;margin-left:8px">' + (item.attribute || '') + '</span>' + (item.unit ? '<span style="color:var(--text-muted);font-size:11px;margin-left:8px">&middot; ' + item.unit + '</span>' : '') + '</div><button class="btn btn-sm btn-danger" onclick="deleteOERBullet(\'' + item.id + '\',this)">\uD83D\uDDD1\uFE0F Delete</button></div>' + bullets.map(function(b) { return '<div class="bullet-item" style="padding:10px;background:var(--dark);border-radius:6px;margin-bottom:6px;font-size:13px">' + b + '</div>'; }).join('') + '<small style="color:var(--text-muted)">' + new Date(item.created_at).toLocaleDateString() + '</small></div>';
+      return '<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div><strong>' + escHtml(item.rank || '') + ' ' + escHtml(item.officer_name || 'Unknown Officer') + '</strong><span style="color:var(--tan);font-size:12px;margin-left:8px">' + escHtml(item.attribute || '') + '</span>' + (item.unit ? '<span style="color:var(--text-muted);font-size:11px;margin-left:8px">&middot; ' + escHtml(item.unit) + '</span>' : '') + '</div><button class="btn btn-sm btn-danger" onclick="deleteOERBullet(\'' + escAttr(item.id) + '\',this)">\uD83D\uDDD1\uFE0F Delete</button></div>' + bullets.map(function(b) { return '<div class="bullet-item" style="padding:10px;background:var(--dark);border-radius:6px;margin-bottom:6px;font-size:13px">' + escHtml(b) + '</div>'; }).join('') + '<small style="color:var(--text-muted)">' + new Date(item.created_at).toLocaleDateString() + '</small></div>';
     }).join('');
   }
 
@@ -4350,7 +4350,7 @@ async function generateAward() {
 
       // Render bullets
       const bulletsList = document.getElementById('awardsBulletsList');
-      bulletsList.innerHTML = (data.bullets || []).map(b => `<div class="bullet-line">${b}</div>`).join('');
+      bulletsList.innerHTML = (data.bullets || []).map(b => `<div class="bullet-line">${escHtml(b)}</div>`).join('');
 
       // Render citation
       document.getElementById('awardsCitationTitle').textContent = `${data.awardName} — NARRATIVE CITATION`;
@@ -4365,7 +4365,7 @@ async function generateAward() {
       // Score
       if (data.score) {
         const scoreEl = document.getElementById('awardsScore');
-        scoreEl.innerHTML = `<span style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; display:block; margin-bottom:2px;">PACKAGE STRENGTH</span>⭐ ${data.score}`;
+        scoreEl.innerHTML = `<span style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); letter-spacing:1px; display:block; margin-bottom:2px;">PACKAGE STRENGTH</span>⭐ ${escHtml(data.score)}`;
       }
 
       // Advisory
@@ -4493,16 +4493,16 @@ async function generateAward() {
     el.innerHTML = items.map(a => `
       <div class="card" style="margin-bottom:12px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>${a.soldier_name || 'Unknown'} — ${a.award_level}</span>
+          <span>${escHtml(a.soldier_name || 'Unknown')} — ${escHtml(a.award_level || '')}</span>
           <div style="display:flex; gap:8px; align-items:center;">
-            ${a.score ? `<span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);">⭐ ${a.score}</span>` : ''}
-            <button class="btn btn-danger" onclick="deleteSave('award','${a.id}')">Delete</button>
+            ${a.score ? `<span style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan);">⭐ ${escHtml(a.score)}</span>` : ''}
+            <button class="btn btn-danger" onclick="deleteSave('award','${escAttr(a.id)}')">Delete</button>
           </div>
         </div>
         <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-bottom:8px;">
-          ${a.unit || ''} | ${a.period || ''} | Saved ${new Date(a.created_at).toLocaleDateString()}
+          ${escHtml(a.unit || '')} | ${escHtml(a.period || '')} | Saved ${new Date(a.created_at).toLocaleDateString()}
         </div>
-        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8; background:var(--od-dark); padding:12px; border:1px solid var(--border);">${a.citation}</div>
+        <div style="font-family:'Libre Franklin',sans-serif; font-size:13px; color:var(--white); line-height:1.8; background:var(--od-dark); padding:12px; border:1px solid var(--border);">${escHtml(a.citation || '')}</div>
         <div class="btn-row" style="margin-top:8px;">
           <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(this.closest('.card').querySelector('div[style*=Libre]').textContent); this.textContent='✓ Copied'; setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
         </div>
@@ -4527,14 +4527,14 @@ async function generateAward() {
     el.innerHTML = items.map(c => `
       <div class="card" style="margin-bottom:12px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>${c.soldier_name || 'Unknown'} — ${typeLabels[c.counseling_type] || c.counseling_type || 'Counseling'}</span>
+          <span>${escHtml(c.soldier_name || 'Unknown')} — ${escHtml(typeLabels[c.counseling_type] || c.counseling_type || 'Counseling')}</span>
           <div style="display:flex; gap:8px;">
-            <button class="btn btn-secondary btn-sm" onclick="loadCounseling(${JSON.stringify(c).replace(/"/g, '&quot;')})">Load</button>
-            <button class="btn btn-danger" onclick="deleteSave('counseling','${c.id}')">Delete</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadCounseling(${escAttr(JSON.stringify(c))})">Load</button>
+            <button class="btn btn-danger" onclick="deleteSave('counseling','${escAttr(c.id)}')">Delete</button>
           </div>
         </div>
         <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark);">
-          ${c.unit || ''} | ${c.date || ''} | Saved ${new Date(c.created_at).toLocaleDateString()}
+          ${escHtml(c.unit || '')} | ${escHtml(c.date || '')} | Saved ${new Date(c.created_at).toLocaleDateString()}
         </div>
       </div>
     `).join('');
@@ -4548,11 +4548,11 @@ async function generateAward() {
     el.innerHTML = items.map(b => `
       <div class="card" style="margin-bottom:12px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>${b.soldier_name || 'Unknown'} — ${b.category}</span>
-          <button class="btn btn-danger" onclick="deleteSave('bullets','${b.id}')">Delete</button>
+          <span>${escHtml(b.soldier_name || 'Unknown')} — ${escHtml(b.category || '')}</span>
+          <button class="btn btn-danger" onclick="deleteSave('bullets','${escAttr(b.id)}')">Delete</button>
         </div>
         <div class="bullet-output visible" style="margin-top:8px;">
-          ${(b.bullets || []).map(bullet => `<div class="bullet-line">${bullet}</div>`).join('')}
+          ${(b.bullets || []).map(bullet => `<div class="bullet-line">${escHtml(bullet)}</div>`).join('')}
         </div>
         <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); margin-top:8px;">
           Saved ${new Date(b.created_at).toLocaleDateString()}
@@ -4569,15 +4569,15 @@ async function generateAward() {
     el.innerHTML = items.map(a => `
       <div class="card" style="margin-bottom:12px;">
         <div class="card-title" style="display:flex; justify-content:space-between; align-items:center;">
-          <span>${a.soldier_name || 'Unknown'} — ${a.test_date || ''}</span>
+          <span>${escHtml(a.soldier_name || 'Unknown')} — ${escHtml(a.test_date || '')}</span>
           <div style="display:flex; gap:8px; align-items:center;">
             <span style="font-family:'Oswald',sans-serif; font-size:18px; color:${a.pass_fail ? '#4CAF50' : '#f44336'};">${a.pass_fail ? 'GO' : 'NO-GO'}</span>
-            <button class="btn btn-danger" onclick="deleteSave('aft','${a.id}')">Delete</button>
+            <button class="btn btn-danger" onclick="deleteSave('aft','${escAttr(a.id)}')">Delete</button>
           </div>
         </div>
         <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); line-height:1.8;">
-          Total: ${a.total} | ${a.standard?.toUpperCase()} | Age: ${a.age} ${a.sex}<br>
-          MDL: ${a.mdl_raw} (${a.mdl_pts}pts) | HRP: ${a.hrp_raw} (${a.hrp_pts}pts) | SDC: ${a.sdc_raw} (${a.sdc_pts}pts) | PLK: ${a.plk_raw} (${a.plk_pts}pts) | 2MR: ${a.tmr_raw} (${a.tmr_pts}pts)
+          Total: ${escHtml(a.total)} | ${escHtml((a.standard || '').toUpperCase())} | Age: ${escHtml(a.age)} ${escHtml(a.sex)}<br>
+          MDL: ${escHtml(a.mdl_raw)} (${escHtml(a.mdl_pts)}pts) | HRP: ${escHtml(a.hrp_raw)} (${escHtml(a.hrp_pts)}pts) | SDC: ${escHtml(a.sdc_raw)} (${escHtml(a.sdc_pts)}pts) | PLK: ${escHtml(a.plk_raw)} (${escHtml(a.plk_pts)}pts) | 2MR: ${escHtml(a.tmr_raw)} (${escHtml(a.tmr_pts)}pts)
         </div>
       </div>
     `).join('');
@@ -4595,13 +4595,13 @@ async function generateAward() {
           ${items.map(s => {
             const badgeClass = s.status === 'current' ? 'badge-green' : s.status === 'due' ? 'badge-yellow' : 'badge-red';
             return `<tr>
-              <td><strong>${s.name}</strong></td>
-              <td>${s.rank}</td>
-              <td>${s.mos || '—'}</td>
-              <td>${s.last_counseling || '—'}</td>
-              <td><span class="badge ${badgeClass}">${s.status}</span></td>
-              <td style="font-size:12px; color:var(--tan-dark)">${s.notes || '—'}</td>
-              <td><button class="btn btn-danger" onclick="deleteSave('soldier','${s.id}')">Delete</button></td>
+              <td><strong>${escHtml(s.name || '')}</strong></td>
+              <td>${escHtml(s.rank || '')}</td>
+              <td>${escHtml(s.mos || '—')}</td>
+              <td>${escHtml(s.last_counseling || '—')}</td>
+              <td><span class="badge ${badgeClass}">${escHtml(s.status || '')}</span></td>
+              <td style="font-size:12px; color:var(--tan-dark)">${escHtml(s.notes || '—')}</td>
+              <td><button class="btn btn-danger" onclick="deleteSave('soldier','${escAttr(s.id)}')">Delete</button></td>
             </tr>`;
           }).join('')}
         </tbody>
