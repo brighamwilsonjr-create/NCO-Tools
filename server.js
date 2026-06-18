@@ -288,26 +288,6 @@ function generateReferralCode() {
   return crypto.randomBytes(4).toString('hex').toUpperCase();
 }
 
-// Timing-safe string equality for secret comparison. Plain === short-circuits
-// on first byte mismatch, leaking length+prefix info via response timing.
-function safeEqualString(a, b) {
-  if (typeof a !== 'string' || typeof b !== 'string') return false;
-  const aBuf = Buffer.from(a);
-  const bBuf = Buffer.from(b);
-  if (aBuf.length !== bBuf.length) return false;
-  return crypto.timingSafeEqual(aBuf, bBuf);
-}
-
-// Admin-aware error response. Leaks err.message to the admin user (so Henry's
-// PowerShell debugging stays useful) but returns a generic message to everyone
-// else — prevents DB schema / library version disclosure to attackers.
-function safeErr(err, admin = null, fallback = 'Internal error') {
-  if (admin?.email === 'brighamwilsonjr@gmail.com') {
-    return { error: err.message };
-  }
-  return { error: fallback };
-}
-
 // Sanitize user input before sending to AI — strip potential prompt injection attempts
 function sanitizeInput(str, maxLen = 2000) {
   if (!str) return '';
@@ -605,16 +585,12 @@ async function sendUsageNudgeEmail(email, templateType) {
 async function checkAndSendUsageNudges() {
   try {
     // Find free users with >= 8 uses out of 10 (80%)
-    // Freshness filter on bullets_reset_date is belt-and-suspenders against
-    // the daily resetStaleBulletCounters job silently failing — see
-    // feedback_audit_log_targeting memory.
     const freeUsers = await pool.query(`
       SELECT u.id, u.email, u.bullets_used_this_month
       FROM users u
       WHERE u.plan = 'free'
         AND u.email != 'brighamwilsonjr@gmail.com'
         AND u.bullets_used_this_month >= 8
-        AND u.bullets_reset_date > NOW() - INTERVAL '30 days'
         AND u.verified = true
         AND (u.usage_nudge_sent_at IS NULL OR u.usage_nudge_sent_at < NOW() - INTERVAL '30 days')
       LIMIT 100
@@ -716,54 +692,6 @@ app.get('/sitemap.xml', async (req, res) => {
     <lastmod>${today}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/bullets</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/counseling</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/awards</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/acft</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/memo</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/oer</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/narrative</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://ncokit.com/roster</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://ncokit.com/privacy</loc>
@@ -2451,9 +2379,9 @@ app.post('/api/contact', authLimiter, async (req, res) => {
 });
 
 // Admin route to gift premium access
-app.post('/api/admin/gift-premium', authLimiter, async (req, res) => {
+app.post('/api/admin/gift-premium', async (req, res) => {
   const { secret, email } = req.body;
-  if (!safeEqualString(secret, process.env.ADMIN_SECRET)) return res.status(403).json({ error: 'Forbidden' });
+  if (secret !== process.env.ADMIN_SECRET) return res.status(403).json({ error: 'Forbidden' });
   try {
     const result = await pool.query(
       'UPDATE users SET plan = $1, updated_at = NOW() WHERE email = $2 RETURNING email',
@@ -2462,8 +2390,7 @@ app.post('/api/admin/gift-premium', authLimiter, async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, message: `${email} granted premium access` });
   } catch (err) {
-    console.error('gift-premium error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -2537,7 +2464,7 @@ async function ga4Report(token, metrics, dimensions, startDate) {
 // ═══════════════════════════════════════════════════════════════════
 app.post('/api/admin/weekly-report', async (req, res) => {
   const secret = req.headers['x-report-secret'] || req.query.secret;
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) {
+  if (!secret || secret !== process.env.WEEKLY_REPORT_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
@@ -2739,43 +2666,36 @@ body{font-family:Arial,sans-serif;background:#0d0f0d;margin:0;padding:20px}
     res.json({ ok: true, db, stripe: s, ga, emailId: emailData.id });
   } catch (err) {
     console.error('Weekly report error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ── ADMIN: USAGE STATS ────────────────────────────────────────────────────────
 app.get('/api/admin/usage-stats', async (req, res) => {
   const secret = req.headers['x-report-secret'];
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   try {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-    // Users who have hit or are near the 10/month limit.
-    // bullets_reset_date freshness filter excludes stale dormants whose
-    // counters froze before the daily reset job catches them — see
-    // feedback_audit_log_targeting memory.
+    // Users who have hit or are near the 10/month limit
     const atLimit = await pool.query(`
       SELECT email, plan, bullets_used_this_month, bullets_reset_date, verified, created_at
       FROM users
       WHERE plan = 'free' AND bullets_used_this_month >= 10
-        AND bullets_reset_date > NOW() - INTERVAL '30 days'
       ORDER BY bullets_used_this_month DESC
     `);
     const nearLimit = await pool.query(`
       SELECT email, plan, bullets_used_this_month, bullets_reset_date, verified, created_at
       FROM users
       WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10
-        AND bullets_reset_date > NOW() - INTERVAL '30 days'
       ORDER BY bullets_used_this_month DESC
     `);
-    // not_used and total_* deliberately omit the freshness filter — they're
-    // population counts, not "in this cycle" counts.
     const allFree = await pool.query(`
       SELECT
         COUNT(*) FILTER (WHERE plan = 'free') AS total_free,
-        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 10 AND bullets_reset_date > NOW() - INTERVAL '30 days') AS at_limit,
-        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10 AND bullets_reset_date > NOW() - INTERVAL '30 days') AS near_limit,
-        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month > 0 AND bullets_used_this_month < 7 AND bullets_reset_date > NOW() - INTERVAL '30 days') AS active_under_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 10) AS at_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month >= 7 AND bullets_used_this_month < 10) AS near_limit,
+        COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month > 0 AND bullets_used_this_month < 7) AS active_under_limit,
         COUNT(*) FILTER (WHERE plan = 'free' AND bullets_used_this_month = 0) AS not_used,
         COUNT(*) FILTER (WHERE plan = 'premium') AS total_premium
       FROM users
@@ -2797,8 +2717,7 @@ app.get('/api/admin/usage-stats', async (req, res) => {
       nearLimit: nearLimit.rows
     });
   } catch(err) {
-    console.error('Usage stats error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -2823,177 +2742,7 @@ app.get('/api/admin/user-status', async (req, res) => {
     const sessions = await pool.query('SELECT count(*) FROM sessions WHERE user_id = $1', [u.id]);
     res.json({ ...u, active_sessions: parseInt(sessions.rows[0].count) });
   } catch (err) {
-    console.error('user-status error:', err);
-    res.status(500).json(safeErr(err, user));
-  }
-});
-
-// ── ADMIN: FULL USER USAGE (everything for one email) ──────────────────────────
-// Returns plan, subscription, counters, AI usage breakdown, saved items, etc.
-// NOTE: bullets_used_this_month is 0 for premium users (counter middleware skips
-// premium — see checkUsageLimit). Use ai_usage_breakdown for real premium usage.
-app.get('/api/admin/user-full-usage', async (req, res) => {
-  const admin = await getUserFromSession(req);
-  if (admin?.email !== 'brighamwilsonjr@gmail.com') {
-    return res.status(403).json({ error: 'Admin only' });
-  }
-  const { email } = req.query;
-  if (!email) return res.status(400).json({ error: 'email query param required' });
-  try {
-    const userQ = await pool.query(`
-      SELECT id, email, plan, verified, created_at, updated_at,
-             onboarding_completed, onboarding_completed_at,
-             bullets_used_this_month, bullets_reset_date,
-             stripe_customer_id, stripe_subscription_id,
-             referral_code, referred_by,
-             usage_nudge_sent_at, usage_nudge_template, usage_nudge_converted,
-             reengagement_email_sent_at,
-             CASE WHEN reset_token IS NULL THEN 'no_pending_reset' ELSE 'has_pending_reset' END AS reset_status,
-             reset_expires
-      FROM users WHERE email = $1
-    `, [email.toLowerCase()]);
-    if (userQ.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    const u = userQ.rows[0];
-
-    const [sessions, totals, byEndpoint, last7, last30, recent,
-           bullets, counselings, awards, oerBullets] = await Promise.all([
-      pool.query('SELECT count(*)::int AS c FROM sessions WHERE user_id = $1', [u.id]),
-      pool.query(`
-        SELECT
-          COUNT(*)::int AS total_calls,
-          COUNT(*) FILTER (WHERE success)::int AS successful,
-          COUNT(*) FILTER (WHERE NOT success)::int AS failed,
-          MIN(timestamp) AS first_call,
-          MAX(timestamp) AS last_call
-        FROM ai_usage_log WHERE user_id = $1
-      `, [u.id]),
-      pool.query(`
-        SELECT endpoint,
-               COUNT(*)::int AS calls,
-               COUNT(*) FILTER (WHERE success)::int AS successful,
-               MAX(timestamp) AS last_used
-        FROM ai_usage_log
-        WHERE user_id = $1
-        GROUP BY endpoint
-        ORDER BY calls DESC
-      `, [u.id]),
-      pool.query(`
-        SELECT COUNT(*)::int AS c FROM ai_usage_log
-        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '7 days'
-      `, [u.id]),
-      pool.query(`
-        SELECT COUNT(*)::int AS c FROM ai_usage_log
-        WHERE user_id = $1 AND timestamp > NOW() - INTERVAL '30 days'
-      `, [u.id]),
-      pool.query(`
-        SELECT endpoint, success, error_message, input_length, timestamp
-        FROM ai_usage_log
-        WHERE user_id = $1
-        ORDER BY timestamp DESC
-        LIMIT 10
-      `, [u.id]),
-      pool.query('SELECT count(*)::int AS c FROM saved_bullets WHERE user_id = $1', [u.id]),
-      pool.query('SELECT count(*)::int AS c FROM saved_counselings WHERE user_id = $1', [u.id]),
-      pool.query('SELECT count(*)::int AS c FROM saved_awards WHERE user_id = $1', [u.id]),
-      pool.query('SELECT count(*)::int AS c FROM saved_oer_bullets WHERE user_id = $1', [u.id]),
-    ]);
-
-    res.json({
-      user: u,
-      active_sessions: sessions.rows[0].c,
-      ai_usage_totals: {
-        ...totals.rows[0],
-        last_7_days: last7.rows[0].c,
-        last_30_days: last30.rows[0].c,
-      },
-      ai_usage_by_endpoint: byEndpoint.rows,
-      ai_usage_recent_10: recent.rows,
-      saved_items: {
-        bullets: bullets.rows[0].c,
-        counselings: counselings.rows[0].c,
-        awards: awards.rows[0].c,
-        oer_bullets: oerBullets.rows[0].c,
-      },
-      notes: {
-        bullets_counter: u.plan === 'premium'
-          ? 'Premium plan — bullets_used_this_month is NOT incremented for premium users. Use ai_usage_totals for actual usage.'
-          : 'Free plan — bullets_used_this_month reflects AI calls in current 30-day window from bullets_reset_date.',
-      },
-    });
-  } catch (err) {
-    console.error('user-full-usage error:', err);
-    res.status(500).json(safeErr(err, admin));
-  }
-});
-
-// ── ADMIN: PREMIUM ENGAGEMENT BREAKDOWN ────────────────────────────────────────
-// How many premium users actually use the product? Answers the question:
-// "Of my paying customers, how many have made zero AI calls?"
-app.get('/api/admin/premium-engagement', async (req, res) => {
-  const admin = await getUserFromSession(req);
-  if (admin?.email !== 'brighamwilsonjr@gmail.com') {
-    return res.status(403).json({ error: 'Admin only' });
-  }
-  try {
-    const result = await pool.query(`
-      WITH premium_users AS (
-        SELECT id, email, created_at, onboarding_completed_at, stripe_customer_id
-        FROM users WHERE plan = 'premium'
-      ),
-      user_calls AS (
-        SELECT
-          pu.id, pu.email, pu.created_at, pu.onboarding_completed_at, pu.stripe_customer_id,
-          COALESCE(COUNT(a.id), 0)::int AS total_calls,
-          COALESCE(COUNT(a.id) FILTER (WHERE a.timestamp > NOW() - INTERVAL '7 days'), 0)::int AS calls_7d,
-          COALESCE(COUNT(a.id) FILTER (WHERE a.timestamp > NOW() - INTERVAL '30 days'), 0)::int AS calls_30d,
-          MAX(a.timestamp) AS last_call
-        FROM premium_users pu
-        LEFT JOIN ai_usage_log a ON a.user_id = pu.id
-        GROUP BY pu.id, pu.email, pu.created_at, pu.onboarding_completed_at, pu.stripe_customer_id
-      )
-      SELECT * FROM user_calls ORDER BY total_calls DESC, created_at ASC
-    `);
-    const rows = result.rows;
-    const total = rows.length;
-    const zero = rows.filter(r => r.total_calls === 0).length;
-    const oneToFive = rows.filter(r => r.total_calls >= 1 && r.total_calls <= 5).length;
-    const moreThanFive = rows.filter(r => r.total_calls > 5).length;
-    const active7d = rows.filter(r => r.calls_7d > 0).length;
-    const active30d = rows.filter(r => r.calls_30d > 0).length;
-    const noStripe = rows.filter(r => !r.stripe_customer_id).length; // gifted/manual premium
-
-    res.json({
-      summary: {
-        total_premium: total,
-        zero_calls_ever: zero,
-        zero_calls_pct: total > 0 ? Math.round((zero / total) * 100) : 0,
-        one_to_five_calls: oneToFive,
-        more_than_five_calls: moreThanFive,
-        active_last_7d: active7d,
-        active_last_30d: active30d,
-        no_stripe_customer_id: noStripe,
-      },
-      dormant_premium: rows
-        .filter(r => r.total_calls === 0)
-        .map(r => ({
-          email: r.email,
-          signed_up: r.created_at,
-          onboarded_at: r.onboarding_completed_at,
-          has_stripe: !!r.stripe_customer_id,
-        })),
-      all_premium_by_usage: rows.map(r => ({
-        email: r.email,
-        total_calls: r.total_calls,
-        calls_30d: r.calls_30d,
-        calls_7d: r.calls_7d,
-        last_call: r.last_call,
-        signed_up: r.created_at,
-        has_stripe: !!r.stripe_customer_id,
-      })),
-    });
-  } catch (err) {
-    console.error('premium-engagement error:', err);
-    res.status(500).json(safeErr(err, admin));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3011,8 +2760,7 @@ app.post('/api/admin/set-user-premium', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json({ success: true, user: result.rows[0] });
   } catch (err) {
-    console.error('set-user-premium error:', err);
-    res.status(500).json(safeErr(err, user));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3045,8 +2793,7 @@ app.post('/api/admin/send-support-email', async (req, res) => {
     if (!response.ok) throw new Error(await response.text());
     res.json({ success: true, sent_to: to });
   } catch (err) {
-    console.error('send-support-email error:', err);
-    res.status(500).json(safeErr(err, user));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3184,9 +2931,8 @@ async function getDetailedUsageAnalytics() {
 // Detailed breakdown of subscriber usage, including 50%+ threshold analysis
 app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
   const apiKey = req.headers['x-api-key'] || (req.headers['authorization'] || '').replace('Bearer ', '') || req.query.api_key;
-  let user = null;
-  if (!apiKey || !safeEqualString(apiKey, process.env.ADMIN_API_KEY)) {
-    user = await getUserFromSession(req);
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    const user = await getUserFromSession(req);
     if (user?.email !== 'brighamwilsonjr@gmail.com') {
       return res.status(403).json({ error: 'Admin only' });
     }
@@ -3197,16 +2943,15 @@ app.get('/api/admin/detailed-usage-analytics', async (req, res) => {
     res.json(data);
   } catch(err) {
     console.error('Analytics error:', err);
-    res.status(500).json(safeErr(err, user));
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ── ADMIN: WEEKLY REPORT HTML VIEW ────────────────────────────────────────────
 app.get('/api/admin/weekly-report-html', async (req, res) => {
   const apiKey = req.headers['x-api-key'] || (req.headers['authorization'] || '').replace('Bearer ', '') || req.query.api_key;
-  let user = null;
-  if (!apiKey || !safeEqualString(apiKey, process.env.ADMIN_API_KEY)) {
-    user = await getUserFromSession(req);
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    const user = await getUserFromSession(req);
     if (user?.email !== 'brighamwilsonjr@gmail.com') {
       return res.status(403).json({ error: 'Admin only' });
     }
@@ -3218,16 +2963,15 @@ app.get('/api/admin/weekly-report-html', async (req, res) => {
     res.send(`<html><body><pre id="data">${JSON.stringify(data, null, 2)}</pre></body></html>`);
   } catch(err) {
     console.error('Weekly report HTML error:', err);
-    res.status(500).json(safeErr(err, user));
+    res.status(500).json({ error: err.message });
   }
 });
 
 // ── ADMIN: TOOL STATS HTML VIEW ───────────────────────────────────────────────
 app.get('/api/admin/tool-stats-html', async (req, res) => {
   const apiKey = req.headers['x-api-key'] || (req.headers['authorization'] || '').replace('Bearer ', '') || req.query.api_key;
-  let user = null;
-  if (!apiKey || !safeEqualString(apiKey, process.env.ADMIN_API_KEY)) {
-    user = await getUserFromSession(req);
+  if (!apiKey || apiKey !== process.env.ADMIN_API_KEY) {
+    const user = await getUserFromSession(req);
     if (user?.email !== 'brighamwilsonjr@gmail.com') {
       return res.status(403).json({ error: 'Admin only' });
     }
@@ -3291,7 +3035,7 @@ app.get('/api/admin/tool-stats-html', async (req, res) => {
     res.send(`<html><body><pre id="data">${JSON.stringify(data, null, 2)}</pre></body></html>`);
   } catch(err) {
     console.error('Tool stats HTML error:', err);
-    res.status(500).json(safeErr(err, user));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3351,7 +3095,7 @@ app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
     });
   } catch (err) {
     console.error('Usage nudge analytics error:', err);
-    res.status(500).json(safeErr(err, user));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3362,7 +3106,7 @@ app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
 // Test mode: pass { test: "you@example.com" } to send one preview without touching DB
 app.post('/api/admin/send-reengagement', async (req, res) => {
   const secret = req.headers['x-report-secret'];
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   const batchSize = 48;
   const batchNum  = parseInt(req.body.batch ?? 0);
@@ -3482,8 +3226,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 
     res.json({ batch: batchNum, sent, total: recipients.length, errors });
   } catch (err) {
-    console.error('send-reengagement error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3492,7 +3235,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
 // Returns counts of zero-usage signups bucketed by verification + email status
 app.get('/api/admin/reengagement-stats', async (req, res) => {
   const secret = req.headers['x-report-secret'];
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const q = await pool.query(`
@@ -3514,8 +3257,7 @@ app.get('/api/admin/reengagement-stats', async (req, res) => {
     `);
     res.json(q.rows[0]);
   } catch (err) {
-    console.error('reengagement-stats error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3525,7 +3267,7 @@ app.get('/api/admin/reengagement-stats', async (req, res) => {
 // (bullets_used_this_month > 0 but zero ai_usage_log rows = NCOER Bullet Builder users)
 app.get('/api/admin/reengagement-mistake-check', async (req, res) => {
   const secret = req.headers['x-report-secret'];
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
 
   try {
     const q = await pool.query(`
@@ -3547,8 +3289,7 @@ app.get('/api/admin/reengagement-mistake-check', async (req, res) => {
     `);
     res.json({ counts: q.rows[0], sample: sample.rows });
   } catch (err) {
-    console.error('reengagement-mistake-check error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3556,7 +3297,7 @@ app.get('/api/admin/reengagement-mistake-check', async (req, res) => {
 // ── ADMIN: USER LOOKUP ────────────────────────────────────────────────────────
 app.get('/api/admin/user-lookup', async (req, res) => {
   const secret = req.headers['x-report-secret'];
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   const email = req.query.email;
   if (!email) return res.status(400).json({ error: 'email query param required' });
   try {
@@ -3567,8 +3308,7 @@ app.get('/api/admin/user-lookup', async (req, res) => {
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
   } catch(err) {
-    console.error('user-lookup error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -3851,22 +3591,34 @@ app.get('/blog/:slug', async (req, res) => {
     const date = new Date(post.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
     const canonicalUrl = `https://ncokit.com/blog/${post.slug}`;
 
+    // Strip HTML and collapse whitespace for plain-text derivatives
+    const plainText = (post.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    const wordCount = plainText ? plainText.split(' ').length : 0;
+    // Fallback meta description: first ~155 chars of plain content if column is empty
+    const metaDesc = (post.meta_description && post.meta_description.trim())
+      || (plainText.length > 155 ? plainText.slice(0, 152).trimEnd() + '…' : plainText);
+
     const schema = `<script type="application/ld+json">${JSON.stringify({
       "@context": "https://schema.org",
-      "@type": "Article",
+      "@type": "BlogPosting",
+      "mainEntityOfPage": { "@type": "WebPage", "@id": canonicalUrl },
       "headline": post.title,
-      "description": post.meta_description,
+      "description": metaDesc,
       "url": canonicalUrl,
       "datePublished": post.published_at,
       "dateModified": post.updated_at || post.published_at,
       "image": "https://ncokit.com/og-image.png",
+      "articleSection": post.category || "Army Leader Tools",
+      "articleBody": plainText,
+      "wordCount": wordCount,
+      "inLanguage": "en-US",
       "author": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com" },
       "publisher": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com", "logo": { "@type": "ImageObject", "url": "https://ncokit.com/icons/icon-512.png" } }
     })}</script>`;
 
     const html = blogPage({
       title: `${post.title} | NCO Kit`,
-      metaDescription: post.meta_description || '',
+      metaDescription: metaDesc,
       canonicalUrl,
       schemaJson: schema,
       bodyHtml: `
@@ -3898,7 +3650,7 @@ app.post('/api/admin/blog/create', async (req, res) => {
     // Check auth — accept either admin session or BLOG_ADMIN_KEY header
     const adminKey = process.env.BLOG_ADMIN_KEY;
     const headerKey = req.headers['x-blog-admin-key'];
-    const isKeyAuth = !!adminKey && !!headerKey && safeEqualString(headerKey, adminKey);
+    const isKeyAuth = adminKey && headerKey && headerKey === adminKey;
 
     if (!isKeyAuth) {
       const user = await getUserFromSession(req);
@@ -4005,7 +3757,7 @@ function dealSection(items, fallbackLabel) {
 
 app.post('/api/admin/deal-report', async (req, res) => {
   const secret = req.headers['x-report-secret'] || req.query.secret;
-  if (!safeEqualString(secret, process.env.WEEKLY_REPORT_SECRET)) {
+  if (!secret || secret !== process.env.WEEKLY_REPORT_SECRET) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -4061,7 +3813,7 @@ app.post('/api/admin/deal-report', async (req, res) => {
     res.json({ success: true, counts: { lowes: lowesDeals.length, homeDepot: hdDeals.length, walmart: walmartDeals.length, hdPenny: hdPenny.length, lowesPenny: lowesPenny.length } });
   } catch (err) {
     console.error('Deal report error:', err);
-    res.status(500).json(safeErr(err));
+    res.status(500).json({ error: err.message });
   }
 });
 
