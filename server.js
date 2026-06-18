@@ -694,6 +694,12 @@ app.get('/sitemap.xml', async (req, res) => {
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://ncokit.com/ncoer-bullet-generator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://ncokit.com/privacy</loc>
     <lastmod>${today}</lastmod>
     <changefreq>yearly</changefreq>
@@ -3681,6 +3687,141 @@ app.post('/api/admin/blog/create', async (req, res) => {
     console.error('Blog create error:', err.message);
     res.status(500).json({ error: 'Failed to create post' });
   }
+});
+
+// GET /ncoer-bullet-generator — dedicated SEO landing page for the NCOER bullet generator
+app.get('/ncoer-bullet-generator', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/ncoer-bullet-generator';
+  const metaDescription = 'Free AI NCOER bullet generator. Type plain language, get AR 623-3 aligned bullets by MOS for Character, Presence, Intellect, Leads, Develops, Achieves. No signup to start.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit NCOER Bullet Generator","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free AI-powered NCOER bullet generator. Generates Army-standard, AR 623-3 aligned NCOER bullets by MOS from plain-language input. Covers Character, Presence, Intellect, Leads, Develops, and Achieves.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["AR 623-3 alignment","MOS-specific bullets","Cross-attribute fit advisory","Covers all six NCOER sections","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"NCOER Bullet Generator","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the NCOER bullet generator free?","acceptedAnswer":{"@type":"Answer","text":"Yes. The NCOER Bullet Builder on NCO Kit is free. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"What format do the bullets come back in?","acceptedAnswer":{"@type":"Answer","text":"Bullets are returned in AR 623-3 NCOER format: action-verb start, quantified impact, fits the character limit. Output is preceded by a lowercase 'o' per Army convention so you can paste directly into DA Form 2166-9-1A/1B/1C."}},
+{"@type":"Question","name":"Does it support all MOS?","acceptedAnswer":{"@type":"Answer","text":"Yes. The generator tailors bullets to the Soldier's MOS so language and metrics match the job — 11B, 68W, 42A, 92A, 25B, 35F, and every other MOS in the Army. Pick the MOS from the dropdown before generating."}},
+{"@type":"Question","name":"What NCOER sections does it cover?","acceptedAnswer":{"@type":"Answer","text":"All six rated NCOER sections: Character, Presence, and Intellect (the attributes) plus Leads, Develops, and Achieves (the competencies). If the bullet you describe fits a different section better, the tool's cross-attribute advisor flags it before you submit."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency. It works on any phone, personal laptop, or any device with internet access."}},
+{"@type":"Question","name":"How is this different from a generic AI chatbot?","acceptedAnswer":{"@type":"Answer","text":"A generic chatbot doesn't know AR 623-3, the six rated NCOER sections, the character limits, or MOS-specific language. NCO Kit's generator is built around those rules — it returns bullets that are formatted, scoped, and structured for the NCOER, not a generic LinkedIn post."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">NCOER Bullet Generator</div>
+      <h1>Free NCOER Bullet Generator</h1>
+      <div class="post-meta">AI-powered · AR 623-3 aligned · By MOS · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Writing NCOER bullets shouldn't take half a Saturday. NCO Kit's free AI NCOER bullet generator turns plain-language notes into Army-standard, AR 623-3 aligned bullets — by MOS, for all six rated sections of the NCOER. No install, no CAC required, no Army network dependency. Works on your phone, your personal laptop, or any device with internet access.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Start Building Bullets</h3>
+        <p>Type what your Soldier did. Get a properly formatted bullet in seconds.</p>
+        <a href="/" class="cta-btn">Open NCOER Bullet Builder →</a>
+      </div>
+
+      <h2>What is an NCOER Bullet?</h2>
+      <p>An NCOER bullet is a single-line performance comment that appears on DA Form 2166-9-1A/1B/1C — the Non-Commissioned Officer Evaluation Report. Bullets sit under the six rated sections: <strong>Character</strong>, <strong>Presence</strong>, and <strong>Intellect</strong> (the three NCO attributes), plus <strong>Leads</strong>, <strong>Develops</strong>, and <strong>Achieves</strong> (the three NCO competencies).</p>
+
+      <p>Per AR 623-3 and the latest DA PAM, each bullet should:</p>
+      <ul>
+        <li>Begin with a lowercase "o" (Army convention indicating the start of a bullet).</li>
+        <li>Lead with an action verb — built, led, executed, mentored, recovered, certified.</li>
+        <li>Include a quantified impact — soldiers trained, dollars saved, hours reclaimed, rates improved, FLIPLs prevented.</li>
+        <li>Fit within the character limit for the section (typically two lines maximum, one preferred).</li>
+        <li>Stay specific to the rated NCO's actual job — generic bullets get raters questioned at the rater profile review.</li>
+      </ul>
+
+      <p>That's a lot of rules to keep in your head at 2200 hours the night before a packet is due. The NCOER bullet generator handles them automatically.</p>
+
+      <h2>How the Generator Works</h2>
+      <p>Three steps. Most leaders finish a section in under two minutes:</p>
+      <ol>
+        <li><strong>Enter the Soldier's name, rank, and MOS.</strong> The MOS dropdown supports every Army occupational specialty — 11B Infantry, 68W Combat Medic, 42A Human Resources, 92A Automated Logistical Specialist, 25B IT Specialist, 35F All-Source Intelligence, and the rest. The generator uses the MOS to choose the right vocabulary and reference the right metrics.</li>
+        <li><strong>Pick the NCOER section.</strong> Character, Presence, Intellect, Leads, Develops, or Achieves. If the action you describe fits a different section better, the tool's cross-attribute advisor flags it before you submit — so you don't waste a bullet on the wrong section.</li>
+        <li><strong>Describe what the Soldier did in plain English.</strong> Don't worry about formatting. Type the way you'd tell a peer at the chow hall: "She ran the BN PT program for six months, got nine soldiers to retake and pass the AFT, never missed a session." The AI converts that into a properly formatted, AR 623-3 aligned bullet you can paste straight into the NCOER support form.</li>
+      </ol>
+
+      <h2>Sample Output by Section</h2>
+      <p>The generator produces bullets that look like the examples below. Each one starts with the lowercase "o," opens with an action verb, includes a quantified impact, and is sized to fit the NCOER section.</p>
+
+      <h3>Leads</h3>
+      <div class="example-box">o led PLT through five Table VI gunnery iterations; certified 12/12 crews on first run, the only PLT in CO to do so</div>
+
+      <h3>Develops</h3>
+      <div class="example-box">o mentored three E-4 promotables through SLC packet prep; all selected, raising PLT NCO depth from 60% to 100%</div>
+
+      <h3>Achieves</h3>
+      <div class="example-box">o executed BN-level 9-mile foot march for 240 Soldiers with zero heat casualties and zero recycles; BN CSM cited as standard</div>
+
+      <h3>Character</h3>
+      <div class="example-box">o stood by AAR truth in front of BDE CDR after a failed lane; led the corrective training that earned a TRAINED rating on retest</div>
+
+      <h3>Presence</h3>
+      <div class="example-box">o physical and tactical standard for the PLT; scored 580 on AFT, finished EIB lanes with zero no-gos, set the tone for junior NCOs</div>
+
+      <h3>Intellect</h3>
+      <div class="example-box">o built CO range packet that became the BN template; saved every PLT SGT an estimated 6 hours per range cycle</div>
+
+      <h2>MOS-Specific Bullets</h2>
+      <p>The generator tailors language and metrics to the Soldier's job. We have step-by-step guides for the most-rated MOS already on the blog:</p>
+      <ul>
+        <li><a href="/blog/ncoer-bullets-68w-combat-medic-guide">NCOER Bullets for 68W Combat Medics</a> — patient care, BCT/TC3 currency, MEDEVAC, casualty evac</li>
+        <li><a href="/blog/ncoer-bullets-42a-human-resources-guide">NCOER Bullets for 42A Human Resources Specialists</a> — personnel actions, NCOERs processed, retention, S1 metrics</li>
+        <li><a href="/blog/ncoer-bullets-92a-logistical-specialist-guide">NCOER Bullets for 92A Automated Logistical Specialists</a> — property accountability, FLIPL, GCSS-Army, inventory</li>
+      </ul>
+      <p>More MOS guides are being added. The bullet generator itself already supports every MOS — the blog posts just walk you through worked examples.</p>
+
+      <h2>Built for Army Standards</h2>
+      <p>The generator was built by an NCO, not a startup that learned about evaluations from a Wikipedia page. Every bullet is shaped around:</p>
+      <ul>
+        <li><strong>AR 623-3 (Evaluation Reporting System)</strong> — governs what an NCOER is, who rates whom, and how bullets should read.</li>
+        <li><strong>FM 6-22 (Developing Leaders)</strong> — defines the Army's leader requirements model that the NCOER attributes and competencies are drawn from.</li>
+        <li><strong>DA PAM 623-3</strong> — the procedural companion that spells out the mechanics most leaders forget.</li>
+        <li><strong>Character limits per section</strong> — bullets are sized to fit, not truncated when you paste.</li>
+      </ul>
+      <p>Final responsibility for the rated NCOER still sits with you as the rater. The generator gets you to a clean first draft in seconds; you make the call on whether it goes in.</p>
+
+      <h2>Why It's Free</h2>
+      <p>Three lifetime generations to try it anonymously. Ten generations per month free after you make an account. Unlimited at $10/month or $97/year if you're writing packets often or want the full kit (DA 4856 counseling generator, OER bullet builder, AFT scorer, awards writer, AR 25-50 memo generator, soldier roster, senior rater narrative generator). No CAC card. No DoD network needed. No app to install — it runs in any browser.</p>
+
+      <h2>Frequently Asked Questions</h2>
+
+      <h3>Is the NCOER bullet generator free?</h3>
+      <p>Yes. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month. Premium is unlimited at $10/month or $97/year.</p>
+
+      <h3>What format do the bullets come back in?</h3>
+      <p>AR 623-3 NCOER format: lowercase "o" at the start, action-verb opener, quantified impact, fits the character limit. Paste straight into DA Form 2166-9-1A/1B/1C.</p>
+
+      <h3>Does it support all MOS?</h3>
+      <p>Yes — every Army MOS. The generator tailors language and metrics to the Soldier's job. Pick the MOS from the dropdown before generating.</p>
+
+      <h3>What NCOER sections does it cover?</h3>
+      <p>All six rated sections: Character, Presence, Intellect (the attributes) and Leads, Develops, Achieves (the competencies). If the bullet you describe fits a different section, the cross-attribute advisor flags it.</p>
+
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency. Works on any phone, personal laptop, or any device with internet access.</p>
+
+      <h3>How is this different from a generic AI chatbot?</h3>
+      <p>A generic chatbot doesn't know AR 623-3, the six rated sections, the character limits, or MOS-specific language. NCO Kit's generator is built around those rules — it returns bullets that are formatted, scoped, and structured for the NCOER.</p>
+
+      <div class="cta-box">
+        <h3>Build Your First Bullet</h3>
+        <p>Free to try. No signup required for the first three.</p>
+        <a href="/" class="cta-btn">Open NCOER Bullet Builder →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free NCOER Bullet Generator — AI, By MOS, AR 623-3 | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
 });
 
 // ═══════════════════════════════════════════════════════════════════
