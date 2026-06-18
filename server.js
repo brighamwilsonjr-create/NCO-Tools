@@ -3683,6 +3683,53 @@ app.post('/api/admin/blog/create', async (req, res) => {
   }
 });
 
+// POST /api/admin/backfill-meta — one-time backfill of meta_description for existing posts.
+// REMOVE THIS ENDPOINT after running once. Auth: BLOG_ADMIN_KEY header or Henry's session.
+app.post('/api/admin/backfill-meta', async (req, res) => {
+  try {
+    const adminKey = process.env.BLOG_ADMIN_KEY;
+    const headerKey = req.headers['x-blog-admin-key'];
+    const isKeyAuth = adminKey && headerKey && headerKey === adminKey;
+    if (!isKeyAuth) {
+      const user = await getUserFromSession(req);
+      if (!user || user.email !== 'brighamwilsonjr@gmail.com') {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+    }
+
+    const updates = [
+      ['da-4856-monthly-counseling-examples', 'Monthly DA 4856 counseling examples for Army leaders. Real worked samples covering performance, growth, and corrective counseling — AR 600-20 compliant.'],
+      ['da-4856-counseling-example-tardiness', 'How to write a DA 4856 counseling for tardiness with a complete worked example. Documents the incident, plan of action, and Soldier-leader signatures right.'],
+      ['ncoer-bullets-42a-human-resources-guide', 'NCOER bullets for 42A Human Resources Specialists. Worked examples for personnel actions, NCOERs, awards, retention, and S1 metrics — built on AR 623-3.'],
+      ['oer-senior-rater-narrative-company-grade-guide', 'Write a strong OER senior rater narrative for company grade officers. Real examples, structure, and language that signals promotion potential per AR 623-3.'],
+      ['oer-bullets-staff-officer-examples-guide', 'OER bullets for staff officers that pass on the first read. Examples for S1–S6 roles, planning, briefings, and operations — impact-first, AR 623-3 aligned.'],
+      ['da-4856-monthly-counseling-example-guide', 'How to write a DA 4856 monthly counseling for an Army Soldier. What to include in each block, what to leave out, and a complete sample you can adapt.'],
+      ['ncoer-bullets-92a-logistical-specialist-guide', 'NCOER bullet examples for 92A Automated Logistical Specialists. Property accountability, inventory, FLIPL, GCSS-Army metrics — Army standard, AR 623-3 aligned.'],
+      ['ncoer-bullets-68w-combat-medic-guide', 'NCOER bullets for 68W Combat Medics that translate patient care and clinical tasks into Army evaluation language — quantified, impact-first, AR 623-3 ready.'],
+      ['aam-citation-writing-guide', 'How to write an AAM citation that gets approved the first time. Format, voice, length, and a complete example you can adapt — per AR 600-8-22.'],
+      ['how-to-write-senior-rater-narrative-oer', 'How to write an OER senior rater narrative that actually stands out. Structure, language, and worked examples that signal potential per AR 623-3.'],
+      ['oer-senior-rater-narrative-promotion-guide', 'OER senior rater narratives that get officers promoted. The exact structure, signals, and language boards look for — with worked examples per AR 623-3.'],
+      ['da-4856-initial-counseling-example-guide', 'DA 4856 initial counseling: what to include, how to write it, and a complete worked example. Set expectations early and document Soldier development right.'],
+    ];
+
+    const results = [];
+    for (const [slug, desc] of updates) {
+      const { rowCount } = await pool.query(
+        `UPDATE blog_posts SET meta_description = $1 WHERE slug = $2`,
+        [desc, slug]
+      );
+      results.push({ slug, updated: rowCount, chars: desc.length });
+    }
+
+    const totalUpdated = results.reduce((sum, r) => sum + r.updated, 0);
+    console.log(`Meta description backfill complete: ${totalUpdated}/${updates.length} rows updated`);
+    res.json({ success: true, totalUpdated, attempted: updates.length, results });
+  } catch (err) {
+    console.error('Backfill meta error:', err.message);
+    res.status(500).json({ error: 'Backfill failed', detail: err.message });
+  }
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // DEAL REPORT — Weekly Friday email with big box store deals
 // Trigger: POST /api/admin/deal-report with x-report-secret header
