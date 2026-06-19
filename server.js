@@ -117,7 +117,12 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
+    const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
     console.error('Webhook signature error:', err.message);
+    console.error('Diag — from IP:', req.ip, '| User-Agent:', req.headers['user-agent'] || '(none)');
+    console.error('Diag — body type:', typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body), 'len:', req.body?.length);
+    console.error('Diag — sig header present:', !!sig, 'sig len:', sig?.length);
+    console.error('Diag — secret prefix:', secret.slice(0, 8), 'len:', secret.length, 'endsWithWhitespace:', /\s$/.test(secret));
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
   try {
