@@ -230,8 +230,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   res.json({ received: true });
 });
 
-// Body size limit — 10kb max
-app.use(express.json({ limit: '10kb' }));
+// Body size limit — 100kb max (covers multi-field text forms like counseling/award narratives)
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
