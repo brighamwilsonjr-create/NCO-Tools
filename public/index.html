@@ -3660,6 +3660,7 @@
         sucEl.style.display = 'block';
         document.getElementById('regEmail').value = '';
         document.getElementById('regPassword').value = '';
+        if (typeof gtag === 'function') gtag('event', 'sign_up', { method: 'email' });
       }
     } catch (e) { showAuthError(errEl, 'Connection error. Please try again.'); }
     finally { btn.textContent = 'Create Free Account'; btn.disabled = false; }
@@ -3784,6 +3785,14 @@
           const user = await res.json();
           setLoggedIn(user, token);
         }
+      }
+      if (typeof gtag === 'function') {
+        gtag('event', 'purchase', {
+          transaction_id: params.get('session_id') || '',
+          value: 8,
+          currency: 'USD',
+          items: [{ item_name: 'Premium Monthly' }]
+        });
       }
       window.history.replaceState({}, '', '/');
       // Show success message

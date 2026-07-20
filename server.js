@@ -1229,7 +1229,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       line_items: [{ price: priceId, quantity: 1 }],
       discounts,
       metadata: { userId: user.id, freeMontUsed: freeMontUsed ? 'true' : 'false' },
-      success_url: 'https://ncokit.com/?upgraded=true',
+      success_url: 'https://ncokit.com/?upgraded=true&session_id={CHECKOUT_SESSION_ID}',
       cancel_url: 'https://ncokit.com/?upgrade=cancelled',
     });
 
