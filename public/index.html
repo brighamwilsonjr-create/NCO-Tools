@@ -781,6 +781,7 @@
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
   gtag('config', 'G-VV26RCZYJ0');
+  gtag('config', 'AW-18336029573');
 </script>
 </head>
 <body>
@@ -3660,7 +3661,10 @@
         sucEl.style.display = 'block';
         document.getElementById('regEmail').value = '';
         document.getElementById('regPassword').value = '';
-        if (typeof gtag === 'function') gtag('event', 'sign_up', { method: 'email' });
+        if (typeof gtag === 'function') {
+          gtag('event', 'sign_up', { method: 'email' });
+          gtag('event', 'conversion', { 'send_to': 'AW-18336029573/VTXwCIKKqNMcEIW3pqdE', 'value': 1.0, 'currency': 'USD' });
+        }
       }
     } catch (e) { showAuthError(errEl, 'Connection error. Please try again.'); }
     finally { btn.textContent = 'Create Free Account'; btn.disabled = false; }
