@@ -3797,6 +3797,12 @@
           currency: 'USD',
           items: [{ item_name: 'Premium Monthly' }]
         });
+        gtag('event', 'conversion', {
+          'send_to': 'AW-18336029573/CeOUCJKjxOAcEIW3pqdE',
+          'value': 8,
+          'currency': 'USD',
+          'transaction_id': params.get('session_id') || ''
+        });
       }
       window.history.replaceState({}, '', '/');
       // Show success message
