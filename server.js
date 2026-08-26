@@ -132,21 +132,28 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       const customerId = session.customer;
       const subscriptionId = session.subscription;
       if (userId) {
-        // Check if user received a nudge email within last 7 days (conversion tracking)
+        // Check if user received a nudge or win-back email within last 7 days (conversion tracking)
         const nudgeResult = await pool.query(
-          `SELECT usage_nudge_sent_at, usage_nudge_template FROM users
+          `SELECT usage_nudge_sent_at, usage_nudge_template, winback_email_sent_at FROM users
            WHERE id = $1 AND usage_nudge_sent_at > NOW() - INTERVAL '7 days'`,
           [userId]
         );
         const converted = nudgeResult.rows.length > 0;
         const template = nudgeResult.rows[0]?.usage_nudge_template || null;
 
+        const winbackResult = await pool.query(
+          `SELECT 1 FROM users WHERE id = $1 AND winback_email_sent_at > NOW() - INTERVAL '7 days'`,
+          [userId]
+        );
+        const winbackConverted = winbackResult.rows.length > 0;
+
         await pool.query(
           `UPDATE users
            SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW(),
-               usage_nudge_converted = $4
+               usage_nudge_converted = $4,
+               winback_email_converted = CASE WHEN $6 THEN TRUE ELSE winback_email_converted END
            WHERE id = $5`,
-          ['premium', customerId, subscriptionId, converted, userId]
+          ['premium', customerId, subscriptionId, converted, userId, winbackConverted]
         );
 
         // Decrement free_months_earned if a free month coupon was used at checkout
@@ -392,7 +399,8 @@ async function sendPasswordResetEmail(email, token) {
   `);
 }
 
-async function sendWelcomeEmail(email) {
+async function sendWelcomeEmail(email, unsubscribeToken) {
+  const unsubscribeUrl = `https://ncokit.com/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -507,7 +515,7 @@ async function sendWelcomeEmail(email) {
                     <br>
                     <a href="https://ncokit.com" style="font-size:13px;color:#7dab7d;text-decoration:none;">ncokit.com</a>
                     &nbsp;|&nbsp;
-                    <a href="https://ncokit.com/unsubscribe" style="font-size:13px;color:#4a7a4a;text-decoration:none;">Unsubscribe</a>
+                    <a href="${unsubscribeUrl}" style="font-size:13px;color:#4a7a4a;text-decoration:none;">Unsubscribe</a>
                     <br><br>
                     <span style="font-size:11px;color:#2a4a2a;line-height:1.6;">You're receiving this because you created an account at ncokit.com.<br>This is a transactional email related to your account.</span>
                   </td>
@@ -527,7 +535,8 @@ async function sendWelcomeEmail(email) {
 // 80% Usage Nudge Email Templates (A/B Testing)
 const STRIPE_CHECKOUT_URL = 'https://ncokit.com';
 
-async function sendUsageNudgeEmail(email, templateType) {
+async function sendUsageNudgeEmail(email, templateType, unsubscribeToken) {
+  const unsubscribeUrl = `https://ncokit.com/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
   const baseStyle = 'font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#0d0f0d;color:#F4F1EA;';
   const headerStyle = 'color:#C8B48A;font-size:24px;letter-spacing:4px;text-transform:uppercase;';
   const ctaStyle = 'display:inline-block;margin:24px 0;padding:14px 32px;background:#C8B48A;color:#1a2419;font-weight:bold;text-decoration:none;letter-spacing:2px;text-transform:uppercase;font-size:13px;border-radius:4px;';
@@ -578,7 +587,8 @@ async function sendUsageNudgeEmail(email, templateType) {
     ${mainMessage}
     <a href="${STRIPE_CHECKOUT_URL}" style="${ctaStyle}">${cta}</a>
     <p style="color:#666;font-size:11px;line-height:1.6;margin-top:32px;">
-      You're receiving this because you've reached 80% of your monthly free uses. If you have questions, reply to this email.<br><br>
+      You're receiving this because you've reached 80% of your monthly free uses. If you have questions, reply to this email.<br>
+      <a href="${unsubscribeUrl}" style="color:#666;">Unsubscribe</a> from marketing emails.<br><br>
       © 2026 NCO Kit. All rights reserved.
     </p>
   </div>`;
@@ -591,10 +601,11 @@ async function checkAndSendUsageNudges() {
   try {
     // Find free users with >= 8 uses out of 10 (80%)
     const freeUsers = await pool.query(`
-      SELECT u.id, u.email, u.bullets_used_this_month
+      SELECT u.id, u.email, u.bullets_used_this_month, u.unsubscribe_token
       FROM users u
       WHERE u.plan = 'free'
         AND u.email != 'brighamwilsonjr@gmail.com'
+        AND u.email_opt_out IS NOT TRUE
         AND u.bullets_used_this_month >= 8
         AND u.verified = true
         AND (u.usage_nudge_sent_at IS NULL OR u.usage_nudge_sent_at < NOW() - INTERVAL '30 days')
@@ -606,7 +617,7 @@ async function checkAndSendUsageNudges() {
       const randomTemplate = templates[Math.floor(Math.random() * templates.length)];
 
       try {
-        await sendUsageNudgeEmail(user.email, randomTemplate);
+        await sendUsageNudgeEmail(user.email, randomTemplate, user.unsubscribe_token);
 
         // Record that we sent the email
         await pool.query(`
@@ -643,6 +654,140 @@ const scheduleUsageNudgeCheck = () => {
     setTimeout(() => {
       console.log('Running daily usage nudge check...');
       checkAndSendUsageNudges();
+      scheduleNext();
+    }, delay);
+  };
+
+  scheduleNext();
+};
+
+// ── WIN-BACK EMAIL ──────────────────────────────────────────────────────────
+// Targets free users who hit their 10/month limit at some point, then went
+// dormant and never came back to use the fresh allocation once it reset.
+// Different audience than the 80%-usage nudge (still-active users approaching
+// the cap) and the zero-usage re-engagement email (never tried the tool at all).
+async function sendWinbackEmail(email, unsubscribeToken) {
+  const unsubscribeUrl = `https://ncokit.com/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NCO Kit</title>
+</head>
+<body style="margin:0;padding:0;background:#0d0f0d;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0d0f0d;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr><td style="background:#0f1f0f;border-top:4px solid #c9a227;border-radius:8px 8px 0 0;padding:28px 40px;">
+          <p style="margin:0;font-size:22px;font-weight:900;color:#c9a227;letter-spacing:2px;text-transform:uppercase;">NCO Kit</p>
+          <p style="margin:4px 0 0;font-size:11px;color:#7dab7d;letter-spacing:1px;text-transform:uppercase;">Army Leader's Toolkit</p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="background:#111a11;padding:36px 40px;">
+          <h1 style="margin:0 0 18px;font-size:24px;font-weight:900;color:#e8e4d4;line-height:1.3;">Your free uses are back.</h1>
+          <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#a8c8a8;">
+            A little while back you used up your monthly NCOER bullets, DA 4856 counselings, or awards write-ups on NCO Kit.
+            Your account has since refreshed — you've got a fresh batch of free AI generations sitting there, unused.
+          </p>
+          <p style="margin:0 0 28px;font-size:15px;line-height:1.7;color:#a8c8a8;">
+            Whatever you were working on then, there's a good chance you've got another counseling, bullet, or award
+            citation to knock out right now. Might as well use what's already yours.
+          </p>
+
+          <!-- CTA Button -->
+          <table cellpadding="0" cellspacing="0"><tr><td>
+            <a href="https://ncokit.com" style="display:inline-block;background:#c9a227;color:#0a140a;font-size:15px;font-weight:900;letter-spacing:1px;text-decoration:none;padding:15px 38px;border-radius:4px;text-transform:uppercase;">
+              Pick Up Where You Left Off &rarr;
+            </a>
+          </td></tr></table>
+
+          <!-- Upgrade nudge -->
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:32px;background:#0a140a;border:1px solid #2a4a2a;border-radius:6px;">
+            <tr><td style="padding:20px 22px;">
+              <p style="margin:0 0 6px;font-size:12px;color:#7dab7d;letter-spacing:2px;text-transform:uppercase;font-weight:700;">If you keep hitting the wall</p>
+              <p style="margin:0;font-size:14px;line-height:1.6;color:#a8c8a8;">
+                Premium removes the monthly limit entirely — unlimited bullets, counselings, and awards for $8/month.
+                No more waiting for a reset.
+              </p>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <!-- Footer -->
+        <tr><td style="background:#080f08;border-top:1px solid #1a3a1a;border-radius:0 0 8px 8px;padding:20px 40px;">
+          <p style="margin:0;font-size:12px;color:#4a7a4a;line-height:1.6;">
+            Built by NCOs, for NCOs.<br>
+            — Henry @ NCO Kit<br><br>
+            <a href="https://ncokit.com/privacy" style="color:#4a7a4a;">Privacy Policy</a> &nbsp;|&nbsp;
+            <a href="${unsubscribeUrl}" style="color:#4a7a4a;">Unsubscribe</a><br>
+            You're receiving this because you created a free account at ncokit.com.
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await sendEmail(email, 'Your free NCO Kit uses just reset', html, 'Henry @ NCO Kit <henry@ncokit.com>');
+}
+
+// Find dormant cap-hitters: hit the 10/month limit before, their allocation has
+// since reset (bullets_reset_date moved past that last_limit_hit_at), and they
+// haven't touched the fresh allocation yet. Checked a few days after reset so
+// resetStaleBulletCounters has run and organic same-day usage isn't caught mid-flight.
+async function checkAndSendWinbackEmails() {
+  try {
+    const dormantCapHitters = await pool.query(`
+      SELECT id, email, unsubscribe_token
+      FROM users
+      WHERE plan = 'free'
+        AND verified = true
+        AND email != 'brighamwilsonjr@gmail.com'
+        AND email_opt_out IS NOT TRUE
+        AND last_limit_hit_at IS NOT NULL
+        AND bullets_reset_date > last_limit_hit_at::date
+        AND bullets_used_this_month = 0
+        AND bullets_reset_date BETWEEN CURRENT_DATE - INTERVAL '9 days' AND CURRENT_DATE - INTERVAL '2 days'
+        AND (winback_email_sent_at IS NULL OR winback_email_sent_at < NOW() - INTERVAL '45 days')
+      LIMIT 100
+    `);
+
+    for (const user of dormantCapHitters.rows) {
+      try {
+        await sendWinbackEmail(user.email, user.unsubscribe_token);
+        await pool.query(`UPDATE users SET winback_email_sent_at = NOW() WHERE id = $1`, [user.id]);
+        console.log(`Sent win-back email to ${user.email}`);
+      } catch (emailErr) {
+        console.error(`Failed to send win-back email to ${user.email}:`, emailErr.message);
+      }
+    }
+  } catch (err) {
+    console.error('Error in checkAndSendWinbackEmails:', err.message);
+  }
+}
+
+// Run win-back check daily at 9:30 AM (offset from the 9 AM usage-nudge check)
+const scheduleWinbackCheck = () => {
+  const checkTime = () => {
+    const now = new Date();
+    const targetTime = new Date();
+    targetTime.setHours(9, 30, 0, 0);
+
+    if (now >= targetTime) targetTime.setDate(targetTime.getDate() + 1);
+    return targetTime.getTime() - now.getTime();
+  };
+
+  const scheduleNext = () => {
+    const delay = checkTime();
+    setTimeout(() => {
+      console.log('Running daily win-back check...');
+      checkAndSendWinbackEmails();
       scheduleNext();
     }, delay);
   };
@@ -762,14 +907,15 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const verificationToken = generateToken();
     const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const referralCode = generateReferralCode();
+    const unsubscribeToken = generateToken();
     let validReferredBy = null;
     if (referredBy) {
       const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referredBy.toUpperCase()]);
       if (referrer.rows.length > 0) validReferredBy = referredBy.toUpperCase();
     }
     await pool.query(
-      `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, referralCode, validReferredBy]
+      `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by, unsubscribe_token) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [email.toLowerCase(), passwordHash, verificationToken, verificationExpires, referralCode, validReferredBy, unsubscribeToken]
     );
     try {
       await sendVerificationEmail(email.toLowerCase(), verificationToken);
@@ -788,7 +934,7 @@ app.post('/api/auth/verify', async (req, res) => {
   if (!token) return res.status(400).json({ error: 'Token required' });
   try {
     const result = await pool.query(
-      'SELECT id, email FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
+      'SELECT id, email, unsubscribe_token FROM users WHERE verification_token = $1 AND verification_expires > NOW() AND verified = FALSE',
       [token]
     );
     if (result.rows.length === 0) return res.status(400).json({ error: 'Invalid or expired verification link' });
@@ -800,7 +946,7 @@ app.post('/api/auth/verify', async (req, res) => {
       body: JSON.stringify({ email: result.rows[0].email, unsubscribed: false })
     }).catch(err => console.error('Resend add contact failed:', err.message));
     // Send welcome email (non-blocking — don't let email failure break verification)
-    sendWelcomeEmail(result.rows[0].email).catch(err =>
+    sendWelcomeEmail(result.rows[0].email, result.rows[0].unsubscribe_token).catch(err =>
       console.error('Welcome email failed:', err.message)
     );
     res.json({ success: true, message: 'Email verified. You can now log in.' });
@@ -984,6 +1130,8 @@ function checkUsageLimit(deductCount) {
     const limit = 10;
 
     if (used + count > limit) {
+      pool.query('UPDATE users SET last_limit_hit_at = NOW() WHERE id = $1', [user.id])
+        .catch(err => console.error('Failed to stamp last_limit_hit_at:', err.message));
       return res.status(403).json({ error: 'limit_reached', limitType: 'free', used, limit, needed: count });
     }
 
@@ -2124,6 +2272,80 @@ app.get('/verify', async (req, res) => {
   }
 });
 
+// Simple branded shell for the unsubscribe pages — no session/login required,
+// reachable straight from a marketing email footer link.
+function renderUnsubscribePage({ heading, message, showConfirmLink, token }) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NCO Kit</title></head>
+<body style="margin:0;padding:0;background:#0d0f0d;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0d0f0d;padding:60px 20px;min-height:100vh;">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;background:#111a11;border:1px solid #2a4a2a;border-radius:8px;">
+        <tr><td style="padding:36px 36px 8px;text-align:center;">
+          <p style="margin:0 0 24px;font-size:20px;font-weight:900;color:#c9a227;letter-spacing:2px;text-transform:uppercase;">NCO Kit</p>
+          <h1 style="margin:0 0 16px;font-size:20px;color:#e8e4d4;">${heading}</h1>
+          <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#a8c8a8;">${message}</p>
+          ${showConfirmLink ? `<a href="/unsubscribe/confirm?token=${encodeURIComponent(token)}" style="display:inline-block;background:#c9a227;color:#0a140a;font-size:14px;font-weight:900;letter-spacing:1px;text-decoration:none;padding:13px 30px;border-radius:4px;text-transform:uppercase;">Confirm Unsubscribe</a>` : `<a href="https://ncokit.com" style="color:#7dab7d;font-size:13px;">Return to NCO Kit</a>`}
+        </td></tr>
+        <tr><td style="padding:24px 36px 32px;text-align:center;">
+          <span style="font-size:11px;color:#4a7a4a;">ncokit.com</span>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
+app.get('/unsubscribe', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send(renderUnsubscribePage({ heading: 'Invalid link', message: "This unsubscribe link is missing its token. If you followed a link from an email, try copying the full link into your browser." }));
+  try {
+    const result = await pool.query('SELECT email, email_opt_out FROM users WHERE unsubscribe_token = $1', [token]);
+    if (result.rows.length === 0) {
+      return res.status(404).send(renderUnsubscribePage({ heading: 'Invalid link', message: "This unsubscribe link isn't valid — it may have expired or already been used." }));
+    }
+    if (result.rows[0].email_opt_out) {
+      return res.send(renderUnsubscribePage({ heading: "You're already unsubscribed", message: `${result.rows[0].email} is not receiving marketing emails from NCO Kit.` }));
+    }
+    return res.send(renderUnsubscribePage({
+      heading: 'Unsubscribe from NCO Kit emails?',
+      message: `We'll stop sending marketing emails (usage reminders, promotions) to <strong style="color:#e8e4d4;">${result.rows[0].email}</strong>. You'll still get account emails like password resets.`,
+      showConfirmLink: true,
+      token
+    }));
+  } catch (err) {
+    console.error('Unsubscribe lookup error:', err.message);
+    return res.status(500).send(renderUnsubscribePage({ heading: 'Something went wrong', message: 'Please try again in a moment.' }));
+  }
+});
+
+app.get('/unsubscribe/confirm', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).send(renderUnsubscribePage({ heading: 'Invalid link', message: 'This unsubscribe link is missing its token.' }));
+  try {
+    const result = await pool.query(
+      'UPDATE users SET email_opt_out = TRUE WHERE unsubscribe_token = $1 RETURNING email',
+      [token]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).send(renderUnsubscribePage({ heading: 'Invalid link', message: "This unsubscribe link isn't valid — it may have expired or already been used." }));
+    }
+    // Keep Resend's own audience in sync (non-blocking)
+    fetch(`https://api.resend.com/audiences/${process.env.RESEND_AUDIENCE_ID}/contacts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
+      body: JSON.stringify({ email: result.rows[0].email, unsubscribed: true })
+    }).catch(err => console.error('Resend unsubscribe sync failed:', err.message));
+
+    return res.send(renderUnsubscribePage({ heading: "You're unsubscribed", message: `${result.rows[0].email} won't receive any more marketing emails from NCO Kit.` }));
+  } catch (err) {
+    console.error('Unsubscribe confirm error:', err.message);
+    return res.status(500).send(renderUnsubscribePage({ heading: 'Something went wrong', message: 'Please try again in a moment.' }));
+  }
+});
+
 app.get('/privacy', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'privacy.html'));
 });
@@ -2185,6 +2407,21 @@ async function initDB() {
 
     // Re-engagement email tracking
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS reengagement_email_sent_at TIMESTAMPTZ`);
+
+    // Win-back email tracking — dormant users who hit their free limit, then their
+    // monthly allocation reset without them coming back to use it
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_limit_hit_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS winback_email_sent_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS winback_email_converted BOOLEAN DEFAULT FALSE`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_last_limit_hit ON users(last_limit_hit_at)`);
+
+    // Marketing email opt-out — real, working unsubscribe (CAN-SPAM compliance).
+    // unsubscribe_token is a per-user unguessable id used in email footer links
+    // so anyone can opt out without logging in, and without exposing other users' status.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS email_opt_out BOOLEAN DEFAULT FALSE`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS unsubscribe_token VARCHAR(64)`);
+    await pool.query(`UPDATE users SET unsubscribe_token = uuid_generate_v4()::text WHERE unsubscribe_token IS NULL`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_unsubscribe_token ON users(unsubscribe_token)`);
 
     // Audit logging table for AI usage tracking (Security Fix #3)
     await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_log (
@@ -3110,6 +3347,44 @@ app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
   }
 });
 
+// ── ADMIN: WIN-BACK CAMPAIGN STATS + TEST SEND ───────────────────────────────
+// Pool breakdown: how many dormant cap-hitters exist, how many already emailed.
+// Pass ?test=you@example.com to fire one preview send without touching the DB.
+app.get('/api/admin/winback-stats', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+
+  const testEmail = req.query.test;
+  if (testEmail) {
+    try {
+      await sendWinbackEmail(testEmail, 'test-preview-token');
+      return res.json({ sent: 1, test: testEmail });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+
+  try {
+    const pool_ = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE last_limit_hit_at IS NOT NULL)::int AS ever_hit_limit,
+        COUNT(*) FILTER (
+          WHERE last_limit_hit_at IS NOT NULL
+            AND bullets_reset_date > last_limit_hit_at::date
+            AND bullets_used_this_month = 0
+        )::int AS dormant_since_last_reset,
+        COUNT(*) FILTER (WHERE winback_email_sent_at IS NOT NULL)::int AS emailed_ever,
+        COUNT(*) FILTER (WHERE winback_email_sent_at > NOW() - INTERVAL '30 days')::int AS emailed_last_30d,
+        COUNT(*) FILTER (WHERE winback_email_converted)::int AS converted
+      FROM users
+      WHERE plan = 'free' AND verified = true AND email != 'brighamwilsonjr@gmail.com'
+    `);
+    res.json(pool_.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: RE-ENGAGEMENT BATCH SEND ──────────────────────────────────────────
 // Targets verified free users with zero AI uses ever (checked via ai_usage_log)
 // Each sent user is stamped with reengagement_email_sent_at to prevent duplicates
@@ -3127,14 +3402,15 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
   try {
     let recipients;
     if (testEmail) {
-      recipients = [{ id: null, email: testEmail, referral_code: null }];
+      recipients = [{ id: null, email: testEmail, referral_code: null, unsubscribe_token: 'test-preview-token' }];
     } else {
       const result = await pool.query(`
-        SELECT u.id, u.email, u.referral_code
+        SELECT u.id, u.email, u.referral_code, u.unsubscribe_token
         FROM users u
         WHERE u.verified = true
           AND u.plan = 'free'
           AND u.email != 'brighamwilsonjr@gmail.com'
+          AND u.email_opt_out IS NOT TRUE
           AND NOT EXISTS (SELECT 1 FROM ai_usage_log a WHERE a.user_id = u.id)
           AND u.reengagement_email_sent_at IS NULL
         ORDER BY u.created_at DESC
@@ -3193,6 +3469,7 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
             Built by NCOs, for NCOs.<br>
             — Henry @ NCO Kit<br><br>
             <a href="https://ncokit.com/privacy" style="color:#6b5e45;">Privacy Policy</a> &nbsp;|&nbsp;
+            <a href="{{unsubscribeLink}}" style="color:#6b5e45;">Unsubscribe</a><br>
             You're receiving this because you created an account at ncokit.com.
           </p>
         </td></tr>
@@ -3209,7 +3486,8 @@ app.post('/api/admin/send-reengagement', async (req, res) => {
     for (const user of recipients) {
       try {
         const refLink = user.referral_code ? `https://ncokit.com?ref=${user.referral_code}` : 'https://ncokit.com/#bullets';
-        const html = htmlTemplate.replace('{{refLink}}', refLink);
+        const unsubscribeLink = `https://ncokit.com/unsubscribe?token=${encodeURIComponent(user.unsubscribe_token)}`;
+        const html = htmlTemplate.replace('{{refLink}}', refLink).replace('{{unsubscribeLink}}', unsubscribeLink);
 
         await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -3982,4 +4260,7 @@ app.listen(PORT, async () => {
   // Start daily usage nudge email check at 9 AM
   scheduleUsageNudgeCheck();
   console.log('Usage nudge scheduler initialized');
+  // Start daily win-back email check at 9:30 AM
+  scheduleWinbackCheck();
+  console.log('Win-back scheduler initialized');
 });
