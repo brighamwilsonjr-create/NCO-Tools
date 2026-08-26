@@ -93,11 +93,11 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://js.stripe.com; " +
+    "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://www.google-analytics.com https://js.stripe.com https://googleads.g.doubleclick.net https://www.googleadservices.com; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
     "font-src 'self' https://fonts.gstatic.com data:; " +
     "img-src 'self' data: https:; " +
-    "connect-src 'self' https://api.stripe.com https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net; " +
+    "connect-src 'self' https://api.stripe.com https://www.google-analytics.com https://analytics.google.com https://stats.g.doubleclick.net https://googleads.g.doubleclick.net https://www.googleadservices.com https://www.google.com; " +
     "frame-src https://js.stripe.com; " +
     "object-src 'none'; " +
     "base-uri 'self';"
@@ -237,8 +237,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   res.json({ received: true });
 });
 
-// Body size limit — 10kb max
-app.use(express.json({ limit: '10kb' }));
+// Body size limit — 100kb max (covers multi-field text forms like counseling/award narratives)
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
@@ -1377,7 +1377,7 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       line_items: [{ price: priceId, quantity: 1 }],
       discounts,
       metadata: { userId: user.id, freeMontUsed: freeMontUsed ? 'true' : 'false' },
-      success_url: 'https://ncokit.com/?upgraded=true',
+      success_url: 'https://ncokit.com/?upgraded=true&session_id={CHECKOUT_SESSION_ID}',
       cancel_url: 'https://ncokit.com/?upgrade=cancelled',
     });
 
