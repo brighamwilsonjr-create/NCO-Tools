@@ -3385,6 +3385,69 @@ app.get('/api/admin/winback-stats', async (req, res) => {
   }
 });
 
+// ── ADMIN: WIN-BACK HISTORICAL BACKFILL SEND ─────────────────────────────────
+// One-time catch-up for users who hit the cap BEFORE last_limit_hit_at existed —
+// their bullets_used_this_month was already silently reset by the 30-day rolling
+// cleanup, so the live column has no record of them. Reconstructs the same
+// population from ai_usage_log instead: free users with 10+ successful AI
+// requests ever (strong signal they hit the monthly cap at some point) and zero
+// successful requests in the last 30 days (dormant now).
+// Pass { dryRun: true } to just get the count/preview without sending anything.
+// Call with { batch: 0 } for first 48, { batch: 1 } for next 48, etc.
+app.post('/api/admin/send-winback-backfill', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+
+  const batchSize = 48;
+  const batchNum  = parseInt(req.body.batch ?? 0);
+  const offset    = batchNum * batchSize;
+  const dryRun    = !!req.body.dryRun;
+
+  const findQuery = `
+    SELECT u.id, u.email, u.unsubscribe_token
+    FROM users u
+    WHERE u.plan = 'free'
+      AND u.verified = true
+      AND u.email != 'brighamwilsonjr@gmail.com'
+      AND u.email_opt_out IS NOT TRUE
+      AND u.winback_email_sent_at IS NULL
+      AND (SELECT COUNT(*) FROM ai_usage_log a WHERE a.user_id = u.id AND a.success = true) >= 10
+      AND NOT EXISTS (
+        SELECT 1 FROM ai_usage_log a2
+        WHERE a2.user_id = u.id AND a2.success = true AND a2.timestamp > NOW() - INTERVAL '30 days'
+      )
+    ORDER BY u.created_at ASC
+  `;
+
+  try {
+    if (dryRun) {
+      const result = await pool.query(`SELECT COUNT(*)::int AS eligible FROM (${findQuery}) sub`);
+      return res.json({ dryRun: true, eligible: result.rows[0].eligible, batchSize });
+    }
+
+    const result = await pool.query(`${findQuery} LIMIT $1 OFFSET $2`, [batchSize, offset]);
+    const recipients = result.rows;
+
+    if (recipients.length === 0) return res.json({ sent: 0, batch: batchNum, message: 'No recipients in this batch — backfill complete' });
+
+    let sent = 0;
+    const errors = [];
+    for (const user of recipients) {
+      try {
+        await sendWinbackEmail(user.email, user.unsubscribe_token);
+        await pool.query(`UPDATE users SET winback_email_sent_at = NOW() WHERE id = $1`, [user.id]);
+        sent++;
+      } catch (e) {
+        errors.push({ email: user.email, error: e.message });
+      }
+    }
+
+    res.json({ batch: batchNum, sent, total: recipients.length, errors });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: RE-ENGAGEMENT BATCH SEND ──────────────────────────────────────────
 // Targets verified free users with zero AI uses ever (checked via ai_usage_log)
 // Each sent user is stamped with reengagement_email_sent_at to prevent duplicates
