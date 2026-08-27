@@ -217,6 +217,9 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.RESEND_API_KEY}` },
             body: JSON.stringify({ email: premiumUser.rows[0].email, unsubscribed: true })
           }).catch(err => console.error('Resend premium update failed:', err.message));
+
+          const sourceTag = winbackConverted ? ' — from win-back email' : (converted ? ` — from usage nudge (${template})` : (referredBy ? ' — from referral' : ''));
+          sendPushoverNotification('💰 New Premium Upgrade', `${premiumUser.rows[0].email} just upgraded to Premium${sourceTag}`);
         }
       }
     }
@@ -290,6 +293,24 @@ async function sendEmail(to, subject, html, from = 'NCO Kit <noreply@ncokit.com>
   console.log('Resend response:', JSON.stringify(data));
   if (!response.ok) throw new Error(`Email failed: ${JSON.stringify(data)}`);
   return data;
+}
+
+// Push a phone notification via Pushover — used for real-time owner alerts
+// (e.g. premium upgrades). Fire-and-forget: never let a notification failure
+// break the caller's actual work.
+function sendPushoverNotification(title, message) {
+  if (!process.env.PUSHOVER_APP_TOKEN || !process.env.PUSHOVER_USER_KEY) return;
+  const params = new URLSearchParams({
+    token: process.env.PUSHOVER_APP_TOKEN,
+    user: process.env.PUSHOVER_USER_KEY,
+    title,
+    message
+  });
+  fetch('https://api.pushover.net/1/messages.json', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  }).catch(err => console.error('Pushover notification failed:', err.message));
 }
 
 function generateToken(length = 32) {
