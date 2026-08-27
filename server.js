@@ -820,6 +820,17 @@ const scheduleWinbackCheck = () => {
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
 
+// One-off check that PUSHOVER_APP_TOKEN/PUSHOVER_USER_KEY are actually set on
+// this deployment and that the notification path fires from the live server.
+app.get('/api/admin/test-pushover', (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const configured = !!(process.env.PUSHOVER_APP_TOKEN && process.env.PUSHOVER_USER_KEY);
+  if (!configured) return res.json({ configured: false, message: 'PUSHOVER_APP_TOKEN or PUSHOVER_USER_KEY not set on this service' });
+  sendPushoverNotification('NCO Kit', 'Live server test — env vars are wired up correctly.');
+  res.json({ configured: true, sent: true });
+});
+
 // SEO
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain');
