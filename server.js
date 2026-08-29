@@ -110,6 +110,27 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── TEMPORARY: page-view traffic logging to investigate a traffic-quality dip
+// (Aug 26-28 2026) — the app has no general request logging otherwise, so
+// there's no historical data to look back on. This only helps going forward.
+// Skips static assets/API calls to cut noise; flags any IP crossing a crude
+// rate threshold as a likely bot/scraper. Remove once the investigation is done.
+const NAVIGATION_LOG_SKIP_EXT = /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2?|ttf|map|json|txt|xml)$/i;
+const trafficRateMap = new Map(); // ip => [timestamps]
+app.use((req, res, next) => {
+  if (req.method === 'GET' && !req.path.startsWith('/api/') && !NAVIGATION_LOG_SKIP_EXT.test(req.path)) {
+    const ip = req.ip;
+    const now = Date.now();
+    const hits = (trafficRateMap.get(ip) || []).filter(t => now - t < 60000);
+    hits.push(now);
+    trafficRateMap.set(ip, hits);
+    const suspicious = hits.length > 20 ? ' [SUSPICIOUS: ' + hits.length + ' reqs/60s]' : '';
+    console.log(`[traffic] ${ip} | ${req.path} | ua="${req.get('user-agent') || ''}" | ref="${req.get('referer') || ''}"${suspicious}`);
+    if (trafficRateMap.size > 5000) trafficRateMap.clear();
+  }
+  next();
+});
+
 // Stripe webhook needs raw body BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
