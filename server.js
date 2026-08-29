@@ -125,27 +125,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// ── TEMPORARY: page-view traffic logging to investigate a traffic-quality dip
-// (Aug 26-28 2026) — the app has no general request logging otherwise, so
-// there's no historical data to look back on. This only helps going forward.
-// Skips static assets/API calls to cut noise; flags any IP crossing a crude
-// rate threshold as a likely bot/scraper. Remove once the investigation is done.
-const NAVIGATION_LOG_SKIP_EXT = /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2?|ttf|map|json|txt|xml)$/i;
-const trafficRateMap = new Map(); // ip => [timestamps]
-app.use((req, res, next) => {
-  if (req.method === 'GET' && !req.path.startsWith('/api/') && !NAVIGATION_LOG_SKIP_EXT.test(req.path)) {
-    const ip = getRealClientIP(req);
-    const now = Date.now();
-    const hits = (trafficRateMap.get(ip) || []).filter(t => now - t < 60000);
-    hits.push(now);
-    trafficRateMap.set(ip, hits);
-    const suspicious = hits.length > 20 ? ' [SUSPICIOUS: ' + hits.length + ' reqs/60s]' : '';
-    console.log(`[traffic] ${ip} | ${req.path} | ua="${req.get('user-agent') || ''}" | ref="${req.get('referer') || ''}"${suspicious}`);
-    if (trafficRateMap.size > 5000) trafficRateMap.clear();
-  }
-  next();
-});
-
 // Stripe webhook needs raw body BEFORE express.json()
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
@@ -855,22 +834,6 @@ const scheduleWinbackCheck = () => {
 // ── ROUTES ────────────────────────────────────────────────────────────────────
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
-
-// TEMPORARY: dump raw proxy headers to determine the real Cloudflare/Render
-// hop count before touching `trust proxy` — remove once diagnosed.
-app.get('/api/admin/debug-ip', (req, res) => {
-  const secret = req.headers['x-report-secret'];
-  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
-  res.json({
-    'req.ip': req.ip,
-    'req.ips': req.ips,
-    'x-forwarded-for': req.headers['x-forwarded-for'] || null,
-    'cf-connecting-ip': req.headers['cf-connecting-ip'] || null,
-    'x-real-ip': req.headers['x-real-ip'] || null,
-    'true-client-ip': req.headers['true-client-ip'] || null,
-    'socket.remoteAddress': req.socket.remoteAddress
-  });
-});
 
 // SEO
 app.get('/robots.txt', (req, res) => {
