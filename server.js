@@ -25,9 +25,21 @@ const anonUsageMap = new Map(); // Store: IP+UserAgent => usage count
 const ANON_USAGE_LIMIT = 3;
 const CLEANUP_INTERVAL = 60 * 60 * 1000; // Clean up old entries every hour
 
+// Both ncokit.com and the raw .onrender.com origin sit behind Cloudflare, and
+// Cloudflare's edge rejects any request where the client tries to set its own
+// CF-Connecting-IP header (confirmed: returns error 1000) — so unlike
+// X-Forwarded-For, which a client can spoof by prepending fake entries ahead
+// of the real chain, this header is safe to trust directly as the real
+// visitor IP. req.ip on its own currently resolves to Cloudflare's edge IP,
+// not the visitor, because Render's own internal proxy adds a hop that
+// `trust proxy`'s hop-count can't distinguish from Cloudflare's.
+function getRealClientIP(req) {
+  return req.headers['cf-connecting-ip'] || req.ip;
+}
+
 function getAnonKey(req) {
   // Create a unique identifier based on IP and user agent
-  const ip = req.ip || req.connection.remoteAddress || 'unknown';
+  const ip = getRealClientIP(req) || req.connection.remoteAddress || 'unknown';
   const userAgent = req.get('user-agent') || 'unknown';
   return crypto.createHash('sha256').update(ip + userAgent).digest('hex');
 }
@@ -54,7 +66,8 @@ const authLimiter = rateLimit({
   max: 20,
   message: { error: 'Too many attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: getRealClientIP
 });
 
 // File upload config — memory storage, PDF/DOCX only, 10MB max
@@ -72,7 +85,8 @@ const aiLimiter = rateLimit({
   max: 10,
   message: { error: 'Too many requests. Please slow down.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: getRealClientIP
 });
 
 const generalLimiter = rateLimit({
@@ -80,7 +94,8 @@ const generalLimiter = rateLimit({
   max: 200,
   message: { error: 'Too many requests. Please try again shortly.' },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  keyGenerator: getRealClientIP
 });
 
 // Apply general limiter to all routes
@@ -119,7 +134,7 @@ const NAVIGATION_LOG_SKIP_EXT = /\.(png|jpg|jpeg|gif|svg|ico|css|js|woff2?|ttf|m
 const trafficRateMap = new Map(); // ip => [timestamps]
 app.use((req, res, next) => {
   if (req.method === 'GET' && !req.path.startsWith('/api/') && !NAVIGATION_LOG_SKIP_EXT.test(req.path)) {
-    const ip = req.ip;
+    const ip = getRealClientIP(req);
     const now = Date.now();
     const hits = (trafficRateMap.get(ip) || []).filter(t => now - t < 60000);
     hits.push(now);
@@ -140,7 +155,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
   } catch (err) {
     const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
     console.error('Webhook signature error:', err.message);
-    console.error('Diag — from IP:', req.ip, '| User-Agent:', req.headers['user-agent'] || '(none)');
+    console.error('Diag — from IP:', getRealClientIP(req), '| User-Agent:', req.headers['user-agent'] || '(none)');
     console.error('Diag — body type:', typeof req.body, 'isBuffer:', Buffer.isBuffer(req.body), 'len:', req.body?.length);
     console.error('Diag — sig header present:', !!sig, 'sig len:', sig?.length);
     console.error('Diag — secret prefix:', secret.slice(0, 8), 'len:', secret.length, 'endsWithWhitespace:', /\s$/.test(secret));
