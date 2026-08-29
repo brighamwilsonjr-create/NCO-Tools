@@ -841,6 +841,22 @@ const scheduleWinbackCheck = () => {
 
 app.get('/health', (req, res) => res.json({ status: 'online' }));
 
+// TEMPORARY: dump raw proxy headers to determine the real Cloudflare/Render
+// hop count before touching `trust proxy` — remove once diagnosed.
+app.get('/api/admin/debug-ip', (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  res.json({
+    'req.ip': req.ip,
+    'req.ips': req.ips,
+    'x-forwarded-for': req.headers['x-forwarded-for'] || null,
+    'cf-connecting-ip': req.headers['cf-connecting-ip'] || null,
+    'x-real-ip': req.headers['x-real-ip'] || null,
+    'true-client-ip': req.headers['true-client-ip'] || null,
+    'socket.remoteAddress': req.socket.remoteAddress
+  });
+});
+
 // SEO
 app.get('/robots.txt', (req, res) => {
   res.type('text/plain');
