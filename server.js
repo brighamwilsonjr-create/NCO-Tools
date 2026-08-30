@@ -3383,6 +3383,27 @@ app.get('/api/admin/usage-nudge-analytics', async (req, res) => {
   }
 });
 
+// ── ADMIN: USER COUNTS ────────────────────────────────────────────────────────
+app.get('/api/admin/user-counts', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  try {
+    const result = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total_users,
+        COUNT(*) FILTER (WHERE verified)::int AS verified,
+        COUNT(*) FILTER (WHERE plan = 'free')::int AS free,
+        COUNT(*) FILTER (WHERE plan = 'premium')::int AS premium,
+        COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days')::int AS signed_up_last_30d,
+        COUNT(*) FILTER (WHERE bullets_reset_date < CURRENT_DATE - INTERVAL '30 days')::int AS currently_stale_reset_date
+      FROM users
+    `);
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: WIN-BACK CAMPAIGN STATS + TEST SEND ───────────────────────────────
 // Pool breakdown: how many dormant cap-hitters exist, how many already emailed.
 // Pass ?test=you@example.com to fire one preview send without touching the DB.
