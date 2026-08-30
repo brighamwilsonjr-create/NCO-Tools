@@ -162,13 +162,20 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         );
         const winbackConverted = winbackResult.rows.length > 0;
 
+        const limitModalResult = await pool.query(
+          `SELECT 1 FROM users WHERE id = $1 AND limit_modal_variant IS NOT NULL`,
+          [userId]
+        );
+        const limitModalConverted = limitModalResult.rows.length > 0;
+
         await pool.query(
           `UPDATE users
            SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW(),
                usage_nudge_converted = $4,
-               winback_email_converted = CASE WHEN $6 THEN TRUE ELSE winback_email_converted END
+               winback_email_converted = CASE WHEN $6 THEN TRUE ELSE winback_email_converted END,
+               limit_modal_converted = CASE WHEN $7 THEN TRUE ELSE limit_modal_converted END
            WHERE id = $5`,
-          ['premium', customerId, subscriptionId, converted, userId, winbackConverted]
+          ['premium', customerId, subscriptionId, converted, userId, winbackConverted, limitModalConverted]
         );
 
         // Decrement free_months_earned if a free month coupon was used at checkout
@@ -352,7 +359,7 @@ async function getUserFromSession(req) {
   const result = await pool.query(
     `SELECT u.id, u.email, u.plan, u.verified, u.referral_code, u.referred_by,
             u.stripe_customer_id, u.stripe_subscription_id, u.bullets_used_this_month,
-            u.bullets_reset_date, u.free_months_earned, u.free_months_used
+            u.bullets_reset_date, u.free_months_earned, u.free_months_used, u.limit_modal_variant
      FROM users u JOIN sessions s ON s.user_id = u.id
      WHERE s.token = $1 AND s.expires_at > NOW()`,
     [token]
@@ -1019,6 +1026,29 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 // ── ONBOARDING TRACKING ENDPOINTS ────────────────────────────────────────────
 
 // Check if user has completed onboarding
+// Assigns (once) and returns this user's limit-hit upgrade modal variant.
+// Persisted so the same user always sees the same pitch, and so
+// /api/stripe/create-checkout can honor variant C's discount later.
+app.post('/api/auth/get-upgrade-variant', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (!user) return res.status(401).json({ error: 'Not authenticated' });
+  try {
+    if (user.limit_modal_variant) {
+      return res.json({ variant: user.limit_modal_variant });
+    }
+    const variants = ['A', 'B', 'C'];
+    const variant = variants[Math.floor(Math.random() * variants.length)];
+    await pool.query(
+      `UPDATE users SET limit_modal_variant = $1, limit_modal_variant_assigned_at = NOW() WHERE id = $2`,
+      [variant, user.id]
+    );
+    res.json({ variant });
+  } catch (err) {
+    console.error('get-upgrade-variant error:', err);
+    res.status(500).json({ error: 'Failed to get variant' });
+  }
+});
+
 app.get('/api/auth/onboarding-status', async (req, res) => {
   try {
     const user = await getUserFromSession(req);
@@ -1402,6 +1432,10 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       freeMontUsed = true;
     } else if (user.referred_by && !user.stripe_customer_id) {
       // Referred user gets 50% off first month
+      const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
+      discounts = [{ coupon: coupon.id }];
+    } else if (user.limit_modal_variant === 'C') {
+      // Limit-hit modal variant C promises 50% off first month — honor it
       const coupon = await stripe.coupons.create({ percent_off: 50, duration: 'once' });
       discounts = [{ coupon: coupon.id }];
     }
@@ -2450,6 +2484,13 @@ async function initDB() {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS winback_email_sent_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS winback_email_converted BOOLEAN DEFAULT FALSE`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_last_limit_hit ON users(last_limit_hit_at)`);
+
+    // In-app limit-hit upgrade modal — A/B/C variant persisted per user so the
+    // same person always sees the same pitch, and so checkout can honor
+    // variant C's 50%-off promise (previously unbacked — see /api/auth/get-upgrade-variant).
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS limit_modal_variant VARCHAR(1)`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS limit_modal_variant_assigned_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS limit_modal_converted BOOLEAN DEFAULT FALSE`);
 
     // Marketing email opt-out — real, working unsubscribe (CAN-SPAM compliance).
     // unsubscribe_token is a per-user unguessable id used in email footer links
