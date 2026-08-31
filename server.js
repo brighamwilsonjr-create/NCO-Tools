@@ -4034,6 +4034,48 @@ ${bodyHtml}
 </html>`;
 }
 
+// Shared registry of the dedicated SEO tool landing pages, used for cross-linking
+// from the blog index, blog posts, and each other — so none of them are orphan
+// pages relying solely on the sitemap for discovery.
+const ALL_TOOL_PAGES = [
+  { href: '/ncoer-bullet-generator', label: 'NCOER Bullet Generator' },
+  { href: '/oer-bullet-generator', label: 'OER Bullet Generator' },
+  { href: '/da-4856-generator', label: 'DA 4856 Counseling Generator' },
+  { href: '/aft-calculator', label: 'AFT Score Calculator' },
+  { href: '/awards-writer', label: 'Award Citation Writer' },
+  { href: '/army-memo-generator', label: 'Army Memo Generator' },
+  { href: '/senior-rater-narrative-generator', label: 'Senior Rater Narrative Generator' },
+  { href: '/soldier-roster-tracker', label: 'Soldier Roster Tracker' },
+];
+
+function toolLinksSection(excludeHref) {
+  const items = ALL_TOOL_PAGES.filter(t => t.href !== excludeHref)
+    .map(t => `<li><a href="${t.href}">${t.label}</a></li>`).join('\n        ');
+  return `
+    <div style="margin-top:48px;padding-top:28px;border-top:1px solid #3d5440;">
+      <h2>Explore More Free Army Tools</h2>
+      <ul>
+        ${items}
+      </ul>
+    </div>`;
+}
+
+// Guesses which tool page a blog post is actually about, from its title/category,
+// so the post's closing CTA can point somewhere specific instead of just "/".
+// Checked most-specific-first since "ncoer" contains "oer" as a substring.
+function findRelevantToolLink(title, category) {
+  const text = `${title} ${category || ''}`.toLowerCase();
+  if (text.includes('senior rater') || text.includes('narrative')) return ALL_TOOL_PAGES.find(t => t.href.includes('senior-rater'));
+  if (text.includes('ncoer')) return ALL_TOOL_PAGES.find(t => t.href.includes('ncoer'));
+  if (text.includes('oer')) return ALL_TOOL_PAGES.find(t => t.href.includes('/oer-'));
+  if (text.includes('4856') || text.includes('counsel')) return ALL_TOOL_PAGES.find(t => t.href.includes('da-4856'));
+  if (text.includes('aft') || text.includes('acft') || text.includes('fitness')) return ALL_TOOL_PAGES.find(t => t.href.includes('aft-calculator'));
+  if (text.includes('award') || text.includes('arcom') || text.includes('aam') || text.includes('msm')) return ALL_TOOL_PAGES.find(t => t.href.includes('awards'));
+  if (text.includes('memo')) return ALL_TOOL_PAGES.find(t => t.href.includes('memo'));
+  if (text.includes('roster')) return ALL_TOOL_PAGES.find(t => t.href.includes('roster'));
+  return null;
+}
+
 // GET /blog — index page
 app.get('/blog', async (req, res) => {
   try {
@@ -4067,7 +4109,8 @@ app.get('/blog', async (req, res) => {
       bodyHtml: `
         <h1 class="blog-heading">Army Leader Resources</h1>
         <p class="blog-sub">Guides, examples, and tips for NCOs and leaders — from the team at NCO Kit</p>
-        <div class="post-list">${postCards}</div>`
+        <div class="post-list">${postCards}</div>
+        ${toolLinksSection()}`
     });
 
     res.type('text/html').send(html);
@@ -4114,6 +4157,8 @@ app.get('/blog/:slug', async (req, res) => {
       "publisher": { "@type": "Organization", "name": "NCO Kit", "url": "https://ncokit.com", "logo": { "@type": "ImageObject", "url": "https://ncokit.com/icons/icon-512.png" } }
     })}</script>`;
 
+    const relevantTool = findRelevantToolLink(post.title, post.category);
+
     const html = blogPage({
       title: `${post.title} | NCO Kit`,
       metaDescription: metaDesc,
@@ -4128,10 +4173,11 @@ app.get('/blog/:slug', async (req, res) => {
         </header>
         <div class="post-body">${post.content}</div>
         <div class="cta-box">
-          <h3>Try It Free on NCO Kit</h3>
+          <h3>${relevantTool ? `Try the ${relevantTool.label} Free` : 'Try It Free on NCO Kit'}</h3>
           <p>Save hours on Army paperwork. NCOER bullets, DA 4856 counseling, award citations, memos, and more — all AI-powered and free.</p>
-          <a href="/" class="cta-btn">Open NCO Kit →</a>
-        </div>`
+          <a href="${relevantTool ? relevantTool.href : '/'}" class="cta-btn">${relevantTool ? `Open ${relevantTool.label}` : 'Open NCO Kit'} →</a>
+        </div>
+        ${toolLinksSection(relevantTool ? relevantTool.href : null)}`
     });
 
     res.type('text/html').send(html);
@@ -4305,6 +4351,7 @@ app.get('/ncoer-bullet-generator', (req, res) => {
         <p>Free to try. No signup required for the first three.</p>
         <a href="/bullets" class="cta-btn">Open NCOER Bullet Builder →</a>
       </div>
+      ${toolLinksSection('/ncoer-bullet-generator')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4389,6 +4436,7 @@ app.get('/oer-bullet-generator', (req, res) => {
         <p>Free to try. No signup required for the first three.</p>
         <a href="/oer" class="cta-btn">Open OER Bullet Builder →</a>
       </div>
+      ${toolLinksSection('/oer-bullet-generator')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4471,6 +4519,7 @@ app.get('/da-4856-generator', (req, res) => {
         <p>Free to try. No signup required for the first three.</p>
         <a href="/counseling" class="cta-btn">Open DA 4856 Generator →</a>
       </div>
+      ${toolLinksSection('/da-4856-generator')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4545,6 +4594,7 @@ app.get('/aft-calculator', (req, res) => {
         <p>Free, instant, no signup required.</p>
         <a href="/acft" class="cta-btn">Open AFT Calculator →</a>
       </div>
+      ${toolLinksSection('/aft-calculator')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4624,6 +4674,7 @@ app.get('/awards-writer', (req, res) => {
         <p>Free to try. No signup required for the first three.</p>
         <a href="/awards" class="cta-btn">Open Awards Writer →</a>
       </div>
+      ${toolLinksSection('/awards-writer')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4702,6 +4753,7 @@ app.get('/army-memo-generator', (req, res) => {
         <p>Free to try. No signup required for the first three.</p>
         <a href="/memo" class="cta-btn">Open Memo Generator →</a>
       </div>
+      ${toolLinksSection('/army-memo-generator')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4782,6 +4834,7 @@ app.get('/senior-rater-narrative-generator', (req, res) => {
         <p>Free to try. No signup required for the first three.</p>
         <a href="/narrative" class="cta-btn">Open Senior Rater Narrative Generator →</a>
       </div>
+      ${toolLinksSection('/senior-rater-narrative-generator')}
     </div>`;
 
   res.type('text/html').send(blogPage({
@@ -4856,6 +4909,7 @@ app.get('/soldier-roster-tracker', (req, res) => {
         <p>Free with an account. No credit card required.</p>
         <a href="/roster" class="cta-btn">Open Soldier Roster →</a>
       </div>
+      ${toolLinksSection('/soldier-roster-tracker')}
     </div>`;
 
   res.type('text/html').send(blogPage({
