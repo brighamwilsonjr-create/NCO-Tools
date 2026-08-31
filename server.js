@@ -3749,11 +3749,17 @@ app.get('/api/admin/user-lookup', async (req, res) => {
   const secret = req.headers['x-report-secret'];
   if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
   const email = req.query.email;
-  if (!email) return res.status(400).json({ error: 'email query param required' });
+  const id = req.query.id;
+  if (!email && !id) return res.status(400).json({ error: 'email or id query param required' });
   try {
     const result = await pool.query(
-      'SELECT id, email, plan, verified, bullets_used_this_month, bullets_reset_date, created_at FROM users WHERE email = $1',
-      [email.toLowerCase().trim()]
+      `SELECT id, email, plan, verified, bullets_used_this_month, bullets_reset_date, created_at,
+              referred_by, free_months_earned, free_months_used,
+              usage_nudge_sent_at, usage_nudge_converted,
+              winback_email_sent_at, winback_email_converted,
+              limit_modal_variant, limit_modal_variant_assigned_at, limit_modal_converted
+       FROM users WHERE ${id ? 'id = $1' : 'email = $1'}`,
+      [id ? id : email.toLowerCase().trim()]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
     res.json(result.rows[0]);
