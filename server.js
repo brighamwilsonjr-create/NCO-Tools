@@ -3483,6 +3483,50 @@ app.get('/api/admin/winback-stats', async (req, res) => {
   }
 });
 
+// ── ADMIN: BACKFILL last_limit_hit_at FOR HISTORICAL USERS ───────────────────
+// One-time data repair, not an email send. last_limit_hit_at only started
+// recording the moment it was added — no historical user has it set, so the
+// ongoing daily win-back job can only ever catch people who hit the cap AFTER
+// that point. This closes the gap permanently: sets last_limit_hit_at (to
+// their most recent successful AI activity, as a proxy for "when they were
+// last active at/near the cap") for every free user with 10+ lifetime
+// successful generations who doesn't already have it set. Once backfilled,
+// the existing daily job takes over naturally as each user's monthly counter
+// cycles through its reset window — no more manual re-runs needed.
+// Pass { dryRun: true } to see the count before committing.
+app.post('/api/admin/backfill-limit-hit-timestamps', async (req, res) => {
+  const secret = req.headers['x-report-secret'];
+  if (secret !== process.env.WEEKLY_REPORT_SECRET) return res.status(401).json({ error: 'Unauthorized' });
+  const dryRun = !!req.body.dryRun;
+
+  const eligibleSubquery = `
+    SELECT a.user_id, MAX(a.timestamp) AS last_activity
+    FROM ai_usage_log a
+    JOIN users u ON u.id = a.user_id
+    WHERE a.success = true AND u.plan = 'free' AND u.last_limit_hit_at IS NULL
+    GROUP BY a.user_id
+    HAVING COUNT(*) >= 10
+  `;
+
+  try {
+    if (dryRun) {
+      const result = await pool.query(`SELECT COUNT(*)::int AS eligible FROM (${eligibleSubquery}) sub`);
+      return res.json({ dryRun: true, eligible: result.rows[0].eligible });
+    }
+
+    const result = await pool.query(`
+      UPDATE users u
+      SET last_limit_hit_at = sub.last_activity
+      FROM (${eligibleSubquery}) sub
+      WHERE u.id = sub.user_id
+      RETURNING u.id
+    `);
+    res.json({ backfilled: result.rowCount });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── ADMIN: WIN-BACK HISTORICAL BACKFILL SEND ─────────────────────────────────
 // One-time catch-up for users who hit the cap BEFORE last_limit_hit_at existed —
 // their bullets_used_this_month was already silently reset by the 30-day rolling
