@@ -893,6 +893,48 @@ app.get('/sitemap.xml', async (req, res) => {
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://ncokit.com/oer-bullet-generator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/da-4856-generator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/aft-calculator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/awards-writer</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/army-memo-generator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/senior-rater-narrative-generator</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://ncokit.com/soldier-roster-tracker</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://ncokit.com/privacy</loc>
     <lastmod>${today}</lastmod>
     <changefreq>yearly</changefreq>
@@ -4170,7 +4212,7 @@ app.get('/ncoer-bullet-generator', (req, res) => {
       <div class="cta-box" style="margin:32px 0;">
         <h3>Start Building Bullets</h3>
         <p>Type what your Soldier did. Get a properly formatted bullet in seconds.</p>
-        <a href="/" class="cta-btn">Open NCOER Bullet Builder →</a>
+        <a href="/bullets" class="cta-btn">Open NCOER Bullet Builder →</a>
       </div>
 
       <h2>What is an NCOER Bullet?</h2>
@@ -4261,12 +4303,563 @@ app.get('/ncoer-bullet-generator', (req, res) => {
       <div class="cta-box">
         <h3>Build Your First Bullet</h3>
         <p>Free to try. No signup required for the first three.</p>
-        <a href="/" class="cta-btn">Open NCOER Bullet Builder →</a>
+        <a href="/bullets" class="cta-btn">Open NCOER Bullet Builder →</a>
       </div>
     </div>`;
 
   res.type('text/html').send(blogPage({
     title: 'Free NCOER Bullet Generator — AI, By MOS, AR 623-3 | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /oer-bullet-generator — dedicated SEO landing page for the OER bullet generator
+app.get('/oer-bullet-generator', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/oer-bullet-generator';
+  const metaDescription = 'Free AI OER bullet generator for Officer Evaluation Reports. Type plain language, get AR 623-3 aligned comments across Character, Presence, Intellect, Leads, Develops, Achieves.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit OER Bullet Generator","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free AI-powered OER bullet generator. Generates Army-standard, AR 623-3 aligned Officer Evaluation Report comments from plain-language input across the six leader attributes and competencies.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["AR 623-3 aligned language","Same six-attribute leader framework as the NCOER","Rank and branch aware phrasing","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"OER Bullet Generator","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the OER bullet generator free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month across every NCO Kit tool. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"Does it use the same framework as the NCOER tool?","acceptedAnswer":{"@type":"Answer","text":"Yes. Since 2022 the Army's evaluation system rates NCOs and officers against the same ADP 6-22 leader requirements model — Character, Presence, and Intellect (attributes) plus Leads, Develops, and Achieves (competencies). The OER generator uses that same structure, phrased for an officer's rank and branch instead of an NCO's MOS."}},
+{"@type":"Question","name":"Can I use it for any branch?","acceptedAnswer":{"@type":"Answer","text":"Yes. Describe what the officer did and specify their branch or functional area, and the generator tailors language and metrics accordingly — Infantry, Aviation, Signal, Medical Service, Judge Advocate General, and every other branch."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency. Works on any phone, personal laptop, or any device with internet access."}},
+{"@type":"Question","name":"How is this different from a generic AI chatbot?","acceptedAnswer":{"@type":"Answer","text":"A generic chatbot doesn't know AR 623-3, the six leader attributes and competencies, or how OER comments are actually phrased. NCO Kit's generator is built around those rules — it returns comments that are formatted and structured for the OER, not a generic paragraph."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">OER Bullet Generator</div>
+      <h1>Free OER Bullet Generator</h1>
+      <div class="post-meta">AI-powered · AR 623-3 aligned · By branch · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Writing OER comments well takes longer than most raters have between real work. NCO Kit's free AI OER bullet generator turns plain-language notes into Army-standard, AR 623-3 aligned comments for the Officer Evaluation Report — phrased for the officer's rank and branch. No install, no CAC required, no Army network dependency.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Start Building OER Comments</h3>
+        <p>Type what the officer did. Get a properly formatted comment in seconds.</p>
+        <a href="/oer" class="cta-btn">Open OER Bullet Builder →</a>
+      </div>
+
+      <h2>What Goes Into an OER Comment?</h2>
+      <p>Since the Army's 2022 evaluation overhaul, the Officer Evaluation Report is rated against the same leader requirements model as the NCOER, drawn from ADP 6-22 and FM 6-22: <strong>Character</strong>, <strong>Presence</strong>, and <strong>Intellect</strong> (the attributes), plus <strong>Leads</strong>, <strong>Develops</strong>, and <strong>Achieves</strong> (the competencies). A strong OER comment:</p>
+      <ul>
+        <li>Opens with an action verb — commanded, synchronized, developed, executed, resourced.</li>
+        <li>Includes a quantified, verifiable impact — soldiers led, budget managed, missions executed, readiness improved.</li>
+        <li>Stays specific to the officer's actual duty position and branch.</li>
+        <li>Fits the character limits of the rating form without getting truncated.</li>
+      </ul>
+
+      <h2>How the Generator Works</h2>
+      <ol>
+        <li><strong>Enter the officer's name, rank, and branch or functional area.</strong> The generator uses this to choose the right vocabulary and reference the right metrics for that branch.</li>
+        <li><strong>Pick the attribute or competency.</strong> Character, Presence, Intellect, Leads, Develops, or Achieves.</li>
+        <li><strong>Describe what the officer did in plain English.</strong> The AI converts that into a properly formatted, AR 623-3 aligned comment ready to paste into the OER support form.</li>
+      </ol>
+
+      <h2>Sample Output</h2>
+      <div class="example-box">o synchronized battalion-level logistics for a 96-hour field exercise supporting 800 Soldiers; zero critical shortages, cited by BDE S4 as the model plan</div>
+      <div class="example-box">o mentored two company commanders through their first command inspection program; both units passed with zero major findings</div>
+
+      <h2>Why It's Free</h2>
+      <p>Three lifetime generations to try it anonymously. Ten generations per month free after you make an account. Unlimited at $10/month or $97/year if you're writing OERs often or want the full kit — NCOER bullets, DA 4856 counseling, AFT scoring, awards writing, AR 25-50 memos, soldier roster, senior rater narratives. No CAC card. No DoD network needed.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the OER bullet generator free?</h3>
+      <p>Yes. Anonymous users get 3 lifetime generations. Free accounts get 10 AI generations per month across every tool. Premium is unlimited at $10/month or $97/year.</p>
+      <h3>Does it use the same framework as the NCOER tool?</h3>
+      <p>Yes — the same ADP 6-22 leader requirements model: Character, Presence, Intellect, Leads, Develops, Achieves. Phrased for an officer's rank and branch instead of an NCO's MOS.</p>
+      <h3>Can I use it for any branch?</h3>
+      <p>Yes. Specify the officer's branch or functional area and the generator tailors language and metrics accordingly.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+      <h3>How is this different from a generic AI chatbot?</h3>
+      <p>A generic chatbot doesn't know AR 623-3 or how OER comments are actually structured and phrased. NCO Kit's generator is built around those rules.</p>
+
+      <div class="cta-box">
+        <h3>Build Your First OER Comment</h3>
+        <p>Free to try. No signup required for the first three.</p>
+        <a href="/oer" class="cta-btn">Open OER Bullet Builder →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free OER Bullet Generator — AI, By Branch, AR 623-3 | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /da-4856-generator — dedicated SEO landing page for the DA 4856 counseling generator
+app.get('/da-4856-generator', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/da-4856-generator';
+  const metaDescription = 'Free AI DA Form 4856 counseling generator. Turn rough notes into a properly formatted developmental, monthly, or event-driven Army counseling form in seconds.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit DA 4856 Counseling Generator","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free AI-powered DA Form 4856 counseling generator. Converts rough notes into a properly formatted developmental, monthly, or event-driven Army counseling form.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Developmental, monthly, and event-driven counseling formats","AI-enhanced professional language","Print-ready DA Form 4856 output","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"DA 4856 Counseling Generator","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the DA 4856 generator free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month across every NCO Kit tool. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"What counseling types does it support?","acceptedAnswer":{"@type":"Answer","text":"Initial, monthly performance, and event-driven (positive or corrective) counseling. Pick the type and the generator structures the form correctly for that purpose."}},
+{"@type":"Question","name":"What does DA 4856 stand for?","acceptedAnswer":{"@type":"Answer","text":"DA Form 4856 is the Developmental Counseling Form, the Army's standard document for recording leader counseling sessions with subordinates."}},
+{"@type":"Question","name":"Will it write the whole form for me?","acceptedAnswer":{"@type":"Answer","text":"You provide the rough facts — what happened, what was discussed, what the plan of action is — and the AI turns that into properly structured, professional Army counseling language across the full form."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">DA 4856 Counseling Generator</div>
+      <h1>Free DA Form 4856 Counseling Generator</h1>
+      <div class="post-meta">AI-powered · Developmental, monthly &amp; event-driven · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Counseling paperwork is the task every leader puts off until the last minute. NCO Kit's free DA Form 4856 generator takes your rough notes — what happened, what was discussed, what the plan is — and turns them into a properly formatted, professional Army counseling form in seconds. No install, no CAC required, no Army network dependency.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Start a Counseling Form</h3>
+        <p>Fill in the facts. Get a print-ready DA 4856 back instantly.</p>
+        <a href="/counseling" class="cta-btn">Open DA 4856 Generator →</a>
+      </div>
+
+      <h2>What Is DA Form 4856?</h2>
+      <p>DA Form 4856, the Developmental Counseling Form, is the Army's standard document for recording a counseling session between a leader and a subordinate. It covers three common situations:</p>
+      <ul>
+        <li><strong>Initial counseling</strong> — sets expectations when a Soldier joins a new unit or duty position.</li>
+        <li><strong>Monthly performance counseling</strong> — a recurring check-in on performance, goals, and professional development.</li>
+        <li><strong>Event-driven counseling</strong> — documents a specific incident, positive or corrective, and the plan of action going forward.</li>
+      </ul>
+
+      <h2>How the Generator Works</h2>
+      <ol>
+        <li><strong>Pick the counseling type.</strong> Initial, monthly, or event-driven.</li>
+        <li><strong>Enter the Soldier's name and rank, and the basic facts.</strong> What happened, what was discussed, what's expected going forward.</li>
+        <li><strong>Let the AI write it up.</strong> It converts your notes into clear, professional counseling language and structures the full form — key points of discussion, plan of action, and follow-up date — ready to print or paste.</li>
+      </ol>
+
+      <h2>Why a Generator Instead of a Template?</h2>
+      <p>A blank template still leaves you staring at a cursor. NCO Kit's generator does the actual writing — turning "he was late twice this week and I talked to him about time management" into a complete, professional counseling entry that reads like it took twenty minutes, not two.</p>
+
+      <h2>Why It's Free</h2>
+      <p>Three lifetime generations to try it anonymously. Ten generations per month free after you make an account. Unlimited at $10/month or $97/year if you're counseling often or want the full kit — NCOER bullets, OER bullets, AFT scoring, awards writing, AR 25-50 memos, soldier roster, senior rater narratives.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the DA 4856 generator free?</h3>
+      <p>Yes. Anonymous users get 3 lifetime generations. Free accounts get 10 AI generations per month across every tool. Premium is unlimited at $10/month or $97/year.</p>
+      <h3>What counseling types does it support?</h3>
+      <p>Initial, monthly performance, and event-driven (positive or corrective) counseling.</p>
+      <h3>What does DA 4856 stand for?</h3>
+      <p>The Developmental Counseling Form — the Army's standard document for recording leader counseling sessions.</p>
+      <h3>Will it write the whole form for me?</h3>
+      <p>You provide the rough facts; the AI turns them into properly structured, professional counseling language across the full form.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+
+      <div class="cta-box">
+        <h3>Write Your First Counseling</h3>
+        <p>Free to try. No signup required for the first three.</p>
+        <a href="/counseling" class="cta-btn">Open DA 4856 Generator →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free DA Form 4856 Counseling Generator | AI | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /aft-calculator — dedicated SEO landing page for the AFT score calculator
+app.get('/aft-calculator', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/aft-calculator';
+  const metaDescription = 'Free Army Fitness Test (AFT) score calculator. Enter raw scores for all six events and get instant pass/fail results with point totals, calibrated by age and gender.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit AFT Score Calculator","url":"${canonicalUrl}","applicationCategory":"HealthApplication","operatingSystem":"Web Browser","description":"Free Army Fitness Test (AFT) score calculator. Enter raw scores across all six events and get an instant pass/fail result with point totals, calibrated by age and gender per Army standards.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["All six AFT events","Age and gender calibrated scoring","Instant pass/fail result","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"AFT Score Calculator","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the AFT calculator free?","acceptedAnswer":{"@type":"Answer","text":"Yes, completely free with no account required to calculate a score."}},
+{"@type":"Question","name":"What replaced the ACFT?","acceptedAnswer":{"@type":"Answer","text":"The Army Combat Fitness Test (ACFT) was renamed the Army Fitness Test (AFT). The event lineup and scoring structure carried forward the same six-event format."}},
+{"@type":"Question","name":"Which six events does it score?","acceptedAnswer":{"@type":"Answer","text":"Enter your raw results for all six AFT events and the calculator converts each to a point total using the current age- and gender-calibrated standards, then gives you a pass/fail result."}},
+{"@type":"Question","name":"Does it account for age and gender?","acceptedAnswer":{"@type":"Answer","text":"Yes. Scoring standards vary by age group and gender per current Army standards, and the calculator applies the correct scale automatically."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">AFT Score Calculator</div>
+      <h1>Free Army Fitness Test (AFT) Score Calculator</h1>
+      <div class="post-meta">All six events · Age &amp; gender calibrated · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Stop doing the math on a scrap of paper after PT. NCO Kit's free AFT calculator takes your raw scores across all six Army Fitness Test events and gives you an instant point total and pass/fail result, calibrated to your age group and gender. No install, no CAC required, no Army network dependency.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Calculate Your AFT Score</h3>
+        <p>Enter your six raw event scores. Get your total instantly.</p>
+        <a href="/acft" class="cta-btn">Open AFT Calculator →</a>
+      </div>
+
+      <h2>What Is the AFT?</h2>
+      <p>The Army Fitness Test (AFT) is the Army's current record fitness test, covering six events that measure strength, power, endurance, and mobility. Each event converts your raw performance — reps, time, or distance — into a point score based on your age group and gender, and the six event scores add up to your total.</p>
+
+      <h2>How the Calculator Works</h2>
+      <ol>
+        <li><strong>Enter your age and select your gender.</strong> Scoring standards vary by both.</li>
+        <li><strong>Enter your raw result for each of the six events.</strong> Reps, time, or distance, exactly as scored on the test.</li>
+        <li><strong>Get your score instantly.</strong> The calculator converts each event to points using current Army standards and totals them for a pass/fail result.</li>
+      </ol>
+
+      <h2>Why Use a Calculator Instead of the Standards Table?</h2>
+      <p>The official scoring tables are long, split by age bracket and gender, and easy to misread under fluorescent gym lighting at 0530. The calculator does the lookup for you — enter your numbers once and get an accurate total without cross-referencing six separate tables.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the AFT calculator free?</h3>
+      <p>Yes, completely free — no account required to calculate a score.</p>
+      <h3>What replaced the ACFT?</h3>
+      <p>The Army Combat Fitness Test (ACFT) was renamed the Army Fitness Test (AFT), carrying forward the same six-event format.</p>
+      <h3>Which six events does it score?</h3>
+      <p>Enter your raw results for all six AFT events and the calculator converts each to points using current age- and gender-calibrated standards.</p>
+      <h3>Does it account for age and gender?</h3>
+      <p>Yes — standards vary by age group and gender, and the calculator applies the correct scale automatically.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+
+      <div class="cta-box">
+        <h3>Score Your AFT</h3>
+        <p>Free, instant, no signup required.</p>
+        <a href="/acft" class="cta-btn">Open AFT Calculator →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free Army Fitness Test (AFT) Score Calculator | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /awards-writer — dedicated SEO landing page for the awards generator
+app.get('/awards-writer', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/awards-writer';
+  const metaDescription = 'Free AI Army award citation generator. Draft AR 600-8-22 compliant recommendations for AAM, ARCOM, and MSM from bullet points in seconds.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit Awards Writer","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free AI-powered Army award citation generator. Drafts AR 600-8-22 compliant award recommendations for AAM, ARCOM, MSM, and more from bullet points.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["AR 600-8-22 compliant formatting","Supports AAM, ARCOM, MSM and other award levels","Drafts full citations from bullet points","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"Awards Writer","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the awards writer free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month across every NCO Kit tool. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"How do I write an award recommendation?","acceptedAnswer":{"@type":"Answer","text":"List out what the Soldier accomplished — specific actions and quantified impact — and the generator drafts a complete citation in proper AR 600-8-22 format for the award level you select."}},
+{"@type":"Question","name":"What award levels does it support?","acceptedAnswer":{"@type":"Answer","text":"Army Achievement Medal (AAM), Army Commendation Medal (ARCOM), Meritorious Service Medal (MSM), and other common award levels."}},
+{"@type":"Question","name":"What does ARCOM/AAM stand for?","acceptedAnswer":{"@type":"Answer","text":"AAM is the Army Achievement Medal and ARCOM is the Army Commendation Medal — two of the most commonly awarded individual decorations, each with its own citation format and threshold of achievement."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">Awards Writer</div>
+      <h1>Free Army Award Citation Generator</h1>
+      <div class="post-meta">AI-powered · AR 600-8-22 compliant · AAM, ARCOM, MSM · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Award packets pile up at the worst time — right before a PCS or a change of command. NCO Kit's free AI awards writer turns a list of accomplishments into a complete, AR 600-8-22 compliant citation in seconds, formatted for the award level you're recommending. No install, no CAC required, no Army network dependency.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Draft an Award Citation</h3>
+        <p>List what the Soldier did. Get a complete citation back instantly.</p>
+        <a href="/awards" class="cta-btn">Open Awards Writer →</a>
+      </div>
+
+      <h2>What Makes a Strong Award Citation?</h2>
+      <p>Per AR 600-8-22, a citation should be specific, quantified, and matched to the threshold of achievement for the award level:</p>
+      <ul>
+        <li><strong>Army Achievement Medal (AAM)</strong> — for meritorious service or acts of achievement of a lesser degree than required for the ARCOM.</li>
+        <li><strong>Army Commendation Medal (ARCOM)</strong> — for sustained meritorious service or an act of heroism, meritorious achievement, or meritorious service.</li>
+        <li><strong>Meritorious Service Medal (MSM)</strong> — for outstanding meritorious service, typically tied to a permanent change of station or end of a key assignment.</li>
+      </ul>
+
+      <h2>How the Generator Works</h2>
+      <ol>
+        <li><strong>Enter the Soldier's name, rank, unit, and the award level.</strong></li>
+        <li><strong>List the accomplishments in plain language</strong> — what they did, over what period, with what measurable result.</li>
+        <li><strong>Get a complete citation.</strong> The AI drafts it in proper AR 600-8-22 format, matched to the award level and ready to route for approval.</li>
+      </ol>
+
+      <h2>Why It's Free</h2>
+      <p>Three lifetime generations to try it anonymously. Ten generations per month free after you make an account. Unlimited at $10/month or $97/year if you're writing packets often or want the full kit — NCOER bullets, OER bullets, DA 4856 counseling, AFT scoring, AR 25-50 memos, soldier roster, senior rater narratives.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the awards writer free?</h3>
+      <p>Yes. Anonymous users get 3 lifetime generations. Free accounts get 10 AI generations per month across every tool. Premium is unlimited at $10/month or $97/year.</p>
+      <h3>How do I write an award recommendation?</h3>
+      <p>List the Soldier's specific actions and quantified impact — the generator drafts a complete citation in proper AR 600-8-22 format.</p>
+      <h3>What award levels does it support?</h3>
+      <p>AAM, ARCOM, MSM, and other common award levels.</p>
+      <h3>What does ARCOM/AAM stand for?</h3>
+      <p>AAM is the Army Achievement Medal; ARCOM is the Army Commendation Medal — two commonly awarded individual decorations.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+
+      <div class="cta-box">
+        <h3>Write Your First Citation</h3>
+        <p>Free to try. No signup required for the first three.</p>
+        <a href="/awards" class="cta-btn">Open Awards Writer →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free Army Award Citation Generator — AAM, ARCOM, MSM | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /army-memo-generator — dedicated SEO landing page for the AR 25-50 memo generator
+app.get('/army-memo-generator', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/army-memo-generator';
+  const metaDescription = 'Free AR 25-50 compliant Army memo generator. Fill in the key facts and get a properly formatted memorandum in seconds — MEMORANDUM FOR, THRU, and record formats.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit Army Memo Generator","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free AR 25-50 compliant Army memo generator. Produces properly formatted memorandums for record, memorandum for, and memorandum thru formats.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["AR 25-50 compliant formatting","Memorandum For, Thru, and For Record formats","AI-enhanced professional language","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"Army Memo Generator","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the memo generator free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month across every NCO Kit tool. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"What memo formats does it support?","acceptedAnswer":{"@type":"Answer","text":"Memorandum For Record, Memorandum For, and Memorandum Thru — the three most common Army memo formats under AR 25-50."}},
+{"@type":"Question","name":"What is AR 25-50?","acceptedAnswer":{"@type":"Answer","text":"AR 25-50 is the Army regulation governing preparing and managing official Army correspondence, including the standard memorandum format."}},
+{"@type":"Question","name":"Will it format the memo correctly?","acceptedAnswer":{"@type":"Answer","text":"Yes. Enter the office symbol, date, subject, and body content, and the generator handles the AR 25-50 structure and spacing automatically."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">Army Memo Generator</div>
+      <h1>Free AR 25-50 Army Memo Generator</h1>
+      <div class="post-meta">MEMORANDUM FOR, THRU &amp; for Record · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Nobody remembers the exact spacing rules for a Memorandum Thru versus a Memorandum For Record. NCO Kit's free AR 25-50 memo generator handles the formatting for you — fill in the key facts and get a properly structured Army memorandum in seconds. No install, no CAC required, no Army network dependency.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Generate a Memo</h3>
+        <p>Fill in the office symbol, subject, and body. Get a formatted memo back instantly.</p>
+        <a href="/memo" class="cta-btn">Open Memo Generator →</a>
+      </div>
+
+      <h2>Which Memo Format Do You Need?</h2>
+      <ul>
+        <li><strong>Memorandum For Record (MFR)</strong> — documents a decision, event, or conversation for the file. No routing required.</li>
+        <li><strong>Memorandum For</strong> — addressed directly to a specific individual, office, or unit.</li>
+        <li><strong>Memorandum Thru</strong> — routes through an intermediate addressee (like a commander) before reaching the final recipient.</li>
+      </ul>
+
+      <h2>How the Generator Works</h2>
+      <ol>
+        <li><strong>Pick the memo type</strong> — For Record, For, or Thru.</li>
+        <li><strong>Enter the office symbol, date, subject, and addressees.</strong></li>
+        <li><strong>Write the body in plain language, or let the AI enhance it.</strong> The generator handles AR 25-50 spacing, structure, and signature block formatting, producing a print-ready PDF.</li>
+      </ol>
+
+      <h2>Why It's Free</h2>
+      <p>Three lifetime generations to try it anonymously. Ten generations per month free after you make an account. Unlimited at $10/month or $97/year if you're writing memos often or want the full kit — NCOER bullets, OER bullets, DA 4856 counseling, AFT scoring, awards writing, soldier roster, senior rater narratives.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the memo generator free?</h3>
+      <p>Yes. Anonymous users get 3 lifetime generations. Free accounts get 10 AI generations per month across every tool. Premium is unlimited at $10/month or $97/year.</p>
+      <h3>What memo formats does it support?</h3>
+      <p>Memorandum For Record, Memorandum For, and Memorandum Thru.</p>
+      <h3>What is AR 25-50?</h3>
+      <p>The Army regulation governing preparing and managing official Army correspondence, including standard memo format.</p>
+      <h3>Will it format the memo correctly?</h3>
+      <p>Yes — enter the office symbol, date, subject, and body, and the generator handles AR 25-50 structure and spacing automatically.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+
+      <div class="cta-box">
+        <h3>Generate Your First Memo</h3>
+        <p>Free to try. No signup required for the first three.</p>
+        <a href="/memo" class="cta-btn">Open Memo Generator →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free AR 25-50 Army Memo Generator | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /senior-rater-narrative-generator — dedicated SEO landing page
+app.get('/senior-rater-narrative-generator', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/senior-rater-narrative-generator';
+  const metaDescription = 'Free AI senior rater narrative generator for NCOER and OER. Build EES-ready narratives using the ESPN framework — Enumeration, School, Promotion, Next Level.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit Senior Rater Narrative Generator","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free AI-powered senior rater narrative generator for NCOER and OER, built around the ESPN framework — Enumeration, School, Promotion, Next Level.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["ESPN framework structure","Works for both NCOER and OER senior rater blocks","Differentiated, impact-focused narratives","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"Senior Rater Narrative Generator","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the senior rater narrative generator free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Anonymous users get 3 lifetime generations to try it. Free accounts get 10 AI generations per month across every NCO Kit tool. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"What is the ESPN framework?","acceptedAnswer":{"@type":"Answer","text":"ESPN stands for Enumeration, School, Promotion, and Next Level — the standard structure senior raters use to write a differentiated, EES-ready narrative: where the rated Soldier ranks among peers, recommended schooling, promotion recommendation, and the next level of responsibility they're ready for."}},
+{"@type":"Question","name":"Does it work for both NCOER and OER?","acceptedAnswer":{"@type":"Answer","text":"Yes. Specify which evaluation type and the rated individual's rank, and the generator builds the narrative for the correct form."}},
+{"@type":"Question","name":"How does it handle enumeration ranking?","acceptedAnswer":{"@type":"Answer","text":"You provide the ranking — for example, 1 of 8 — and the generator builds language around it that reads as genuinely differentiated rather than a generic top-block statement."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">Senior Rater Narrative Generator</div>
+      <h1>Free Senior Rater Narrative Generator</h1>
+      <div class="post-meta">AI-powered · ESPN framework · NCOER &amp; OER · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">A senior rater narrative has to say a lot in very little space — rank, potential, and a promotion recommendation, all in a few dense sentences. NCO Kit's free AI generator builds an EES-ready narrative using the ESPN framework, tailored to the rated Soldier's actual ranking and record. No install, no CAC required, no Army network dependency.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Build a Senior Rater Narrative</h3>
+        <p>Enter the ranking and record. Get a polished narrative back instantly.</p>
+        <a href="/narrative" class="cta-btn">Open Senior Rater Narrative Generator →</a>
+      </div>
+
+      <h2>What Is the ESPN Framework?</h2>
+      <p>Senior rater narratives are built around four elements, commonly remembered as ESPN:</p>
+      <ul>
+        <li><strong>Enumeration</strong> — where the rated Soldier ranks among their peer group (e.g., "1 of 8 SFCs I senior rate").</li>
+        <li><strong>School</strong> — the recommended next level of professional military education.</li>
+        <li><strong>Promotion</strong> — the senior rater's promotion recommendation.</li>
+        <li><strong>Next Level</strong> — the level of responsibility the Soldier is ready for next.</li>
+      </ul>
+
+      <h2>How the Generator Works</h2>
+      <ol>
+        <li><strong>Select NCOER or OER</strong> and enter the rated individual's rank.</li>
+        <li><strong>Enter the enumeration ranking</strong> and any standout accomplishments that justify it.</li>
+        <li><strong>Get a complete narrative.</strong> The AI builds the full ESPN structure into a polished, differentiated statement ready to paste into the form.</li>
+      </ol>
+
+      <h2>Why It's Free</h2>
+      <p>Three lifetime generations to try it anonymously. Ten generations per month free after you make an account. Unlimited at $10/month or $97/year if you're a senior rater writing these often, or want the full kit — NCOER bullets, OER bullets, DA 4856 counseling, AFT scoring, awards writing, AR 25-50 memos, soldier roster.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the senior rater narrative generator free?</h3>
+      <p>Yes. Anonymous users get 3 lifetime generations. Free accounts get 10 AI generations per month across every tool. Premium is unlimited at $10/month or $97/year.</p>
+      <h3>What is the ESPN framework?</h3>
+      <p>Enumeration, School, Promotion, Next Level — the standard structure for a differentiated senior rater narrative.</p>
+      <h3>Does it work for both NCOER and OER?</h3>
+      <p>Yes. Specify the evaluation type and rank, and the generator builds the narrative for the correct form.</p>
+      <h3>How does it handle enumeration ranking?</h3>
+      <p>You provide the ranking (e.g., 1 of 8) and the generator writes genuinely differentiated language around it.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+
+      <div class="cta-box">
+        <h3>Build Your First Narrative</h3>
+        <p>Free to try. No signup required for the first three.</p>
+        <a href="/narrative" class="cta-btn">Open Senior Rater Narrative Generator →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free Senior Rater Narrative Generator — ESPN Framework | NCO Kit',
+    metaDescription,
+    canonicalUrl,
+    schemaJson,
+    bodyHtml,
+  }));
+});
+
+// GET /soldier-roster-tracker — dedicated SEO landing page for the roster tool
+app.get('/soldier-roster-tracker', (req, res) => {
+  const canonicalUrl = 'https://ncokit.com/soldier-roster-tracker';
+  const metaDescription = 'Free Soldier Roster tracker. See every Soldier\'s counseling status at a glance, and generate NCOER bullets or award citations straight from their record with AI Scrub.';
+
+  const schemaJson = `
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"NCO Kit Soldier Roster Tracker","url":"${canonicalUrl}","applicationCategory":"ProductivityApplication","operatingSystem":"Web Browser","description":"Free Soldier Roster tracker showing counseling status at a glance, with AI Scrub to generate NCOER bullets or award citations directly from a Soldier's record.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Current, Due, and Overdue counseling status","Upload previous counselings to a Soldier's record","AI Scrub — generate bullets or award citations from a record","Works on any device including government computers"],"author":{"@type":"Organization","name":"NCO Kit","url":"https://ncokit.com"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"NCO Kit","item":"https://ncokit.com"},{"@type":"ListItem","position":2,"name":"Soldier Roster Tracker","item":"${canonicalUrl}"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Is the Soldier Roster tracker free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Free accounts get full access to the roster tracker, with 10 AI generations per month for AI Scrub and other tools. Premium is unlimited at $10/month or $97/year."}},
+{"@type":"Question","name":"What does the roster track?","acceptedAnswer":{"@type":"Answer","text":"Every Soldier's counseling status — Current, Due, or Overdue — at a glance, along with their record and any counselings you've uploaded."}},
+{"@type":"Question","name":"What is AI Scrub?","acceptedAnswer":{"@type":"Answer","text":"AI Scrub reads a Soldier's record on the roster and instantly generates NCOER bullets or an award citation from it, so you don't have to re-type what you already documented."}},
+{"@type":"Question","name":"Can I upload previous counselings?","acceptedAnswer":{"@type":"Answer","text":"Yes. Upload previous counselings directly to a Soldier's record to keep a complete history in one place."}},
+{"@type":"Question","name":"Does it work on a government computer?","acceptedAnswer":{"@type":"Answer","text":"Yes. NCO Kit is a browser-only web app — no install, no CAC required, no Army network dependency."}}
+]}</script>`;
+
+  const bodyHtml = `
+    <a href="/" class="back-link">← All Tools</a>
+    <header class="post-header">
+      <div class="post-category">Soldier Roster Tracker</div>
+      <h1>Free Soldier Roster Tracker</h1>
+      <div class="post-meta">Counseling status at a glance · AI Scrub · No install</div>
+    </header>
+
+    <div class="post-body">
+      <p style="font-size:16px;">Knowing who's overdue for counseling shouldn't require digging through a folder of old DA 4856s. NCO Kit's free Soldier Roster tracker keeps every Soldier's status — Current, Due, or Overdue — visible at a glance, and lets you generate NCOER bullets or award citations straight from their record with one click.</p>
+
+      <div class="cta-box" style="margin:32px 0;">
+        <h3>Build Your Roster</h3>
+        <p>Add your squad and see a live counseling dashboard instantly.</p>
+        <a href="/roster" class="cta-btn">Open Soldier Roster →</a>
+      </div>
+
+      <h2>What the Roster Tracks</h2>
+      <ul>
+        <li><strong>Counseling status</strong> — a live Current / Due / Overdue indicator for every Soldier, so nobody falls through the cracks.</li>
+        <li><strong>Counseling history</strong> — upload previous DA 4856s directly to a Soldier's record to keep everything in one place.</li>
+        <li><strong>Performance record</strong> — accumulate notes and accomplishments over time instead of trying to remember them all at evaluation season.</li>
+      </ul>
+
+      <h2>AI Scrub — Generate From a Record Instantly</h2>
+      <p>Hit <strong>✦ AI Scrub</strong> on any Soldier's entry and the tool reads what's already on their record — counselings, notes, accomplishments — and generates NCOER bullets or an award citation from it. You've already done the work of documenting; AI Scrub just turns it into a finished draft.</p>
+
+      <h2>Why It's Free</h2>
+      <p>Full roster access is free with an account, plus 10 AI generations per month for AI Scrub and every other tool. Unlimited at $10/month or $97/year if you manage a larger formation or want the full kit — NCOER bullets, OER bullets, DA 4856 counseling, AFT scoring, awards writing, AR 25-50 memos, senior rater narratives.</p>
+
+      <h2>Frequently Asked Questions</h2>
+      <h3>Is the Soldier Roster tracker free?</h3>
+      <p>Yes. Free accounts get full roster access plus 10 AI generations per month. Premium is unlimited at $10/month or $97/year.</p>
+      <h3>What does the roster track?</h3>
+      <p>Every Soldier's counseling status — Current, Due, or Overdue — plus their record and uploaded counseling history.</p>
+      <h3>What is AI Scrub?</h3>
+      <p>A one-click feature that generates NCOER bullets or an award citation directly from a Soldier's existing record.</p>
+      <h3>Can I upload previous counselings?</h3>
+      <p>Yes — upload them directly to a Soldier's record to keep a complete history in one place.</p>
+      <h3>Does it work on a government computer?</h3>
+      <p>Yes. Browser-only, no install, no CAC, no Army network dependency.</p>
+
+      <div class="cta-box">
+        <h3>Start Your Roster</h3>
+        <p>Free with an account. No credit card required.</p>
+        <a href="/roster" class="cta-btn">Open Soldier Roster →</a>
+      </div>
+    </div>`;
+
+  res.type('text/html').send(blogPage({
+    title: 'Free Soldier Roster Tracker — Counseling Status &amp; AI Scrub | NCO Kit',
     metaDescription,
     canonicalUrl,
     schemaJson,
