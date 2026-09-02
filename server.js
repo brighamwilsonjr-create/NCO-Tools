@@ -173,7 +173,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
            SET plan = $1, stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = NOW(),
                usage_nudge_converted = $4,
                winback_email_converted = CASE WHEN $6 THEN TRUE ELSE winback_email_converted END,
-               limit_modal_converted = CASE WHEN $7 THEN TRUE ELSE limit_modal_converted END
+               limit_modal_converted = CASE WHEN $7 THEN TRUE ELSE limit_modal_converted END,
+               premium_converted_at = COALESCE(premium_converted_at, NOW())
            WHERE id = $5`,
           ['premium', customerId, subscriptionId, converted, userId, winbackConverted, limitModalConverted]
         );
@@ -959,13 +960,15 @@ app.post('/api/auth/apply-referral', authLimiter, async (req, res) => {
     if (!code || typeof code !== 'string') return res.status(400).json({ error: 'Invalid referral code' });
     const cleanCode = code.trim().toUpperCase();
 
-    // Make sure the code exists and doesn't belong to the user themselves
-    const referrer = await pool.query(
-      'SELECT id FROM users WHERE referral_code = $1',
-      [cleanCode]
-    );
-    if (referrer.rows.length === 0) return res.status(404).json({ error: 'Referral code not found — double-check and try again' });
-    if (referrer.rows[0].id === user.id) return res.status(400).json({ error: 'You cannot use your own referral code' });
+    // Make sure the code exists (either a peer's referral code or an active influencer
+    // code) and, if it's a peer code, doesn't belong to the user themselves
+    const userCodeMatch = await pool.query('SELECT id FROM users WHERE referral_code = $1', [cleanCode]);
+    if (userCodeMatch.rows.length > 0) {
+      if (userCodeMatch.rows[0].id === user.id) return res.status(400).json({ error: 'You cannot use your own referral code' });
+    } else {
+      const infMatch = await pool.query(`SELECT 1 FROM influencer_codes WHERE code = $1 AND status = 'active'`, [cleanCode]);
+      if (infMatch.rows.length === 0) return res.status(404).json({ error: 'Referral code not found — double-check and try again' });
+    }
 
     // Apply the code
     await pool.query(
@@ -995,8 +998,13 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const unsubscribeToken = generateToken();
     let validReferredBy = null;
     if (referredBy) {
-      const referrer = await pool.query('SELECT id FROM users WHERE referral_code = $1', [referredBy.toUpperCase()]);
-      if (referrer.rows.length > 0) validReferredBy = referredBy.toUpperCase();
+      const code = referredBy.toUpperCase();
+      const referrer = await pool.query(
+        `SELECT 1 FROM users WHERE referral_code = $1
+         UNION SELECT 1 FROM influencer_codes WHERE code = $1 AND status = 'active'`,
+        [code]
+      );
+      if (referrer.rows.length > 0) validReferredBy = code;
     }
     await pool.query(
       `INSERT INTO users (email, password_hash, verification_token, verification_expires, referral_code, referred_by, unsubscribe_token) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -2542,6 +2550,41 @@ async function initDB() {
     await pool.query(`UPDATE users SET unsubscribe_token = uuid_generate_v4()::text WHERE unsubscribe_token IS NULL`);
     await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_unsubscribe_token ON users(unsubscribe_token)`);
 
+    // Precise first-conversion timestamp — used to attribute influencer conversions
+    // to the correct monthly payout period. updated_at gets touched by other things
+    // too (usage resets, etc.) so it isn't reliable for this.
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS premium_converted_at TIMESTAMPTZ`);
+
+    // Influencer / vanity referral codes for creator partnerships (MilTok, etc).
+    // The `code` plugs directly into the existing referral system (users.referred_by),
+    // so the 50%-off-first-month discount for whoever signs up with it already works
+    // with no changes there — this table just adds a name, contact/payment info, and
+    // payout rates on top, for tracking what's owed each month.
+    await pool.query(`CREATE TABLE IF NOT EXISTS influencer_codes (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      code VARCHAR(20) UNIQUE NOT NULL,
+      influencer_name VARCHAR(255) NOT NULL,
+      contact_email VARCHAR(255),
+      payment_info TEXT,
+      rate_per_signup_cents INTEGER NOT NULL DEFAULT 0,
+      rate_per_conversion_cents INTEGER NOT NULL DEFAULT 0,
+      status VARCHAR(20) NOT NULL DEFAULT 'active',
+      notes TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE TABLE IF NOT EXISTS influencer_payouts (
+      id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+      influencer_code_id UUID NOT NULL REFERENCES influencer_codes(id) ON DELETE CASCADE,
+      period_start DATE NOT NULL,
+      period_end DATE NOT NULL,
+      signups_count INTEGER NOT NULL DEFAULT 0,
+      conversions_count INTEGER NOT NULL DEFAULT 0,
+      amount_owed_cents INTEGER NOT NULL DEFAULT 0,
+      paid_at TIMESTAMPTZ DEFAULT NOW()
+    )`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_influencer_codes_code ON influencer_codes(code)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_influencer_payouts_code_id ON influencer_payouts(influencer_code_id)`);
+
     // Audit logging table for AI usage tracking (Security Fix #3)
     await pool.query(`CREATE TABLE IF NOT EXISTS ai_usage_log (
       id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -3109,6 +3152,161 @@ app.get('/api/admin/user-status', async (req, res) => {
     const sessions = await pool.query('SELECT count(*) FROM sessions WHERE user_id = $1', [u.id]);
     res.json({ ...u, active_sessions: parseInt(sessions.rows[0].count) });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── ADMIN: INFLUENCER CODES ─────────────────────────────────────────────────────
+// Vanity referral codes for creator partnerships (MilTok, etc), with per-code
+// signup/conversion payout rates. The code itself reuses the existing referral
+// system (see /api/auth/register and /api/auth/apply-referral) — a signup with
+// ?ref=CODE matching an active influencer_codes row gets the same automatic
+// 50%-off-first-month discount as a peer referral. This block only adds the
+// admin-side tracking: creating codes, reporting what's owed each period, and
+// logging payouts once Henry has actually sent the money (this never moves
+// money itself — it's a ledger, paid out manually).
+
+function monthBounds(monthParam) {
+  // monthParam: 'YYYY-MM' or undefined (defaults to the current calendar month)
+  let year, month;
+  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    [year, month] = monthParam.split('-').map(Number);
+  } else {
+    const now = new Date();
+    year = now.getUTCFullYear();
+    month = now.getUTCMonth() + 1;
+  }
+  const start = new Date(Date.UTC(year, month - 1, 1));
+  const end = new Date(Date.UTC(year, month, 1));
+  return { start, end };
+}
+
+// List all influencer codes with all-time + this-period signup/conversion counts
+app.get('/api/admin/influencers', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const { start, end } = monthBounds(req.query.month);
+    const result = await pool.query(
+      `SELECT
+         ic.id, ic.code, ic.influencer_name, ic.contact_email, ic.payment_info,
+         ic.rate_per_signup_cents, ic.rate_per_conversion_cents, ic.status, ic.notes, ic.created_at,
+         COUNT(u.id) AS signups_all_time,
+         COUNT(u.id) FILTER (WHERE u.plan = 'premium') AS conversions_all_time,
+         COUNT(u.id) FILTER (WHERE u.created_at >= $1 AND u.created_at < $2) AS signups_period,
+         COUNT(u.id) FILTER (WHERE u.premium_converted_at >= $1 AND u.premium_converted_at < $2) AS conversions_period,
+         (SELECT paid_at FROM influencer_payouts p
+          WHERE p.influencer_code_id = ic.id AND p.period_start = $1::date AND p.period_end = $2::date
+          ORDER BY p.paid_at DESC LIMIT 1) AS paid_at_for_period
+       FROM influencer_codes ic
+       LEFT JOIN users u ON u.referred_by = ic.code
+       GROUP BY ic.id
+       ORDER BY ic.created_at DESC`,
+      [start, end]
+    );
+    const rows = result.rows.map(r => ({
+      ...r,
+      signups_period: parseInt(r.signups_period),
+      conversions_period: parseInt(r.conversions_period),
+      signups_all_time: parseInt(r.signups_all_time),
+      conversions_all_time: parseInt(r.conversions_all_time),
+      amount_owed_cents: parseInt(r.signups_period) * r.rate_per_signup_cents + parseInt(r.conversions_period) * r.rate_per_conversion_cents,
+      already_paid: !!r.paid_at_for_period
+    }));
+    res.json({ period: { start, end }, influencers: rows });
+  } catch (err) {
+    console.error('list influencers error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Create a new influencer code
+app.post('/api/admin/influencer', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') return res.status(403).json({ error: 'Admin only' });
+  try {
+    let { code, influencerName, contactEmail, paymentInfo, ratePerSignup, ratePerConversion, notes } = req.body;
+    if (!code || !influencerName) return res.status(400).json({ error: 'code and influencerName are required' });
+    code = String(code).trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!code) return res.status(400).json({ error: 'Code must contain at least one letter or number' });
+    if (code.length > 20) return res.status(400).json({ error: 'Code must be 20 characters or fewer' });
+
+    // Must not collide with an existing peer referral code or another influencer code
+    const collision = await pool.query(
+      `SELECT 1 FROM users WHERE referral_code = $1
+       UNION SELECT 1 FROM influencer_codes WHERE code = $1`,
+      [code]
+    );
+    if (collision.rows.length > 0) return res.status(400).json({ error: 'That code is already in use — try another' });
+
+    const result = await pool.query(
+      `INSERT INTO influencer_codes (code, influencer_name, contact_email, payment_info, rate_per_signup_cents, rate_per_conversion_cents, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [
+        code, influencerName, contactEmail || null, paymentInfo || null,
+        Math.round((ratePerSignup || 0) * 100), Math.round((ratePerConversion || 0) * 100),
+        notes || null
+      ]
+    );
+    res.json({ success: true, influencer: result.rows[0] });
+  } catch (err) {
+    console.error('create influencer error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Update rate, status, or notes for an existing influencer code
+app.patch('/api/admin/influencer/:id', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const { id } = req.params;
+    const { influencerName, contactEmail, paymentInfo, ratePerSignup, ratePerConversion, status, notes } = req.body;
+    const result = await pool.query(
+      `UPDATE influencer_codes SET
+         influencer_name = COALESCE($1, influencer_name),
+         contact_email = COALESCE($2, contact_email),
+         payment_info = COALESCE($3, payment_info),
+         rate_per_signup_cents = COALESCE($4, rate_per_signup_cents),
+         rate_per_conversion_cents = COALESCE($5, rate_per_conversion_cents),
+         status = COALESCE($6, status),
+         notes = COALESCE($7, notes)
+       WHERE id = $8 RETURNING *`,
+      [
+        influencerName || null, contactEmail || null, paymentInfo || null,
+        ratePerSignup != null ? Math.round(ratePerSignup * 100) : null,
+        ratePerConversion != null ? Math.round(ratePerConversion * 100) : null,
+        status || null, notes || null, id
+      ]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Influencer code not found' });
+    res.json({ success: true, influencer: result.rows[0] });
+  } catch (err) {
+    console.error('update influencer error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Log a payout for a given influencer + period as paid (Henry sends the money
+// himself — this is a record-keeping ledger, it never moves money)
+app.post('/api/admin/influencer/:id/mark-paid', async (req, res) => {
+  const user = await getUserFromSession(req);
+  if (user?.email !== 'brighamwilsonjr@gmail.com') return res.status(403).json({ error: 'Admin only' });
+  try {
+    const { id } = req.params;
+    const { month, signupsCount, conversionsCount, amountOwedCents } = req.body;
+    const { start, end } = monthBounds(month);
+    const influencer = await pool.query('SELECT id FROM influencer_codes WHERE id = $1', [id]);
+    if (influencer.rows.length === 0) return res.status(404).json({ error: 'Influencer code not found' });
+
+    const result = await pool.query(
+      `INSERT INTO influencer_payouts (influencer_code_id, period_start, period_end, signups_count, conversions_count, amount_owed_cents)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [id, start, end, signupsCount || 0, conversionsCount || 0, amountOwedCents || 0]
+    );
+    res.json({ success: true, payout: result.rows[0] });
+  } catch (err) {
+    console.error('mark influencer paid error:', err);
     res.status(500).json({ error: err.message });
   }
 });

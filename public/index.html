@@ -806,6 +806,7 @@
     <div id="userMenu" style="display:none; align-items:center; gap:12px; position:relative;">
       <span id="userEmail" style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan-dark); cursor:pointer;" onclick="toggleAccountMenu()"></span>
       <button class="btn btn-secondary btn-sm" onclick="showReferralModal()" title="Share your referral code">Refer a Friend</button>
+      <button class="btn btn-secondary btn-sm" id="adminInfluencerBtn" style="display:none;" onclick="showInfluencerAdminModal()" title="Manage influencer codes and payouts">Influencers (Admin)</button>
       <span id="userPlan" style="font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px; padding:2px 8px; border:1px solid var(--tan); color:var(--tan); cursor:pointer;" onclick="handlePlanClick()"></span>
       <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
 
@@ -985,6 +986,64 @@
       </div>
       <button class="btn btn-primary" style="width:100%; font-size:14px; padding:14px;" id="upgradeBtn" onclick="startUpgrade()">Upgrade to Premium — $8/month</button>
       <div style="text-align:center; margin-top:12px; font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark);">Secured by Stripe · Cancel anytime from your account</div>
+    </div>
+  </div>
+</div>
+
+<!-- INFLUENCER ADMIN MODAL (Henry only) -->
+<div id="influencerAdminModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:1000; align-items:center; justify-content:center; overflow-y:auto; padding:20px 0;">
+  <div style="background:var(--card); border:1px solid var(--tan); width:100%; max-width:920px; margin:20px;">
+    <div style="background:var(--od-dark); padding:20px 24px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <div style="font-family:'Oswald',sans-serif; font-size:16px; letter-spacing:3px; color:var(--tan); text-transform:uppercase;">Influencer Codes</div>
+        <div style="font-family:'Source Code Pro',monospace; font-size:10px; color:var(--tan-dark); margin-top:2px;">Vanity referral codes, tracking, and monthly payouts</div>
+      </div>
+      <button onclick="closeInfluencerAdminModal()" style="background:none; border:none; color:var(--tan-dark); font-size:20px; cursor:pointer;">✕</button>
+    </div>
+    <div style="padding:24px;">
+
+      <!-- Add influencer form -->
+      <div style="border:1px solid var(--border); padding:16px; margin-bottom:24px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); letter-spacing:2px; margin-bottom:12px;">ADD INFLUENCER</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div class="field"><label>Vanity Code</label><input type="text" id="infCode" placeholder="e.g. SGTSMITH" maxlength="20"></div>
+          <div class="field"><label>Influencer Name</label><input type="text" id="infName" placeholder="e.g. Sgt. Smith (@handle)"></div>
+          <div class="field"><label>Contact Email</label><input type="email" id="infEmail" placeholder="optional"></div>
+          <div class="field"><label>Payment Info</label><input type="text" id="infPayment" placeholder="e.g. PayPal: name@email.com"></div>
+          <div class="field"><label>Rate per Signup ($)</label><input type="number" id="infRateSignup" placeholder="0.00" step="0.01" min="0" value="0"></div>
+          <div class="field"><label>Rate per Conversion ($)</label><input type="number" id="infRateConversion" placeholder="0.00" step="0.01" min="0" value="0"></div>
+        </div>
+        <div class="field" style="margin-top:12px;"><label>Notes</label><input type="text" id="infNotes" placeholder="optional"></div>
+        <div id="infFormError" style="color:#c0392b; font-family:'Source Code Pro',monospace; font-size:11px; margin-top:8px; display:none;"></div>
+        <button class="btn btn-primary btn-sm" style="margin-top:12px;" onclick="submitNewInfluencer()">Add Influencer</button>
+      </div>
+
+      <!-- Period selector -->
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+        <div style="font-family:'Source Code Pro',monospace; font-size:11px; color:var(--tan); letter-spacing:2px;">PAYOUT PERIOD</div>
+        <input type="month" id="infMonthPicker" style="font-family:'Source Code Pro',monospace; font-size:12px;" onchange="loadInfluencerReport()">
+      </div>
+
+      <!-- Influencer table -->
+      <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse; font-family:'Libre Franklin',sans-serif; font-size:12px;">
+          <thead>
+            <tr style="border-bottom:1px solid var(--tan);">
+              <th style="text-align:left; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">CODE</th>
+              <th style="text-align:left; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">NAME</th>
+              <th style="text-align:left; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">STATUS</th>
+              <th style="text-align:right; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">SIGNUPS (PERIOD/ALL)</th>
+              <th style="text-align:right; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">CONVERSIONS (PERIOD/ALL)</th>
+              <th style="text-align:right; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">OWED THIS PERIOD</th>
+              <th style="text-align:center; padding:8px 6px; color:var(--tan); font-family:'Source Code Pro',monospace; font-size:10px; letter-spacing:1px;">ACTIONS</th>
+            </tr>
+          </thead>
+          <tbody id="influencerTableBody">
+            <tr><td colspan="7" style="padding:16px 6px; color:var(--tan-dark); font-family:'Source Code Pro',monospace; font-size:11px;">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
     </div>
   </div>
 </div>
@@ -3551,6 +3610,8 @@
     document.getElementById('userMenu').style.display = 'flex';
     document.getElementById('userEmail').textContent = user.email;
     document.getElementById('userPlan').textContent = user.plan === 'premium' ? '⭐ PREMIUM' : 'FREE';
+    const adminInfluencerBtn = document.getElementById('adminInfluencerBtn');
+    if (adminInfluencerBtn) adminInfluencerBtn.style.display = user.email === 'brighamwilsonjr@gmail.com' ? 'inline-block' : 'none';
     document.getElementById('savesTab').style.display = 'block';
     document.getElementById('saveCounselingBtn').style.display = 'inline-block';
     const saveAFTBtn = document.getElementById('saveAFTBtn');
@@ -3911,6 +3972,134 @@
     document.getElementById('referralModal').style.display = 'none';
   }
 
+  // ── Influencer admin panel (Henry only) ───────────────────────────────────
+  function showInfluencerAdminModal() {
+    if (!currentUser || currentUser.email !== 'brighamwilsonjr@gmail.com') return;
+    const picker = document.getElementById('infMonthPicker');
+    if (!picker.value) {
+      const now = new Date();
+      picker.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    }
+    document.getElementById('influencerAdminModal').style.display = 'flex';
+    loadInfluencerReport();
+  }
+
+  function closeInfluencerAdminModal() {
+    document.getElementById('influencerAdminModal').style.display = 'none';
+  }
+
+  async function loadInfluencerReport() {
+    const tbody = document.getElementById('influencerTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:16px 6px; color:var(--tan-dark); font-family:\'Source Code Pro\',monospace; font-size:11px;">Loading...</td></tr>';
+    try {
+      const tok = safeStorage.getItem('ncokit_token');
+      const month = document.getElementById('infMonthPicker').value;
+      const res = await fetch('/api/admin/influencers' + (month ? '?month=' + month : ''), {
+        headers: { 'Authorization': `Bearer ${tok}` }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:16px 6px; color:#c0392b;">' + (data.error || 'Failed to load') + '</td></tr>';
+        return;
+      }
+      if (data.influencers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:16px 6px; color:var(--tan-dark); font-family:\'Source Code Pro\',monospace; font-size:11px;">No influencer codes yet — add one above.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.influencers.map(inf => {
+        const owed = (inf.amount_owed_cents / 100).toFixed(2);
+        const statusColor = inf.status === 'active' ? 'var(--tan)' : 'var(--tan-dark)';
+        const paidBadge = inf.already_paid ? '<span style="color:#4CAF50;">&#10003; Paid</span>' : '<span style="color:var(--tan-dark);">Unpaid</span>';
+        const idJson = JSON.stringify(inf.id);
+        const statusJson = JSON.stringify(inf.status);
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:8px 6px; color:var(--white); font-family:'Source Code Pro',monospace;">${inf.code}</td>
+          <td style="padding:8px 6px; color:var(--white);">${inf.influencer_name}</td>
+          <td style="padding:8px 6px; color:${statusColor}; text-transform:capitalize;">${inf.status}</td>
+          <td style="padding:8px 6px; text-align:right; color:var(--white);">${inf.signups_period} / ${inf.signups_all_time}</td>
+          <td style="padding:8px 6px; text-align:right; color:var(--white);">${inf.conversions_period} / ${inf.conversions_all_time}</td>
+          <td style="padding:8px 6px; text-align:right; color:var(--tan);">$${owed}</td>
+          <td style="padding:8px 6px; text-align:center; white-space:nowrap;">
+            ${paidBadge}
+            ${!inf.already_paid ? `<button class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:10px; margin-left:6px;" onclick='markInfluencerPaid(${idJson}, ${inf.signups_period}, ${inf.conversions_period}, ${inf.amount_owed_cents})'>Mark Paid</button>` : ''}
+            <button class="btn btn-secondary btn-sm" style="padding:3px 8px; font-size:10px; margin-left:6px;" onclick='toggleInfluencerStatus(${idJson}, ${statusJson})'>${inf.status === 'active' ? 'Pause' : 'Activate'}</button>
+          </td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="7" style="padding:16px 6px; color:#c0392b;">Failed to load — try again.</td></tr>';
+    }
+  }
+
+  async function submitNewInfluencer() {
+    const errEl = document.getElementById('infFormError');
+    errEl.style.display = 'none';
+    const code = document.getElementById('infCode').value.trim();
+    const influencerName = document.getElementById('infName').value.trim();
+    const contactEmail = document.getElementById('infEmail').value.trim();
+    const paymentInfo = document.getElementById('infPayment').value.trim();
+    const ratePerSignup = parseFloat(document.getElementById('infRateSignup').value) || 0;
+    const ratePerConversion = parseFloat(document.getElementById('infRateConversion').value) || 0;
+    const notes = document.getElementById('infNotes').value.trim();
+    if (!code || !influencerName) {
+      errEl.textContent = 'Code and influencer name are required.';
+      errEl.style.display = 'block';
+      return;
+    }
+    try {
+      const tok = safeStorage.getItem('ncokit_token');
+      const res = await fetch('/api/admin/influencer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+        body: JSON.stringify({ code, influencerName, contactEmail, paymentInfo, ratePerSignup, ratePerConversion, notes })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        errEl.textContent = data.error || 'Failed to add influencer';
+        errEl.style.display = 'block';
+        return;
+      }
+      document.getElementById('infCode').value = '';
+      document.getElementById('infName').value = '';
+      document.getElementById('infEmail').value = '';
+      document.getElementById('infPayment').value = '';
+      document.getElementById('infRateSignup').value = '0';
+      document.getElementById('infRateConversion').value = '0';
+      document.getElementById('infNotes').value = '';
+      loadInfluencerReport();
+    } catch (e) {
+      errEl.textContent = 'Something went wrong — try again.';
+      errEl.style.display = 'block';
+    }
+  }
+
+  async function markInfluencerPaid(id, signupsCount, conversionsCount, amountOwedCents) {
+    if (!confirm('Log this payout as sent? This just records it in NCO Kit — it does not send any money.')) return;
+    try {
+      const tok = safeStorage.getItem('ncokit_token');
+      const month = document.getElementById('infMonthPicker').value;
+      await fetch(`/api/admin/influencer/${id}/mark-paid`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+        body: JSON.stringify({ month, signupsCount, conversionsCount, amountOwedCents })
+      });
+      loadInfluencerReport();
+    } catch (e) {}
+  }
+
+  async function toggleInfluencerStatus(id, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'paused' : 'active';
+    try {
+      const tok = safeStorage.getItem('ncokit_token');
+      await fetch(`/api/admin/influencer/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+        body: JSON.stringify({ status: newStatus })
+      });
+      loadInfluencerReport();
+    } catch (e) {}
+  }
+
   async function submitReferralCode() {
     const input = document.getElementById('applyReferralInput');
     const msg   = document.getElementById('applyReferralMsg');
@@ -3959,6 +4148,10 @@
 
   document.getElementById('referralModal').addEventListener('click', function(e) {
     if (e.target === this) closeReferralModal();
+  });
+
+  document.getElementById('influencerAdminModal').addEventListener('click', function(e) {
+    if (e.target === this) closeInfluencerAdminModal();
   });
 
   // ── USAGE LIMITS ──────────────────────────────────────────────────────────────
