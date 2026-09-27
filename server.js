@@ -265,6 +265,15 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
 // Body size limit — 100kb max (covers multi-field text forms like counseling/award narratives)
 app.use(express.json({ limit: '100kb' }));
+// Malformed JSON bodies (bots/scanners probing endpoints) hit body-parser's JSON.parse
+// before any route runs — catch that SyntaxError here so it doesn't fall through to
+// Express's default handler, which dumps the full stack trace to the logs on every hit.
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+  next(err);
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const pool = new Pool({
