@@ -1499,12 +1499,18 @@ app.post('/api/stripe/create-checkout', async (req, res) => {
       discounts = [{ coupon: coupon.id }];
     }
 
+    // Stripe doesn't allow a promo-code box alongside a server-applied discount, so
+    // only show it when no discount was applied (e.g. the TIKTOK6 code from the bio).
+    const discountParams = discounts.length > 0
+      ? { discounts }
+      : { allow_promotion_codes: true };
+
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'subscription',
       customer_email: user.email,
       line_items: [{ price: priceId, quantity: 1 }],
-      discounts,
+      ...discountParams,
       metadata: { userId: user.id, freeMontUsed: freeMontUsed ? 'true' : 'false' },
       success_url: 'https://ncokit.com/?upgraded=true&session_id={CHECKOUT_SESSION_ID}',
       cancel_url: 'https://ncokit.com/?upgrade=cancelled',
